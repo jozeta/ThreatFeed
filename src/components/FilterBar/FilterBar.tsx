@@ -1,17 +1,22 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useFilter } from '../../context/FilterContext';
 import { useFeeds } from '../../context/FeedContext';
 import { X, Filter, Calendar, ArrowUpDown } from 'lucide-react';
 
-const CATEGORIES = [
+const ORDERED_PRIMARY_CATEGORIES = [
   'All',
   'Security News',
-  'Vulnerabilities',
   'Threat Intelligence',
+  'Vulnerabilities',
   'Malware',
   'Research',
   'Red Team',
   'Blue Team',
+  'General Tech',
+  'Consumer Tech',
+  'Tech Guides & How-To',
+  'Platform Ecosystems',
+  'Privacy & Policy',
 ];
 
 const POPULAR_TAGS = [
@@ -41,11 +46,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({ isOpen, onClose }) => {
     updateFilter('selectedCategory', cat === 'All' ? null : cat);
   };
 
+  const categories = useMemo(() => {
+    const feedCategories = Array.from(new Set(feeds.map((f) => f.category))).filter(Boolean);
+    const combined = Array.from(new Set([...ORDERED_PRIMARY_CATEGORIES.slice(1), ...feedCategories]));
+    return ['All', ...combined];
+  }, [feeds]);
+
   return (
     <div className="border-b border-theme-border/60 bg-theme-surface/50">
       {/* Horizontal Category Navigation Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 overflow-x-auto scrollbar-none flex items-center gap-1.5 text-xs font-mono">
-        {CATEGORIES.map((category) => {
+        {categories.map((category) => {
           const isSelected =
             (category === 'All' && !filters.selectedCategory) ||
             filters.selectedCategory?.toLowerCase() === category.toLowerCase();

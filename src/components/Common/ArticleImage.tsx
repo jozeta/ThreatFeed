@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { getEditorialPlaceholder } from '../../utils/imagePlaceholder';
-import { ShieldAlert, Terminal, Cpu } from 'lucide-react';
+import { ShieldAlert, Terminal, Cpu, Smartphone, Laptop, BookOpen, ShieldCheck } from 'lucide-react';
 
 interface ArticleImageProps {
   src?: string;
@@ -32,6 +32,7 @@ export const ArticleImage: React.FC<ArticleImageProps> = ({
   const placeholder = getEditorialPlaceholder(sourceName, category);
 
   if (!src || loadFailed) {
+    const catLower = category.toLowerCase();
     return (
       <div
         className={`w-full overflow-hidden flex flex-col items-center justify-center relative select-none ${aspectClass} ${className}`}
@@ -43,10 +44,18 @@ export const ArticleImage: React.FC<ArticleImageProps> = ({
             className="w-10 h-10 rounded-full flex items-center justify-center mb-2.5 opacity-80 border border-white/10"
             style={{ backgroundColor: `${placeholder.accent}22`, color: placeholder.accent }}
           >
-            {category.toLowerCase().includes('vuln') ? (
+            {catLower.includes('vuln') ? (
               <ShieldAlert className="w-5 h-5" />
-            ) : category.toLowerCase().includes('red') ? (
+            ) : catLower.includes('red') ? (
               <Terminal className="w-5 h-5" />
+            ) : catLower.includes('platform') || catLower.includes('consumer') ? (
+              <Smartphone className="w-5 h-5" />
+            ) : catLower.includes('guide') || catLower.includes('how') ? (
+              <BookOpen className="w-5 h-5" />
+            ) : catLower.includes('privacy') ? (
+              <ShieldCheck className="w-5 h-5" />
+            ) : catLower.includes('tech') ? (
+              <Laptop className="w-5 h-5" />
             ) : (
               <Cpu className="w-5 h-5" />
             )}

@@ -1,37 +1,18 @@
 {
-  "version": "1.0",
-  "updatedAt": "2026-09-24T12:00:00Z",
+  "version": "1.1",
+  "updatedAt": "2026-09-24T16:00:00Z",
   "feeds": [
     {
       "id": "the-hacker-news",
       "name": "The Hacker News",
       "url": "https://feeds.feedburner.com/TheHackersNews",
       "category": "Security News",
-      "tags": ["news", "vulnerability", "malware", "cybercrime"],
-      "enabled": true
-    },
-    {
-      "id": "krebs-on-security",
-      "name": "Krebs on Security",
-      "url": "https://krebsonsecurity.com/feed/",
-      "category": "Security News",
-      "tags": ["investigation", "cybercrime", "fraud", "news"],
-      "enabled": true
-    },
-    {
-      "id": "sans-isc",
-      "name": "SANS Internet Storm Center",
-      "url": "https://isc.sans.edu/rssfeed.xml",
-      "category": "Security News",
-      "tags": ["incident-response", "network-security", "honeypot", "analysis"],
-      "enabled": true
-    },
-    {
-      "id": "cisa-advisories",
-      "name": "CISA Cybersecurity Advisories",
-      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
-      "category": "Vulnerabilities",
-      "tags": ["cisa", "advisory", "vulnerability", "government", "cve"],
+      "tags": [
+        "news",
+        "vulnerability",
+        "malware",
+        "cybercrime"
+      ],
       "enabled": true
     },
     {
@@ -39,7 +20,25 @@
       "name": "BleepingComputer",
       "url": "https://www.bleepingcomputer.com/feed/",
       "category": "Security News",
-      "tags": ["news", "ransomware", "data-breach", "zero-day"],
+      "tags": [
+        "news",
+        "ransomware",
+        "data-breach",
+        "zero-day"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "krebs-on-security",
+      "name": "Krebs on Security",
+      "url": "https://krebsonsecurity.com/feed/",
+      "category": "Security News",
+      "tags": [
+        "investigation",
+        "cybercrime",
+        "fraud",
+        "news"
+      ],
       "enabled": true
     },
     {
@@ -47,7 +46,12 @@
       "name": "SecurityWeek",
       "url": "https://www.securityweek.com/feed/",
       "category": "Security News",
-      "tags": ["enterprise", "vulnerabilities", "cyberwarfare", "news"],
+      "tags": [
+        "enterprise",
+        "vulnerabilities",
+        "cyberwarfare",
+        "news"
+      ],
       "enabled": true
     },
     {
@@ -55,7 +59,11 @@
       "name": "Dark Reading",
       "url": "https://www.darkreading.com/rss.xml",
       "category": "Security News",
-      "tags": ["enterprise", "threat-intelligence", "infosec"],
+      "tags": [
+        "enterprise",
+        "threat-intelligence",
+        "infosec"
+      ],
       "enabled": true
     },
     {
@@ -63,23 +71,155 @@
       "name": "Help Net Security",
       "url": "https://www.helpnetsecurity.com/feed/",
       "category": "Security News",
-      "tags": ["news", "management", "privacy", "products"],
+      "tags": [
+        "news",
+        "management",
+        "privacy",
+        "products"
+      ],
       "enabled": true
     },
     {
-      "id": "google-project-zero",
-      "name": "Google Project Zero",
-      "url": "https://googleprojectzero.blogspot.com/feeds/posts/default",
-      "category": "Vulnerabilities",
-      "tags": ["zero-day", "exploit", "research", "vulnerability"],
+      "id": "wired-security",
+      "name": "WIRED Security",
+      "url": "https://www.wired.com/feed/category/security/latest/rss",
+      "category": "Security News",
+      "tags": [
+        "privacy",
+        "national-security",
+        "cyberwarfare",
+        "surveillance"
+      ],
       "enabled": true
+    },
+    {
+      "id": "ars-technica-security",
+      "name": "Ars Technica Security",
+      "url": "https://arstechnica.com/tag/security/feed/",
+      "category": "Security News",
+      "tags": [
+        "cryptography",
+        "exploit",
+        "privacy",
+        "hacks"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "the-record",
+      "name": "The Record by Recorded Future",
+      "url": "https://therecord.media/feed",
+      "category": "Security News",
+      "tags": [
+        "investigations",
+        "ransomware",
+        "cyber-underground",
+        "nation-state"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cyberscoop",
+      "name": "CyberScoop",
+      "url": "https://cyberscoop.com/feed/",
+      "category": "Security News",
+      "tags": [
+        "government",
+        "policy",
+        "cybercrime",
+        "espionage",
+        "cisa"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "the-register",
+      "name": "The Register",
+      "url": "https://www.theregister.com/headlines.atom",
+      "category": "Security News",
+      "tags": [
+        "enterprise",
+        "systems",
+        "infrastructure",
+        "infosec"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "hackread",
+      "name": "Hackread",
+      "url": "https://hackread.com/feed/",
+      "category": "Security News",
+      "tags": [
+        "cybercrime",
+        "hacktivism",
+        "surveillance",
+        "data-breach"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "schneier-security",
+      "name": "Schneier on Security",
+      "url": "https://www.schneier.com/feed/atom/",
+      "category": "Security News",
+      "tags": [
+        "cryptography",
+        "privacy",
+        "policy",
+        "philosophy"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "threatpost-archive",
+      "name": "Threatpost (Archive)",
+      "url": "https://threatpost.com/feed/",
+      "category": "Security News",
+      "tags": [
+        "archive",
+        "infosec",
+        "malware",
+        "vulnerabilities"
+      ],
+      "enabled": false
+    },
+    {
+      "id": "venturebeat-security",
+      "name": "VentureBeat Security",
+      "url": "https://venturebeat.com/category/security/feed/",
+      "category": "Security News",
+      "tags": [
+        "enterprise-security",
+        "ai-security",
+        "venture-capital"
+      ],
+      "enabled": false
     },
     {
       "id": "cisco-talos",
       "name": "Cisco Talos Intelligence",
       "url": "https://blog.talosintelligence.com/rss/",
       "category": "Threat Intelligence",
-      "tags": ["threat-intelligence", "apt", "malware", "research"],
+      "tags": [
+        "threat-intelligence",
+        "apt",
+        "malware",
+        "research"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "crowdstrike-blog",
+      "name": "CrowdStrike Blog",
+      "url": "https://www.crowdstrike.com/blog/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "adversary-tracking",
+        "threat-hunting",
+        "incident-response",
+        "falcon"
+      ],
       "enabled": true
     },
     {
@@ -87,39 +227,12 @@
       "name": "Microsoft Security Blog",
       "url": "https://www.microsoft.com/en-us/security/blog/feed/",
       "category": "Threat Intelligence",
-      "tags": ["cloud-security", "apt", "microsoft", "threat-intelligence"],
-      "enabled": true
-    },
-    {
-      "id": "google-online-security",
-      "name": "Google Online Security Blog",
-      "url": "https://security.googleblog.com/feeds/posts/default",
-      "category": "Research",
-      "tags": ["google", "cryptography", "web-security", "research"],
-      "enabled": true
-    },
-    {
-      "id": "portswigger-research",
-      "name": "PortSwigger Web Security Research",
-      "url": "https://portswigger.net/research/rss",
-      "category": "Vulnerabilities",
-      "tags": ["web-security", "appsec", "burp-suite", "exploit"],
-      "enabled": true
-    },
-    {
-      "id": "trail-of-bits",
-      "name": "Trail of Bits",
-      "url": "https://blog.trailofbits.com/feed/",
-      "category": "Research",
-      "tags": ["cryptography", "reverse-engineering", "blockchain", "research"],
-      "enabled": true
-    },
-    {
-      "id": "specterops",
-      "name": "SpecterOps Posts",
-      "url": "https://posts.specterops.io/feed",
-      "category": "Red Team",
-      "tags": ["red-team", "active-directory", "offense", "adversary-simulation"],
+      "tags": [
+        "cloud-security",
+        "apt",
+        "microsoft",
+        "threat-intelligence"
+      ],
       "enabled": true
     },
     {
@@ -127,31 +240,12 @@
       "name": "SentinelOne Labs",
       "url": "https://www.sentinelone.com/labs/feed/",
       "category": "Threat Intelligence",
-      "tags": ["apt", "malware", "reverse-engineering", "threat-intelligence"],
-      "enabled": true
-    },
-    {
-      "id": "malwarebytes-labs",
-      "name": "Malwarebytes Labs",
-      "url": "https://www.malwarebytes.com/blog/feed/index.xml",
-      "category": "Malware",
-      "tags": ["malware", "scams", "ransomware", "threat-analysis"],
-      "enabled": true
-    },
-    {
-      "id": "welivesecurity",
-      "name": "ESET WeLiveSecurity",
-      "url": "https://www.welivesecurity.com/feed/",
-      "category": "Malware",
-      "tags": ["malware", "apt", "research", "threat-intelligence"],
-      "enabled": true
-    },
-    {
-      "id": "sophos-xops",
-      "name": "Sophos X-Ops",
-      "url": "https://news.sophos.com/en-us/category/threat-research/feed/",
-      "category": "Malware",
-      "tags": ["threat-research", "incident-response", "ransomware", "malware"],
+      "tags": [
+        "apt",
+        "malware",
+        "reverse-engineering",
+        "threat-intelligence"
+      ],
       "enabled": true
     },
     {
@@ -159,23 +253,106 @@
       "name": "Securelist (Kaspersky)",
       "url": "https://securelist.com/feed/",
       "category": "Threat Intelligence",
-      "tags": ["apt", "malware", "botnet", "industrial-control"],
+      "tags": [
+        "apt",
+        "malware",
+        "botnet",
+        "industrial-control"
+      ],
       "enabled": true
     },
     {
-      "id": "huntress-blog",
-      "name": "Huntress",
-      "url": "https://www.huntress.com/blog/rss.xml",
-      "category": "Blue Team",
-      "tags": ["blue-team", "incident-response", "soc", "detection-engineering"],
+      "id": "socradar",
+      "name": "SOCRadar Cyber Intelligence",
+      "url": "https://socradar.io/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-intel",
+        "dark-web",
+        "cve",
+        "soc",
+        "ransomware"
+      ],
       "enabled": true
     },
     {
-      "id": "rapid7-blog",
-      "name": "Rapid7 Research & Blog",
-      "url": "https://blog.rapid7.com/rss/",
-      "category": "Research",
-      "tags": ["vulnerability", "metasploit", "research", "cloud-security"],
+      "id": "dailydarkweb",
+      "name": "Daily Dark Web",
+      "url": "https://dailydarkweb.net/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "dark-web",
+        "data-leak",
+        "ransomware",
+        "cybercrime"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "red-packet-security",
+      "name": "Red Packet Security",
+      "url": "https://www.redpacketsecurity.com/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "indicators-of-compromise",
+        "iocs",
+        "yara",
+        "snort"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cisa-advisories",
+      "name": "CISA Cybersecurity Advisories",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cisa",
+        "advisory",
+        "vulnerability",
+        "government",
+        "cve"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-project-zero",
+      "name": "Google Project Zero",
+      "url": "https://googleprojectzero.blogspot.com/feeds/posts/default",
+      "category": "Vulnerabilities",
+      "tags": [
+        "zero-day",
+        "exploit",
+        "research",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "portswigger-research",
+      "name": "PortSwigger Web Security Research",
+      "url": "https://portswigger.net/research/rss",
+      "category": "Vulnerabilities",
+      "tags": [
+        "web-security",
+        "appsec",
+        "burp-suite",
+        "exploit"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "watchtowr-labs",
+      "name": "watchTowr Labs",
+      "url": "https://labs.watchtowr.com/rss/",
+      "category": "Vulnerabilities",
+      "tags": [
+        "exploit-research",
+        "zero-day",
+        "attack-surface",
+        "offensive-security",
+        "cve"
+      ],
       "enabled": true
     },
     {
@@ -183,7 +360,388 @@
       "name": "Exploit-DB",
       "url": "https://www.exploit-db.com/rss.xml",
       "category": "Vulnerabilities",
-      "tags": ["exploit", "cve", "poc", "offensive-security"],
+      "tags": [
+        "exploit",
+        "cve",
+        "poc",
+        "offensive-security"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "any-run",
+      "name": "ANY.RUN Cybersecurity Blog",
+      "url": "https://any.run/cybersecurity-blog/feed/",
+      "category": "Malware",
+      "tags": [
+        "sandbox",
+        "malware-analysis",
+        "threat-hunting",
+        "reverse-engineering"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "welivesecurity",
+      "name": "ESET WeLiveSecurity",
+      "url": "https://www.welivesecurity.com/feed/",
+      "category": "Malware",
+      "tags": [
+        "malware",
+        "apt",
+        "research",
+        "threat-intelligence"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "sophos-xops",
+      "name": "Sophos X-Ops",
+      "url": "https://news.sophos.com/en-us/category/threat-research/feed/",
+      "category": "Malware",
+      "tags": [
+        "threat-research",
+        "incident-response",
+        "ransomware",
+        "malware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "malwarebytes-labs",
+      "name": "Malwarebytes Labs",
+      "url": "https://www.malwarebytes.com/blog/feed/index.xml",
+      "category": "Malware",
+      "tags": [
+        "malware",
+        "scams",
+        "ransomware",
+        "threat-analysis"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "infostealers",
+      "name": "Infostealers Research",
+      "url": "https://www.infostealers.com/feed/",
+      "category": "Malware",
+      "tags": [
+        "infostealers",
+        "redline",
+        "lumma",
+        "stealer-logs"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-online-security",
+      "name": "Google Online Security Blog",
+      "url": "https://security.googleblog.com/feeds/posts/default",
+      "category": "Research",
+      "tags": [
+        "google",
+        "cryptography",
+        "web-security",
+        "research"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "trail-of-bits",
+      "name": "Trail of Bits",
+      "url": "https://blog.trailofbits.com/feed/",
+      "category": "Research",
+      "tags": [
+        "cryptography",
+        "reverse-engineering",
+        "blockchain",
+        "research"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "rapid7-blog",
+      "name": "Rapid7 Research & Blog",
+      "url": "https://blog.rapid7.com/rss/",
+      "category": "Research",
+      "tags": [
+        "vulnerability",
+        "metasploit",
+        "research",
+        "cloud-security"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "specterops",
+      "name": "SpecterOps Posts",
+      "url": "https://posts.specterops.io/feed",
+      "category": "Red Team",
+      "tags": [
+        "red-team",
+        "active-directory",
+        "offense",
+        "adversary-simulation"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "praetorian-blog",
+      "name": "Praetorian Security",
+      "url": "https://www.praetorian.com/feed/",
+      "category": "Red Team",
+      "tags": [
+        "offensive-security",
+        "red-team",
+        "cloud-security",
+        "exploitation"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "offsec-blog",
+      "name": "OffSec Blog",
+      "url": "https://www.offsec.com/rss.xml",
+      "category": "Red Team",
+      "tags": [
+        "kali-linux",
+        "pentesting",
+        "offensive-security",
+        "certifications"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dfir-report",
+      "name": "The DFIR Report",
+      "url": "https://thedfirreport.com/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "incident-response",
+        "intrusion-analysis",
+        "forensics",
+        "ransomware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "sans-isc",
+      "name": "SANS Internet Storm Center",
+      "url": "https://isc.sans.edu/rssfeed.xml",
+      "category": "Blue Team",
+      "tags": [
+        "incident-response",
+        "network-security",
+        "honeypot",
+        "analysis"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "huntress-blog",
+      "name": "Huntress",
+      "url": "https://www.huntress.com/blog/rss.xml",
+      "category": "Blue Team",
+      "tags": [
+        "blue-team",
+        "incident-response",
+        "soc",
+        "detection-engineering"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "the-verge",
+      "name": "The Verge",
+      "url": "https://www.theverge.com/rss/index.xml",
+      "category": "General Tech",
+      "tags": [
+        "tech-news",
+        "gadgets",
+        "culture",
+        "ai",
+        "policy"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "zdnet",
+      "name": "ZDNET",
+      "url": "https://www.zdnet.com/news/rss.xml",
+      "category": "General Tech",
+      "tags": [
+        "enterprise",
+        "cloud",
+        "security",
+        "tech-news"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "gizmodo",
+      "name": "Gizmodo",
+      "url": "https://gizmodo.com/rss",
+      "category": "General Tech",
+      "tags": [
+        "science",
+        "culture",
+        "consumer-tech",
+        "gadgets"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "engadget",
+      "name": "Engadget",
+      "url": "https://www.engadget.com/rss.xml",
+      "category": "Consumer Tech",
+      "tags": [
+        "gadgets",
+        "reviews",
+        "consumer-electronics",
+        "mobile"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "xda-developers",
+      "name": "XDA Developers",
+      "url": "https://www.xda-developers.com/feed/",
+      "category": "Consumer Tech",
+      "tags": [
+        "hardware",
+        "mobile",
+        "android",
+        "reviews",
+        "pc-building"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "howtogeek",
+      "name": "How-To Geek",
+      "url": "https://www.howtogeek.com/feed/",
+      "category": "Tech Guides & How-To",
+      "tags": [
+        "how-to",
+        "windows",
+        "gadgets",
+        "explained",
+        "software"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "makeuseof",
+      "name": "MakeUseOf",
+      "url": "https://www.makeuseof.com/feed/",
+      "category": "Tech Guides & How-To",
+      "tags": [
+        "tutorials",
+        "how-to",
+        "software",
+        "productivity",
+        "tips"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "lifehacker",
+      "name": "Lifehacker",
+      "url": "https://lifehacker.com/rss",
+      "category": "Tech Guides & How-To",
+      "tags": [
+        "productivity",
+        "life-hacks",
+        "software",
+        "tips"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "macrumors",
+      "name": "MacRumors",
+      "url": "https://feeds.macrumors.com/MacRumors-All",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "mac",
+        "iphone",
+        "ios",
+        "rumors"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "9to5mac",
+      "name": "9to5Mac",
+      "url": "https://9to5mac.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "macos",
+        "iphone",
+        "ipad",
+        "watchos"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "9to5google",
+      "name": "9to5Google",
+      "url": "https://9to5google.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "google",
+        "android",
+        "pixel",
+        "chrome",
+        "wearos"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "android-police",
+      "name": "Android Police",
+      "url": "https://www.androidpolice.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "android",
+        "apps",
+        "phones",
+        "mobile-security",
+        "google-play"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "windows-central",
+      "name": "Windows Central",
+      "url": "https://www.windowscentral.com/rss",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "windows",
+        "microsoft",
+        "pc-gaming",
+        "surface",
+        "enterprise"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "torrentfreak",
+      "name": "TorrentFreak",
+      "url": "https://torrentfreak.com/feed/",
+      "category": "Privacy & Policy",
+      "tags": [
+        "privacy",
+        "copyright",
+        "p2p",
+        "vpn",
+        "censorship",
+        "legal"
+      ],
       "enabled": true
     }
   ]

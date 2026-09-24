@@ -77,18 +77,26 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // 1. Load feeds
       let storedFeeds = await getFeedsFromDB();
-      if (!storedFeeds || storedFeeds.length === 0) {
-        // Fetch static default feeds
-        try {
-          const res = await fetch('/data/feeds.json');
-          if (res.ok) {
-            const data = await res.json();
-            storedFeeds = data.feeds || [];
+      try {
+        const res = await fetch('/data/feeds.json');
+        if (res.ok) {
+          const data = await res.json();
+          const defaultFeeds: Feed[] = data.feeds || [];
+          if (!storedFeeds || storedFeeds.length === 0) {
+            storedFeeds = defaultFeeds;
             await saveFeedsToDB(storedFeeds);
+          } else {
+            // Automatically merge newly introduced default feeds while preserving user customizations
+            const existingIds = new Set(storedFeeds.map(f => f.id));
+            const newFeeds = defaultFeeds.filter(f => !existingIds.has(f.id));
+            if (newFeeds.length > 0) {
+              storedFeeds = [...storedFeeds, ...newFeeds];
+              await saveFeedsToDB(storedFeeds);
+            }
           }
-        } catch (fetchErr) {
-          console.warn('Could not load /data/feeds.json:', fetchErr);
         }
+      } catch (fetchErr) {
+        console.warn('Could not load /data/feeds.json:', fetchErr);
       }
       setFeeds(storedFeeds || []);
 
