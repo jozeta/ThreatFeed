@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   fontSize: 'base',
   headlineScale: 'prominent',
   autoRefreshMinutes: 30,
-  proxyMode: 'corsproxy',
+  proxyMode: 'allorigins',
   hideReadArticles: false,
   reducedMotion: false,
 };
@@ -34,6 +34,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     getSettingsFromDB().then((saved) => {
       if (saved) {
+        // Migrate deprecated corsproxy setting
+        if ((saved as any).proxyMode === 'corsproxy') {
+          saved.proxyMode = 'allorigins';
+          saveSettingsToDB({ ...DEFAULT_SETTINGS, ...saved });
+        }
         setSettings({ ...DEFAULT_SETTINGS, ...saved });
       }
       setLoaded(true);

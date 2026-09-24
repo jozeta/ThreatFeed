@@ -56,7 +56,7 @@ export type BorderStyle = 'none' | 'subtle' | 'strong';
 export type ImageBehavior = 'large' | 'normal' | 'compact' | 'hidden';
 export type ContentDensity = 'compact' | 'normal' | 'spacious';
 export type AutoRefreshInterval = 0 | 15 | 30 | 60 | 180; // in minutes (0 = manual only)
-export type ProxyMode = 'corsproxy' | 'allorigins' | 'direct' | 'custom';
+export type ProxyMode = 'allorigins' | 'direct' | 'custom';
 
 export interface UserSettings {
   theme: ThemeMode;

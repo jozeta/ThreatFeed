@@ -97,15 +97,28 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFeedHealth(healthMap);
 
       // 3. Load articles
-      const storedArticles = await getAllArticlesFromDB();
-      setArticles(storedArticles);
+      let storedArticles = await getAllArticlesFromDB();
+      if (!storedArticles || storedArticles.length === 0) {
+        try {
+          const seedRes = await fetch('/data/seed-articles.json');
+          if (seedRes.ok) {
+            const seedData = await seedRes.json();
+            if (Array.isArray(seedData) && seedData.length > 0) {
+              storedArticles = seedData;
+              await saveArticlesToDB(storedArticles);
+            }
+          }
+        } catch (seedErr) {
+          console.warn('Could not load /data/seed-articles.json:', seedErr);
+        }
+      }
+      setArticles(storedArticles || []);
 
-      // 4. Initial fetch if no articles are cached and device is online
-      if (storedArticles.length === 0 && navigator.onLine && storedFeeds && storedFeeds.length > 0) {
-        // Trigger background initial fetch
+      // 4. Initial fetch if device is online to ingest latest dispatches
+      if (navigator.onLine && storedFeeds && storedFeeds.length > 0) {
         setTimeout(() => {
           refreshFeedsInternal(storedFeeds);
-        }, 500);
+        }, 300);
       }
     } catch (err) {
       console.error('Initialization error:', err);

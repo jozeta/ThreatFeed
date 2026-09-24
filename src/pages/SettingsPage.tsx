@@ -300,14 +300,9 @@ export const SettingsPage: React.FC = () => {
           <div className="space-y-2">
             {[
               {
-                id: 'corsproxy' as ProxyMode,
-                name: 'CORS Proxy (corsproxy.io)',
-                desc: 'Fast, public CORS gateway. Recommended for complete cross-origin feed access without running any backend.',
-              },
-              {
                 id: 'allorigins' as ProxyMode,
-                name: 'AllOrigins (api.allorigins.win)',
-                desc: 'Alternative public open-source proxy.',
+                name: 'AllOrigins Gateway (api.allorigins.win)',
+                desc: 'Open-source CORS gateway. Recommended for complete cross-origin feed access without running any backend.',
               },
               {
                 id: 'direct' as ProxyMode,

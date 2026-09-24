@@ -5,8 +5,6 @@ const TIMEOUT_MS = 12000;
 
 export function buildFetchUrl(targetUrl: string, proxyMode: ProxyMode, customProxyUrl?: string): string {
   switch (proxyMode) {
-    case 'corsproxy':
-      return `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
     case 'allorigins':
       return `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
     case 'custom':
@@ -23,14 +21,40 @@ export function buildFetchUrl(targetUrl: string, proxyMode: ProxyMode, customPro
 
 export async function fetchFeed(
   feed: Feed,
-  proxyMode: ProxyMode = 'corsproxy',
+  proxyMode: ProxyMode = 'allorigins',
   customProxyUrl?: string
+): Promise<{ articles: Article[]; health: FeedHealth }> {
+  // Strategy 1: Fetch using configured proxy mode
+  const primaryUrl = buildFetchUrl(feed.url, proxyMode, customProxyUrl);
+  const primaryResult = await doFetch(feed, primaryUrl, proxyMode);
+
+  if (primaryResult.articles.length > 0) {
+    return primaryResult;
+  }
+
+  // Strategy 2: If proxy mode was not direct, and it failed with 401/403 or network error, attempt direct fetch as fallback
+  if (proxyMode !== 'direct') {
+    try {
+      const fallbackResult = await doFetch(feed, feed.url, 'direct');
+      if (fallbackResult.articles.length > 0) {
+        return fallbackResult;
+      }
+    } catch {
+      // Fallback failed, return primary result with diagnostics
+    }
+  }
+
+  return primaryResult;
+}
+
+async function doFetch(
+  feed: Feed,
+  fetchUrl: string,
+  mode: ProxyMode
 ): Promise<{ articles: Article[]; health: FeedHealth }> {
   const now = new Date().toISOString();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  const fetchUrl = buildFetchUrl(feed.url, proxyMode, customProxyUrl);
 
   try {
     const response = await fetch(fetchUrl, {
@@ -43,6 +67,13 @@ export async function fetchFeed(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      let errorMsg = `HTTP Error ${response.status} (${response.statusText || 'Fetch failed'})`;
+      if (response.status === 401) {
+        errorMsg = 'Source or proxy returned 401 Unauthorized.';
+      } else if (response.status === 403) {
+        errorMsg = 'Access Forbidden (Cloudflare or server anti-bot challenge).';
+      }
+
       return {
         articles: [],
         health: {
@@ -50,7 +81,7 @@ export async function fetchFeed(
           status: 'http_error',
           lastFetchedAt: now,
           articleCount: 0,
-          errorMessage: `HTTP Error ${response.status} (${response.statusText || 'Failed to fetch'})`,
+          errorMessage: errorMsg,
           httpStatus: response.status
         }
       };
@@ -106,10 +137,9 @@ export async function fetchFeed(
       status = 'timeout';
       errorMessage = `Request timed out after ${TIMEOUT_MS / 1000}s`;
     } else if (err instanceof TypeError && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
-      // In browsers, TypeError: Failed to fetch on cross-origin requests is the telltale signature of CORS restriction
-      status = proxyMode === 'direct' ? 'cors_error' : 'network_error';
-      errorMessage = proxyMode === 'direct'
-        ? 'CORS restriction prevented direct browser access. Enable CORS proxy in Settings or switch to a compatible feed.'
+      status = mode === 'direct' ? 'cors_error' : 'network_error';
+      errorMessage = mode === 'direct'
+        ? 'CORS restriction prevented direct browser access. Use AllOrigins proxy in Settings.'
         : 'Network error or proxy unavailable.';
     }
 
@@ -141,7 +171,7 @@ export async function fetchAllFeeds(
   const allArticles: Article[] = [];
   const healthMap: Record<string, FeedHealth> = {};
 
-  const CONCURRENCY_LIMIT = 5;
+  const CONCURRENCY_LIMIT = 4;
   const queue = [...activeFeeds];
 
   async function worker() {
