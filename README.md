@@ -2,6 +2,8 @@
 
 > **A polished, modern, client-side-only security news reader that aggregates RSS/Atom feeds and presents them as a beautiful digital newspaper.**
 
+**🌐 Live site: [https://jozeta.github.io/ThreatFeed/](https://jozeta.github.io/ThreatFeed/)**
+
 Inspired by the editorial elegance, typography, and usability of **Newsify for iOS**, ThreatFeed transforms security alerts, threat research, and exploit writeups into a high-end digital publication.
 
 ![image](Screenshot.png)
