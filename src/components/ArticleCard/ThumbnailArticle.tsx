@@ -7,9 +7,62 @@ import { formatRelativeTime } from '../../utils/date';
 interface ThumbnailArticleProps {
   article: Article;
   onOpen: () => void;
+  variant?: 'card' | 'newspaper';
+  showBorder?: boolean;
 }
 
-export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({ article, onOpen }) => {
+export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
+  article,
+  onOpen,
+  variant = 'card',
+  showBorder = true,
+}) => {
+  if (variant === 'newspaper') {
+    return (
+      <article
+        onClick={onOpen}
+        className={`group cursor-pointer flex flex-row gap-3 py-3 transition-all duration-200 ${
+          showBorder ? 'border-b border-theme-border/60' : ''
+        } ${article.read ? 'opacity-85' : 'opacity-100'}`}
+      >
+        {/* Compact Newspaper Thumbnail */}
+        <div className="w-24 sm:w-28 h-20 flex-shrink-0 rounded-sm overflow-hidden border border-theme-border/40">
+          <ArticleImage
+            src={article.image}
+            alt={article.title}
+            sourceName={article.sourceName}
+            category={article.categories[0] || 'Security'}
+            aspectClass="h-full w-full"
+          />
+        </div>
+
+        {/* Content */}
+        <div className="flex flex-col flex-grow min-w-0 justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <span className="font-mono text-[10px] font-bold text-theme-accent uppercase truncate">
+                {article.sourceName}
+              </span>
+              <time className="font-mono text-[10px] text-theme-text-muted flex-shrink-0">
+                {formatRelativeTime(article.publishedAt)}
+              </time>
+            </div>
+            <h4 className="font-serif text-sm sm:text-base font-bold text-theme-text group-hover:text-theme-accent transition-colors leading-snug line-clamp-2">
+              {article.title}
+            </h4>
+          </div>
+
+          <div className="flex items-center justify-between gap-1 pt-1 mt-1">
+            <span className="font-mono text-[9px] uppercase px-1 rounded bg-theme-card text-theme-text-muted truncate max-w-[80px]">
+              #{article.tags[0] || 'Intel'}
+            </span>
+            <ArticleActions article={article} compact onOpenReader={onOpen} />
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article
       onClick={onOpen}

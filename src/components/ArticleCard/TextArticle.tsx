@@ -7,19 +7,21 @@ interface TextArticleProps {
   article: Article;
   onOpen: () => void;
   showDivider?: boolean;
+  className?: string;
 }
 
 export const TextArticle: React.FC<TextArticleProps> = ({
   article,
   onOpen,
   showDivider = true,
+  className = '',
 }) => {
   return (
     <article
       onClick={onOpen}
       className={`group cursor-pointer flex flex-col transition-all duration-200 ${
         showDivider ? 'border-b border-theme-border/70 pb-4 mb-4' : 'pb-2'
-      } ${article.read ? 'opacity-80' : 'opacity-100'}`}
+      } ${article.read ? 'opacity-80' : 'opacity-100'} ${className}`}
     >
       <div className="flex items-center justify-between gap-2 mb-1">
         <span className="font-mono text-[10px] font-semibold text-theme-accent uppercase tracking-wider truncate">

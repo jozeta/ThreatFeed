@@ -22,7 +22,7 @@ export const QuarterBriefArticle: React.FC<QuarterBriefArticleProps> = ({
         article.read ? 'opacity-85' : 'opacity-100 shadow-sm'
       }`}
     >
-      {withImage && article.image && (
+      {withImage && (
         <div className="w-full mb-3 rounded overflow-hidden border border-theme-border/40">
           <ArticleImage
             src={article.image}

@@ -8,19 +8,25 @@ interface FeatureArticleProps {
   article: Article;
   onOpen: () => void;
   orientation?: 'vertical' | 'horizontal';
+  showBorder?: boolean;
+  className?: string;
 }
 
 export const FeatureArticle: React.FC<FeatureArticleProps> = ({
   article,
   onOpen,
   orientation = 'vertical',
+  showBorder = true,
+  className = '',
 }) => {
   return (
     <article
       onClick={onOpen}
-      className={`group cursor-pointer flex transition-all duration-200 border-b border-theme-border pb-5 mb-5 ${
+      className={`group cursor-pointer flex transition-all duration-200 ${
+        showBorder ? 'border-b border-theme-border pb-5 mb-5' : ''
+      } ${
         orientation === 'horizontal' ? 'flex-col sm:flex-row gap-4' : 'flex-col'
-      } ${article.read ? 'opacity-85' : 'opacity-100'}`}
+      } ${article.read ? 'opacity-85' : 'opacity-100'} ${className}`}
     >
       {/* Thumbnail or Featured Image */}
       <div
