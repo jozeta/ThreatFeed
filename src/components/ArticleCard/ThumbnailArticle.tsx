@@ -1,0 +1,81 @@
+import React from 'react';
+import { Article } from '../../types';
+import { ArticleImage } from '../Common/ArticleImage';
+import { ArticleActions } from '../Common/ArticleActions';
+import { formatRelativeTime } from '../../utils/date';
+
+interface ThumbnailArticleProps {
+  article: Article;
+  onOpen: () => void;
+}
+
+export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({ article, onOpen }) => {
+  return (
+    <article
+      onClick={onOpen}
+      className={`group cursor-pointer flex flex-col sm:flex-row gap-4 p-4 rounded-lg bg-theme-surface border border-theme-border hover:border-theme-accent/50 transition-all duration-200 ${
+        article.read ? 'opacity-85' : 'opacity-100 shadow-sm'
+      }`}
+    >
+      {/* Thumbnail */}
+      <div className="w-full sm:w-36 h-28 sm:h-24 flex-shrink-0 rounded overflow-hidden border border-theme-border/40">
+        <ArticleImage
+          src={article.image}
+          alt={article.title}
+          sourceName={article.sourceName}
+          category={article.categories[0] || 'Security'}
+          aspectClass="h-full w-full"
+        />
+      </div>
+
+      {/* Content */}
+      <div className="flex flex-col flex-grow min-w-0 justify-between">
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2 truncate">
+              <span className="font-mono text-xs font-semibold text-theme-accent truncate">
+                {article.sourceName}
+              </span>
+              <span className="text-theme-border font-bold">·</span>
+              <span className="font-mono text-[11px] text-theme-text-muted truncate">
+                {article.categories[0] || 'Security'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {!article.read && (
+                <span className="w-2 h-2 rounded-full bg-theme-accent" />
+              )}
+              <time className="font-mono text-xs text-theme-text-muted">
+                {formatRelativeTime(article.publishedAt)}
+              </time>
+            </div>
+          </div>
+
+          <h3 className="font-serif text-base sm:text-lg font-bold text-theme-text group-hover:text-theme-accent transition-colors leading-snug mb-1 line-clamp-2">
+            {article.title}
+          </h3>
+
+          {article.description && (
+            <p className="font-serif text-xs text-theme-text-muted line-clamp-1 mb-2">
+              {article.description}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-theme-border/40">
+          <div className="flex items-center gap-1 overflow-hidden">
+            {article.tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded bg-theme-card text-theme-text-muted truncate"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+          <ArticleActions article={article} compact onOpenReader={onOpen} />
+        </div>
+      </div>
+    </article>
+  );
+};

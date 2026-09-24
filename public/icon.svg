@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#0B0D10"/>
+  <rect x="24" y="24" width="464" height="464" rx="88" stroke="#E11D48" stroke-width="4" stroke-opacity="0.3"/>
+  <!-- ThreatFeed Shield / Editorial T -->
+  <path d="M256 72L400 128V240C400 336 338 418 256 448C174 418 112 336 112 240V128L256 72Z" fill="#11151A" stroke="#E11D48" stroke-width="12" stroke-linejoin="round"/>
+  <!-- News feed lines -->
+  <path d="M192 188H320" stroke="#F5F7FA" stroke-width="14" stroke-linecap="round"/>
+  <path d="M256 188V352" stroke="#F5F7FA" stroke-width="14" stroke-linecap="round"/>
+  <!-- Radar signal rings -->
+  <circle cx="256" cy="352" r="16" fill="#E11D48"/>
+  <path d="M220 316C230 306 242 300 256 300C270 300 282 306 292 316" stroke="#E11D48" stroke-width="6" stroke-linecap="round"/>
+  <path d="M200 296C215 281 234 272 256 272C278 272 297 281 312 296" stroke="#E11D48" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5"/>
+</svg>

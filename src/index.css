@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0b0d10;
+  --color-surface: #11151a;
+  --color-card: #151a21;
+  --color-border: #222831;
+  --color-border-strong: #3e4756;
+  --color-text: #f5f7fa;
+  --color-text-muted: #9ba3af;
+  --color-accent: #e11d48;
+  --color-accent-hover: #e11d48dd;
+  --color-accent-subtle: #e11d481a;
+  --newspaper-spacing: 1.25rem;
+  --body-font-size: 16px;
+}
+
+body {
+  font-size: var(--body-font-size);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  overflow-x: hidden;
+}
+
+/* Reduced motion preference */
+.reduce-motion * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* Subtle animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Reader HTML content styling */
+.reader-html-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+  margin: 1.5rem 0;
+}
+
+.reader-html-content p {
+  margin-bottom: 1.25rem;
+  line-height: 1.75;
+}
+
+.reader-html-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.reader-html-content pre, .reader-html-content code {
+  font-family: 'JetBrains Mono', monospace;
+  background-color: var(--color-card);
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PRINT STYLESHEET (Requirement 48: Print Newspaper Edition)
+   ───────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide application chrome, navigation, buttons, modals */
+  nav,
+  header .interactive-chrome,
+  button,
+  input,
+  select,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+  }
+
+  .newspaper-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Black and white newspaper print borders */
+  * {
+    border-color: #000000 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  a {
+    text-decoration: none !important;
+    color: #000000 !important;
+  }
+
+  /* Masthead in print */
+  #print-masthead {
+    display: block !important;
+    text-align: center;
+    border-bottom: 3px double #000000;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  img {
+    filter: grayscale(100%);
+    max-height: 250px;
+    page-break-inside: avoid;
+  }
+
+  article {
+    page-break-inside: avoid;
+    border-bottom: 1px solid #666666 !important;
+    margin-bottom: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+}

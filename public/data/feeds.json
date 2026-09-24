@@ -1,0 +1,190 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-09-24T12:00:00Z",
+  "feeds": [
+    {
+      "id": "the-hacker-news",
+      "name": "The Hacker News",
+      "url": "https://feeds.feedburner.com/TheHackersNews",
+      "category": "Security News",
+      "tags": ["news", "vulnerability", "malware", "cybercrime"],
+      "enabled": true
+    },
+    {
+      "id": "krebs-on-security",
+      "name": "Krebs on Security",
+      "url": "https://krebsonsecurity.com/feed/",
+      "category": "Security News",
+      "tags": ["investigation", "cybercrime", "fraud", "news"],
+      "enabled": true
+    },
+    {
+      "id": "sans-isc",
+      "name": "SANS Internet Storm Center",
+      "url": "https://isc.sans.edu/rssfeed.xml",
+      "category": "Security News",
+      "tags": ["incident-response", "network-security", "honeypot", "analysis"],
+      "enabled": true
+    },
+    {
+      "id": "cisa-advisories",
+      "name": "CISA Cybersecurity Advisories",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+      "category": "Vulnerabilities",
+      "tags": ["cisa", "advisory", "vulnerability", "government", "cve"],
+      "enabled": true
+    },
+    {
+      "id": "bleeping-computer",
+      "name": "BleepingComputer",
+      "url": "https://www.bleepingcomputer.com/feed/",
+      "category": "Security News",
+      "tags": ["news", "ransomware", "data-breach", "zero-day"],
+      "enabled": true
+    },
+    {
+      "id": "securityweek",
+      "name": "SecurityWeek",
+      "url": "https://www.securityweek.com/feed/",
+      "category": "Security News",
+      "tags": ["enterprise", "vulnerabilities", "cyberwarfare", "news"],
+      "enabled": true
+    },
+    {
+      "id": "dark-reading",
+      "name": "Dark Reading",
+      "url": "https://www.darkreading.com/rss.xml",
+      "category": "Security News",
+      "tags": ["enterprise", "threat-intelligence", "infosec"],
+      "enabled": true
+    },
+    {
+      "id": "help-net-security",
+      "name": "Help Net Security",
+      "url": "https://www.helpnetsecurity.com/feed/",
+      "category": "Security News",
+      "tags": ["news", "management", "privacy", "products"],
+      "enabled": true
+    },
+    {
+      "id": "google-project-zero",
+      "name": "Google Project Zero",
+      "url": "https://googleprojectzero.blogspot.com/feeds/posts/default",
+      "category": "Vulnerabilities",
+      "tags": ["zero-day", "exploit", "research", "vulnerability"],
+      "enabled": true
+    },
+    {
+      "id": "cisco-talos",
+      "name": "Cisco Talos Intelligence",
+      "url": "https://blog.talosintelligence.com/rss/",
+      "category": "Threat Intelligence",
+      "tags": ["threat-intelligence", "apt", "malware", "research"],
+      "enabled": true
+    },
+    {
+      "id": "microsoft-security",
+      "name": "Microsoft Security Blog",
+      "url": "https://www.microsoft.com/en-us/security/blog/feed/",
+      "category": "Threat Intelligence",
+      "tags": ["cloud-security", "apt", "microsoft", "threat-intelligence"],
+      "enabled": true
+    },
+    {
+      "id": "google-online-security",
+      "name": "Google Online Security Blog",
+      "url": "https://security.googleblog.com/feeds/posts/default",
+      "category": "Research",
+      "tags": ["google", "cryptography", "web-security", "research"],
+      "enabled": true
+    },
+    {
+      "id": "portswigger-research",
+      "name": "PortSwigger Web Security Research",
+      "url": "https://portswigger.net/research/rss",
+      "category": "Vulnerabilities",
+      "tags": ["web-security", "appsec", "burp-suite", "exploit"],
+      "enabled": true
+    },
+    {
+      "id": "trail-of-bits",
+      "name": "Trail of Bits",
+      "url": "https://blog.trailofbits.com/feed/",
+      "category": "Research",
+      "tags": ["cryptography", "reverse-engineering", "blockchain", "research"],
+      "enabled": true
+    },
+    {
+      "id": "specterops",
+      "name": "SpecterOps Posts",
+      "url": "https://posts.specterops.io/feed",
+      "category": "Red Team",
+      "tags": ["red-team", "active-directory", "offense", "adversary-simulation"],
+      "enabled": true
+    },
+    {
+      "id": "sentinelone-labs",
+      "name": "SentinelOne Labs",
+      "url": "https://www.sentinelone.com/labs/feed/",
+      "category": "Threat Intelligence",
+      "tags": ["apt", "malware", "reverse-engineering", "threat-intelligence"],
+      "enabled": true
+    },
+    {
+      "id": "malwarebytes-labs",
+      "name": "Malwarebytes Labs",
+      "url": "https://www.malwarebytes.com/blog/feed/index.xml",
+      "category": "Malware",
+      "tags": ["malware", "scams", "ransomware", "threat-analysis"],
+      "enabled": true
+    },
+    {
+      "id": "welivesecurity",
+      "name": "ESET WeLiveSecurity",
+      "url": "https://www.welivesecurity.com/feed/",
+      "category": "Malware",
+      "tags": ["malware", "apt", "research", "threat-intelligence"],
+      "enabled": true
+    },
+    {
+      "id": "sophos-xops",
+      "name": "Sophos X-Ops",
+      "url": "https://news.sophos.com/en-us/category/threat-research/feed/",
+      "category": "Malware",
+      "tags": ["threat-research", "incident-response", "ransomware", "malware"],
+      "enabled": true
+    },
+    {
+      "id": "securelist",
+      "name": "Securelist (Kaspersky)",
+      "url": "https://securelist.com/feed/",
+      "category": "Threat Intelligence",
+      "tags": ["apt", "malware", "botnet", "industrial-control"],
+      "enabled": true
+    },
+    {
+      "id": "huntress-blog",
+      "name": "Huntress",
+      "url": "https://www.huntress.com/blog/rss.xml",
+      "category": "Blue Team",
+      "tags": ["blue-team", "incident-response", "soc", "detection-engineering"],
+      "enabled": true
+    },
+    {
+      "id": "rapid7-blog",
+      "name": "Rapid7 Research & Blog",
+      "url": "https://blog.rapid7.com/rss/",
+      "category": "Research",
+      "tags": ["vulnerability", "metasploit", "research", "cloud-security"],
+      "enabled": true
+    },
+    {
+      "id": "exploit-db",
+      "name": "Exploit-DB",
+      "url": "https://www.exploit-db.com/rss.xml",
+      "category": "Vulnerabilities",
+      "tags": ["exploit", "cve", "poc", "offensive-security"],
+      "enabled": true
+    }
+  ]
+}
