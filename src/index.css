@@ -13,10 +13,108 @@
   --color-accent: #e11d48;
   --color-accent-hover: #e11d48dd;
   --color-accent-subtle: #e11d481a;
-  --newspaper-spacing: 1.25rem;
   --body-font-size: 16px;
+  --font-headline: 'Newsreader', Georgia, Cambria, 'Times New Roman', serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --content-max-w: 80rem; /* default 1280px */
 }
 
+/* ─────────────────────────────────────────────────────────────
+   DYNAMIC FONT FAMILIES
+   ───────────────────────────────────────────────────────────── */
+.font-mode-serif {
+  --font-headline: 'Newsreader', Georgia, Cambria, 'Times New Roman', serif;
+  --font-body: 'Newsreader', Georgia, Cambria, serif;
+}
+
+.font-mode-sans {
+  --font-headline: Arial, Helvetica, "Nimbus Sans L", "Liberation Sans", sans-serif !important;
+  --font-body: Arial, Helvetica, "Nimbus Sans L", "Liberation Sans", sans-serif !important;
+  font-family: Arial, Helvetica, "Nimbus Sans L", "Liberation Sans", sans-serif !important;
+}
+
+.font-mode-mono {
+  --font-headline: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
+  --font-body: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
+}
+
+.font-mode-system {
+  --font-headline: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DYNAMIC CONTAINER WIDTHS
+   ───────────────────────────────────────────────────────────── */
+.width-mode-compact .main-content-container {
+  max-width: 64rem !important; /* 1024px */
+}
+
+.width-mode-standard .main-content-container {
+  max-width: 76rem !important; /* 1216px */
+}
+
+.width-mode-wide .main-content-container {
+  max-width: 92rem !important; /* 1472px */
+}
+
+.width-mode-full .main-content-container {
+  max-width: 98% !important; /* 98% of viewport */
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DYNAMIC ARTICLE SPACING
+   ───────────────────────────────────────────────────────────── */
+.spacing-mode-compact .newspaper-row {
+  margin-bottom: 1.5rem !important;
+  gap: 1rem !important;
+}
+.spacing-mode-compact article {
+  padding-bottom: 0.75rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.spacing-mode-comfortable .newspaper-row {
+  margin-bottom: 2.75rem !important;
+  gap: 2rem !important;
+}
+.spacing-mode-comfortable article {
+  padding-bottom: 1.25rem !important;
+  margin-bottom: 1.25rem !important;
+}
+
+.spacing-mode-spacious .newspaper-row {
+  margin-bottom: 4rem !important;
+  gap: 2.75rem !important;
+}
+.spacing-mode-spacious article {
+  padding-bottom: 2rem !important;
+  margin-bottom: 2rem !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DYNAMIC BORDER STYLES
+   ───────────────────────────────────────────────────────────── */
+.border-mode-none * {
+  border-color: transparent !important;
+}
+
+.border-mode-strong article,
+.border-mode-strong section,
+.border-mode-strong header {
+  border-color: var(--color-border-strong) !important;
+}
+.border-mode-strong .border-b,
+.border-mode-strong .border-t {
+  border-bottom-width: 2px !important;
+}
+.border-mode-strong .border-r {
+  border-right-width: 2px !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   BASE BODY STYLES
+   ───────────────────────────────────────────────────────────── */
 body {
   font-size: var(--body-font-size);
   background-color: var(--color-bg);
@@ -66,6 +164,19 @@ body {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Drop Cap for editorial stories */
+.editorial-drop-cap::first-letter {
+  float: left;
+  font-size: 3.5rem;
+  line-height: 0.85;
+  padding-top: 4px;
+  padding-right: 8px;
+  padding-bottom: 4px;
+  font-family: var(--font-headline);
+  font-weight: 900;
+  color: var(--color-accent);
+}
+
 /* Reader HTML content styling */
 .reader-html-content img {
   max-width: 100%;
@@ -93,10 +204,9 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   PRINT STYLESHEET (Requirement 48: Print Newspaper Edition)
+   PRINT STYLESHEET
    ───────────────────────────────────────────────────────────── */
 @media print {
-  /* Hide application chrome, navigation, buttons, modals */
   nav,
   header .interactive-chrome,
   button,
@@ -112,12 +222,12 @@ body {
     font-size: 11pt !important;
   }
 
+  .main-content-container,
   .newspaper-container {
     max-width: 100% !important;
     padding: 0 !important;
   }
 
-  /* Black and white newspaper print borders */
   * {
     border-color: #000000 !important;
     color: #000000 !important;
@@ -130,7 +240,6 @@ body {
     color: #000000 !important;
   }
 
-  /* Masthead in print */
   #print-masthead {
     display: block !important;
     text-align: center;

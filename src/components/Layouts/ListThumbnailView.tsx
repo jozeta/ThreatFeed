@@ -19,7 +19,7 @@ export const ListThumbnailView: React.FC<ListThumbnailViewProps> = ({
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <div className="main-content-container mx-auto px-4 sm:px-6 py-6 space-y-4">
       {articles.map((article) => (
         <ThumbnailArticle
           key={article.id}

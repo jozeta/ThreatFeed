@@ -8,8 +8,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        serif: ['Newsreader', 'Georgia', 'Cambria', '"Times New Roman"', 'Times', 'serif'],
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        serif: ['var(--font-headline, "Newsreader")', 'Georgia', 'Cambria', '"Times New Roman"', 'serif'],
+        sans: ['var(--font-body, "Inter")', 'Arial', 'Helvetica', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', 'monospace'],
       },
       colors: {

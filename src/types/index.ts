@@ -58,9 +58,14 @@ export type ContentDensity = 'compact' | 'normal' | 'spacious';
 export type AutoRefreshInterval = 0 | 15 | 30 | 60 | 180; // in minutes (0 = manual only)
 export type ProxyMode = 'allorigins' | 'direct' | 'custom';
 
+export type FontFamily = 'serif' | 'sans' | 'mono' | 'system';
+export type ContainerWidth = 'compact' | 'standard' | 'wide' | 'full';
+
 export interface UserSettings {
   theme: ThemeMode;
   layout: LayoutMode;
+  fontFamily: FontFamily;
+  containerWidth: ContainerWidth;
   spacing: ArticleSpacing;
   borderStyle: BorderStyle;
   imageBehavior: ImageBehavior;

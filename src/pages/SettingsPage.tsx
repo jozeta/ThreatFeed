@@ -7,7 +7,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Layout,
   Palette,
   Database,
   Printer,
@@ -15,9 +14,13 @@ import {
   Upload,
   RotateCcw,
   Sliders,
-  Check
+  Check,
+  Type,
+  Maximize2,
+  Shield,
+  Eye
 } from 'lucide-react';
-import { ArticleSpacing, BorderStyle, ImageBehavior, LayoutMode, ProxyMode, ThemeMode } from '../types';
+import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode } from '../types';
 
 const ACCENT_PRESETS = [
   { name: 'Crimson', color: '#e11d48' },
@@ -71,16 +74,16 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+    <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-theme-border">
         <div>
           <h1 className="font-serif text-3xl font-extrabold text-theme-text flex items-center gap-2.5">
             <SettingsIcon className="w-6 h-6 text-theme-accent" />
-            <span>Preferences & Customization</span>
+            <span>Preferences & Newspaper Customization</span>
           </h1>
           <p className="font-serif text-sm text-theme-text-muted mt-1">
-            Personalize typography, color schemes, newspaper density, and client-side ingestion parameters.
+            Configure typography fonts (Arial vs Serif), layout widths, asymmetric editorial weights, and feed proxies.
           </p>
         </div>
 
@@ -93,17 +96,279 @@ export const SettingsPage: React.FC = () => {
         </button>
       </div>
 
-      {/* SECTION 1: THEME & COLOR IDENTITY */}
+      {/* LIVE PREVIEW COMPONENT */}
+      <div className="p-6 rounded-xl bg-theme-surface border border-theme-border shadow-sm">
+        <div className="flex items-center justify-between pb-3 mb-4 border-b border-theme-border">
+          <div className="flex items-center gap-2">
+            <Eye className="w-4 h-4 text-theme-accent" />
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-theme-text">
+              Live Newspaper Design Preview
+            </span>
+          </div>
+          <span className="font-mono text-[11px] text-theme-text-muted">
+            Updates in real-time
+          </span>
+        </div>
+
+        <div className="p-4 rounded-lg bg-theme-card border border-theme-border/60">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="font-mono text-[10px] font-bold text-theme-accent uppercase flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              CYBER DISPATCH · CISA TELEMETRY
+            </span>
+            <span className="font-mono text-[11px] text-theme-text-muted">Just now</span>
+          </div>
+          <h3 className="font-serif text-xl sm:text-2xl font-bold text-theme-text mb-2 leading-tight">
+            Attackers Target Zero-Day In Multi-Cloud Edge Appliances
+          </h3>
+          <p className="font-serif text-sm text-theme-text-muted leading-relaxed line-clamp-2">
+            Security researchers discover ongoing automated exploitation campaigns weaponizing chained authentication bypass primitives across enterprise gateways.
+          </p>
+          <div className="mt-3 pt-2 border-t border-theme-border/50 flex items-center gap-2 font-mono text-[10px] text-theme-text-muted">
+            <span className="px-1.5 py-0.5 rounded bg-theme-surface border border-theme-border uppercase">#Zero-Day</span>
+            <span className="px-1.5 py-0.5 rounded bg-theme-surface border border-theme-border uppercase">#CVE-2026-9041</span>
+            <span className="ml-auto text-theme-accent font-semibold">Active Font: {settings.fontFamily.toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 1: TYPOGRAPHY & FONTS */}
+      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
+          <Type className="w-5 h-5 text-theme-accent" />
+          <h2 className="font-serif text-xl font-bold text-theme-text">Typography & Font Family</h2>
+        </div>
+
+        <div>
+          <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+            Editorial Font Style (Headlines & Body)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                id: 'sans' as FontFamily,
+                label: 'Arial / Modern Clean Sans',
+                fontPreview: 'font-sans font-bold',
+                desc: 'Clean, crisp modern broadsheet newspaper (Arial / Helvetica)',
+              },
+              {
+                id: 'serif' as FontFamily,
+                label: 'Classic Editorial Serif',
+                fontPreview: 'font-serif font-bold',
+                desc: 'Traditional broadsheet newspaper (Newsreader / Georgia)',
+              },
+              {
+                id: 'mono' as FontFamily,
+                label: 'Technical Monospace',
+                fontPreview: 'font-mono font-bold',
+                desc: 'Cyber intelligence terminal style (JetBrains Mono / Code)',
+              },
+              {
+                id: 'system' as FontFamily,
+                label: 'System UI',
+                fontPreview: 'font-sans font-medium',
+                desc: 'Native operating system default interface font',
+              },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => updateSettings({ fontFamily: f.id })}
+                className={`p-3.5 rounded-lg border text-left transition-all ${
+                  settings.fontFamily === f.id
+                    ? 'border-theme-accent bg-theme-accent-subtle text-theme-text font-bold shadow-sm'
+                    : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                }`}
+              >
+                <div className={`text-base text-theme-text mb-1 ${f.fontPreview}`}>
+                  {f.label}
+                </div>
+                <div className="text-[11px] font-sans opacity-70 leading-relaxed">
+                  {f.desc}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Headline Typography Scale */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Headline Typography Scale
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'normal', label: 'Normal' },
+                { id: 'prominent', label: 'Prominent' },
+                { id: 'dramatic', label: 'Dramatic' },
+              ].map((scale) => (
+                <button
+                  key={scale.id}
+                  onClick={() => updateSettings({ headlineScale: scale.id as any })}
+                  className={`py-2 px-2 text-center rounded border font-mono text-xs uppercase transition-colors ${
+                    settings.headlineScale === scale.id
+                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold'
+                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                  }`}
+                >
+                  {scale.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Base Body Font Size
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['sm', 'base', 'lg', 'xl'] as const).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => updateSettings({ fontSize: size })}
+                  className={`py-2 px-1 text-center rounded border font-mono text-xs uppercase transition-colors ${
+                    settings.fontSize === size
+                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold'
+                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 2: NEWSPAPER WIDTH & ASYMMETRIC SIZING */}
+      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
+          <Maximize2 className="w-5 h-5 text-theme-accent" />
+          <h2 className="font-serif text-xl font-bold text-theme-text">Newspaper Page Width & Dimensions</h2>
+        </div>
+
+        <div>
+          <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+            Reading Width (Applies to Newspaper, List & Thumbnail Views)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { id: 'compact' as ContainerWidth, label: 'Compact Column', desc: '1024px · Narrow focused reading' },
+              { id: 'standard' as ContainerWidth, label: 'Standard Balanced', desc: '1216px · Modern editorial width' },
+              { id: 'wide' as ContainerWidth, label: 'Wide Broadsheet', desc: '1472px · Traditional sprawling paper' },
+              { id: 'full' as ContainerWidth, label: 'Ultrawide Full', desc: '98% · Wall-to-wall widescreen' },
+            ].map((w) => (
+              <button
+                key={w.id}
+                onClick={() => updateSettings({ containerWidth: w.id })}
+                className={`p-3 rounded-lg border text-left transition-all ${
+                  settings.containerWidth === w.id
+                    ? 'border-theme-accent bg-theme-accent-subtle text-theme-text font-bold shadow-sm'
+                    : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                }`}
+              >
+                <div className="font-mono text-xs font-bold uppercase">{w.label}</div>
+                <div className="text-[11px] font-sans opacity-70 mt-0.5">{w.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Spacing & Borders */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Article Spacing & Padding
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['compact', 'comfortable', 'spacious'] as ArticleSpacing[]).map((spacing) => (
+                <button
+                  key={spacing}
+                  onClick={() => updateSettings({ spacing })}
+                  className={`py-2 px-2 text-center rounded border font-mono text-xs uppercase transition-colors ${
+                    settings.spacing === spacing
+                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold'
+                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                  }`}
+                >
+                  {spacing}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Border Style & Column Rules
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'none' as BorderStyle, label: 'None' },
+                { id: 'subtle' as BorderStyle, label: 'Subtle (1px)' },
+                { id: 'strong' as BorderStyle, label: 'Strong Ink (2px)' },
+              ].map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => updateSettings({ borderStyle: b.id })}
+                  className={`py-2 px-1 text-center rounded border font-mono text-xs uppercase transition-colors ${
+                    settings.borderStyle === b.id
+                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold'
+                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Image Behavior & Density */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Image Sizing & Presentation
+            </label>
+            <select
+              value={settings.imageBehavior}
+              onChange={(e) => updateSettings({ imageBehavior: e.target.value as ImageBehavior })}
+              className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+            >
+              <option value="large">Large Panoramic Imagery</option>
+              <option value="normal">Normal (Standard Aspect Ratios)</option>
+              <option value="compact">Compact Thumbnails</option>
+              <option value="hidden">Hide All Images (Text-Only Broadsheet)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Default View Layout
+            </label>
+            <select
+              value={settings.layout}
+              onChange={(e) => updateSettings({ layout: e.target.value as LayoutMode })}
+              className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+            >
+              <option value="newspaper">Newspaper (Asymmetric Editorial Hierarchy)</option>
+              <option value="list-thumbnails">List + Thumbnails (Modern Feed)</option>
+              <option value="list">Compact List (Fast Traditional Scanner)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3: THEME & COLOR ACCENTS */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
         <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
           <Palette className="w-5 h-5 text-theme-accent" />
-          <h2 className="font-serif text-xl font-bold text-theme-text">Theme & Color Identity</h2>
+          <h2 className="font-serif text-xl font-bold text-theme-text">Color Scheme & Accents</h2>
         </div>
 
         {/* Theme mode */}
         <div>
           <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-            Color Scheme
+            Base Theme
           </label>
           <div className="grid grid-cols-3 gap-3 max-w-md">
             {[
@@ -130,7 +395,7 @@ export const SettingsPage: React.FC = () => {
         {/* Accent Color Picker */}
         <div>
           <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-            Accent & Link Highlight Color
+            Link Highlight & Accent Color
           </label>
           <div className="flex flex-wrap items-center gap-2.5">
             {ACCENT_PRESETS.map((p) => (
@@ -167,134 +432,19 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* SECTION 2: EDITORIAL LAYOUT & DESIGN */}
-      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
-        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
-          <Layout className="w-5 h-5 text-theme-accent" />
-          <h2 className="font-serif text-xl font-bold text-theme-text">Newspaper Design & Layout</h2>
-        </div>
-
-        {/* Default Layout Mode */}
-        <div>
-          <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-            Default Feed Layout
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              { id: 'newspaper' as LayoutMode, label: 'Newspaper', desc: 'Editorial visual hierarchy' },
-              { id: 'list-thumbnails' as LayoutMode, label: 'List + Thumbnails', desc: 'Modern card stream' },
-              { id: 'list' as LayoutMode, label: 'Compact List', desc: 'Traditional fast scanner' },
-            ].map((m) => (
-              <button
-                key={m.id}
-                onClick={() => updateSettings({ layout: m.id })}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  settings.layout === m.id
-                    ? 'border-theme-accent bg-theme-accent-subtle text-theme-text font-bold'
-                    : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
-                }`}
-              >
-                <div className="font-mono text-xs font-bold uppercase">{m.label}</div>
-                <div className="text-[11px] font-sans opacity-70 mt-0.5">{m.desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Article Spacing & Border Style */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-              Article Spacing
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['compact', 'comfortable', 'spacious'] as ArticleSpacing[]).map((spacing) => (
-                <button
-                  key={spacing}
-                  onClick={() => updateSettings({ spacing })}
-                  className={`py-2 px-2 text-center rounded border font-mono text-xs uppercase transition-colors ${
-                    settings.spacing === spacing
-                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold'
-                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
-                  }`}
-                >
-                  {spacing}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-              Border Style
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['none', 'subtle', 'strong'] as BorderStyle[]).map((b) => (
-                <button
-                  key={b}
-                  onClick={() => updateSettings({ borderStyle: b })}
-                  className={`py-2 px-2 text-center rounded border font-mono text-xs uppercase transition-colors ${
-                    settings.borderStyle === b
-                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold'
-                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
-                  }`}
-                >
-                  {b}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Image Behavior & Headline Scale */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-              Image Behavior
-            </label>
-            <select
-              value={settings.imageBehavior}
-              onChange={(e) => updateSettings({ imageBehavior: e.target.value as ImageBehavior })}
-              className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
-            >
-              <option value="large">Large Editorial Imagery</option>
-              <option value="normal">Normal (Standard Aspect Ratios)</option>
-              <option value="compact">Compact Thumbnails</option>
-              <option value="hidden">Hide All Images (Text-Only Mode)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-              Headline Typography Scale
-            </label>
-            <select
-              value={settings.headlineScale}
-              onChange={(e) => updateSettings({ headlineScale: e.target.value as any })}
-              className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
-            >
-              <option value="normal">Normal (Standard Serif)</option>
-              <option value="prominent">Prominent (Bold Newspaper)</option>
-              <option value="dramatic">Dramatic (Broadsheet Masthead)</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 3: INGESTION & CLIENT-SIDE NETWORK */}
+      {/* SECTION 4: INGESTION & GATEWAY */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
         <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
           <Sliders className="w-5 h-5 text-theme-accent" />
           <h2 className="font-serif text-xl font-bold text-theme-text">Network & RSS Ingestion</h2>
         </div>
 
-        {/* Proxy Mode */}
         <div>
           <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">
             Browser Fetch & CORS Handling Mode
           </label>
           <p className="text-xs font-serif text-theme-text-muted mb-3">
-            Since ThreatFeed has no backend server, CORS-restricted RSS feeds require a CORS bridge for direct browser reading.
+            Since ThreatFeed has no backend server, cross-origin feeds require a CORS gateway for direct browser reading.
           </p>
 
           <div className="space-y-2">
@@ -377,7 +527,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* SECTION 4: DATA, BACKUP & PRINT */}
+      {/* SECTION 5: DATA, BACKUP & PRINT */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
         <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
           <Database className="w-5 h-5 text-theme-accent" />

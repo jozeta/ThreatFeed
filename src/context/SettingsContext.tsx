@@ -5,6 +5,8 @@ import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexed
 export const DEFAULT_SETTINGS: UserSettings = {
   theme: 'dark',
   layout: 'newspaper',
+  fontFamily: 'serif',
+  containerWidth: 'wide',
   spacing: 'comfortable',
   borderStyle: 'subtle',
   imageBehavior: 'normal',
@@ -34,12 +36,16 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     getSettingsFromDB().then((saved) => {
       if (saved) {
-        // Migrate deprecated corsproxy setting
-        if ((saved as any).proxyMode === 'corsproxy') {
-          saved.proxyMode = 'allorigins';
-          saveSettingsToDB({ ...DEFAULT_SETTINGS, ...saved });
-        }
-        setSettings({ ...DEFAULT_SETTINGS, ...saved });
+        // Migrate defaults for new fields
+        const migrated: UserSettings = {
+          ...DEFAULT_SETTINGS,
+          ...saved,
+          fontFamily: saved.fontFamily || 'serif',
+          containerWidth: saved.containerWidth || 'wide',
+          proxyMode: (saved as any).proxyMode === 'corsproxy' ? 'allorigins' : (saved.proxyMode || 'allorigins'),
+        };
+        setSettings(migrated);
+        saveSettingsToDB(migrated);
       }
       setLoaded(true);
     });
@@ -59,7 +65,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     saveSettingsToDB(DEFAULT_SETTINGS);
   };
 
-  // Apply Theme & CSS Variables
+  // Apply Theme & CSS Variables & Classes
   useEffect(() => {
     if (!loaded) return;
 
@@ -73,41 +79,47 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isDark) {
       root.classList.add('dark');
       root.classList.remove('light');
-      // Dark color palette (genuine security newspaper aesthetic)
       root.style.setProperty('--color-bg', '#0b0d10');
       root.style.setProperty('--color-surface', '#11151a');
       root.style.setProperty('--color-card', '#151a21');
-      root.style.setProperty('--color-border', settings.borderStyle === 'none' ? 'transparent' : settings.borderStyle === 'strong' ? '#333b47' : '#222831');
-      root.style.setProperty('--color-border-strong', '#3e4756');
+      root.style.setProperty('--color-border', settings.borderStyle === 'none' ? 'transparent' : settings.borderStyle === 'strong' ? '#3e4756' : '#222831');
+      root.style.setProperty('--color-border-strong', '#525e70');
       root.style.setProperty('--color-text', '#f5f7fa');
       root.style.setProperty('--color-text-muted', '#9ba3af');
     } else {
       root.classList.add('light');
       root.classList.remove('dark');
-      // Light color palette (crisp print editorial aesthetic)
       root.style.setProperty('--color-bg', '#f7f8fa');
       root.style.setProperty('--color-surface', '#ffffff');
       root.style.setProperty('--color-card', '#ffffff');
-      root.style.setProperty('--color-border', settings.borderStyle === 'none' ? 'transparent' : settings.borderStyle === 'strong' ? '#cbd5e1' : '#e2e8f0');
-      root.style.setProperty('--color-border-strong', '#94a3b8');
+      root.style.setProperty('--color-border', settings.borderStyle === 'none' ? 'transparent' : settings.borderStyle === 'strong' ? '#94a3b8' : '#e2e8f0');
+      root.style.setProperty('--color-border-strong', '#334155');
       root.style.setProperty('--color-text', '#0f172a');
       root.style.setProperty('--color-text-muted', '#64748b');
     }
 
-    // 2. Accent Color
+    // 2. Font Family Mode (serif, sans/Arial, mono, system)
+    root.classList.remove('font-mode-serif', 'font-mode-sans', 'font-mode-mono', 'font-mode-system');
+    root.classList.add(`font-mode-${settings.fontFamily}`);
+
+    // 3. Container Width Mode (compact, standard, wide, full)
+    root.classList.remove('width-mode-compact', 'width-mode-standard', 'width-mode-wide', 'width-mode-full');
+    root.classList.add(`width-mode-${settings.containerWidth}`);
+
+    // 4. Spacing Mode (compact, comfortable, spacious)
+    root.classList.remove('spacing-mode-compact', 'spacing-mode-comfortable', 'spacing-mode-spacious');
+    root.classList.add(`spacing-mode-${settings.spacing}`);
+
+    // 5. Border Style Mode (none, subtle, strong)
+    root.classList.remove('border-mode-none', 'border-mode-subtle', 'border-mode-strong');
+    root.classList.add(`border-mode-${settings.borderStyle}`);
+
+    // 6. Accent Color
     root.style.setProperty('--color-accent', settings.accentColor);
     root.style.setProperty('--color-accent-hover', `${settings.accentColor}dd`);
     root.style.setProperty('--color-accent-subtle', `${settings.accentColor}1a`);
 
-    // 3. Spacing & Density
-    const spacingMap = {
-      compact: '0.75rem',
-      comfortable: '1.25rem',
-      spacious: '2rem',
-    };
-    root.style.setProperty('--newspaper-spacing', spacingMap[settings.spacing] || '1.25rem');
-
-    // 4. Font size
+    // 7. Font size
     const fontSizeMap = {
       sm: '14px',
       base: '16px',
@@ -116,7 +128,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     root.style.setProperty('--body-font-size', fontSizeMap[settings.fontSize] || '16px');
 
-    // 5. Reduced motion
+    // 8. Reduced motion
     if (settings.reducedMotion) {
       root.classList.add('reduce-motion');
     } else {
