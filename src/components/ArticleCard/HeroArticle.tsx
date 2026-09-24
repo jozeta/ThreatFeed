@@ -1,18 +1,33 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
 import { useSettings } from '../../context/SettingsContext';
+import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { Shield } from 'lucide-react';
 
 interface HeroArticleProps {
   article: Article;
   onOpen: () => void;
+  clusterCount?: number;
+  clusterSources?: string[];
+  onOpenCluster?: () => void;
 }
 
-export const HeroArticle: React.FC<HeroArticleProps> = ({ article, onOpen }) => {
+export const HeroArticle: React.FC<HeroArticleProps> = ({
+  article,
+  onOpen,
+  clusterCount = 1,
+  clusterSources = [],
+  onOpenCluster
+}) => {
   const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
 
   const headlineClass = {
     normal: 'text-2xl lg:text-3xl font-bold',
@@ -28,8 +43,12 @@ export const HeroArticle: React.FC<HeroArticleProps> = ({ article, onOpen }) => 
       }`}
     >
       {/* Editorial Category & Freshness Header */}
-      <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-theme-border/60">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-theme-border/60">
+        <div className="flex flex-wrap items-center gap-2">
+          <SeverityBadge severity={article.severity} score={article.severityScore} />
+          {watchlistMatch.matched && (
+            <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+          )}
           <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold tracking-widest text-theme-accent uppercase">
             <Shield className="w-3 h-3" />
             LEAD STORY · {article.sourceName}
@@ -89,6 +108,16 @@ export const HeroArticle: React.FC<HeroArticleProps> = ({ article, onOpen }) => 
               #{tag}
             </span>
           ))}
+          {article.cves && article.cves.slice(0, 3).map((cve) => (
+            <CveChip key={cve} cve={cve} />
+          ))}
+          {clusterCount > 1 && (
+            <ClusterPill
+              count={clusterCount}
+              sources={clusterSources}
+              onClick={onOpenCluster}
+            />
+          )}
         </div>
 
         <ArticleActions article={article} onOpenReader={onOpen} />

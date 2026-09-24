@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
+import { SeverityBadge, WatchlistBadge } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
+import { useSettings } from '../../context/SettingsContext';
 
 interface TextArticleProps {
   article: Article;
@@ -16,6 +19,12 @@ export const TextArticle: React.FC<TextArticleProps> = ({
   showDivider = true,
   className = '',
 }) => {
+  const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
+
   return (
     <article
       onClick={onOpen}
@@ -23,10 +32,16 @@ export const TextArticle: React.FC<TextArticleProps> = ({
         showDivider ? 'border-b border-theme-border/70 pb-4 mb-4' : 'pb-2'
       } ${article.read ? 'opacity-80' : 'opacity-100'} ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="font-mono text-[10px] font-semibold text-theme-accent uppercase tracking-wider truncate">
-          {article.sourceName}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <SeverityBadge severity={article.severity} />
+          {watchlistMatch.matched && (
+            <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+          )}
+          <span className="font-mono text-[10px] font-semibold text-theme-accent uppercase tracking-wider truncate">
+            {article.sourceName}
+          </span>
+        </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {!article.read && (
             <span className="w-1.5 h-1.5 rounded-full bg-theme-accent" />

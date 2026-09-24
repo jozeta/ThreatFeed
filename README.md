@@ -4,6 +4,8 @@
 
 Inspired by the editorial elegance, typography, and usability of **Newsify for iOS**, ThreatFeed transforms security alerts, threat research, and exploit writeups into a high-end digital publication.
 
+![image](Screenshot.png)
+
 ---
 
 ## 🗞️ Key Features

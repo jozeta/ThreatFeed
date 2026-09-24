@@ -1,15 +1,31 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActiveNavTab } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
+import { useFilter } from '../../context/FilterContext';
+import { useSettings } from '../../context/SettingsContext';
 import {
   Newspaper,
   Clock,
   Inbox,
   Bookmark,
-  Radio,
-  Activity,
-  Settings as SettingsIcon,
+  Target,
 } from 'lucide-react';
+
+const ORDERED_PRIMARY_CATEGORIES = [
+  'All',
+  'Security News',
+  'Threat Intelligence',
+  'Vulnerabilities',
+  'Malware',
+  'Research',
+  'Red Team',
+  'Blue Team',
+  'General Tech',
+  'Consumer Tech',
+  'Tech Guides & How-To',
+  'Platform Ecosystems',
+  'Privacy & Policy',
+];
 
 interface NavigationTabsProps {
   activeTab: ActiveNavTab;
@@ -17,14 +33,18 @@ interface NavigationTabsProps {
 }
 
 export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSelectTab }) => {
-  const { articles, feedHealth } = useFeeds();
+  const { feeds, articles } = useFeeds();
+  const { filters, updateFilter } = useFilter();
+  const { settings } = useSettings();
 
   const unreadCount = articles.filter((a) => !a.read).length;
   const bookmarkedCount = articles.filter((a) => a.bookmarked).length;
 
-  const errorFeedsCount = Object.values(feedHealth).filter(
-    (h) => h.status !== 'healthy'
-  ).length;
+  const categories = useMemo(() => {
+    const feedCategories = Array.from(new Set(feeds.map((f) => f.category))).filter(Boolean);
+    const combined = Array.from(new Set([...ORDERED_PRIMARY_CATEGORIES.slice(1), ...feedCategories]));
+    return ['All', ...combined];
+  }, [feeds]);
 
   const tabs: { id: ActiveNavTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string }[] = [
     { id: 'newspaper', label: 'Newspaper', icon: <Newspaper className="w-4 h-4" /> },
@@ -43,22 +63,28 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       badge: bookmarkedCount > 0 ? bookmarkedCount : undefined,
       badgeColor: 'bg-theme-card text-theme-text border border-theme-border',
     },
-    { id: 'sources', label: 'Sources', icon: <Radio className="w-4 h-4" /> },
-    {
-      id: 'health',
-      label: 'Health',
-      icon: <Activity className="w-4 h-4" />,
-      badge: errorFeedsCount > 0 ? errorFeedsCount : undefined,
-      badgeColor: 'bg-amber-600 text-white',
-    },
-    { id: 'settings', label: 'Settings', icon: <SettingsIcon className="w-4 h-4" /> },
   ];
+
+  const handleCategoryChange = (cat: string) => {
+    updateFilter('selectedCategory', cat === 'All' ? null : cat);
+    if (activeTab !== 'newspaper' && activeTab !== 'latest' && activeTab !== 'unread') {
+      onSelectTab('newspaper');
+    }
+  };
+
+  const handleWatchlistToggle = () => {
+    updateFilter('watchlistOnly', !filters.watchlistOnly);
+    if (activeTab !== 'newspaper' && activeTab !== 'latest' && activeTab !== 'unread') {
+      onSelectTab('newspaper');
+    }
+  };
 
   return (
     <>
-      {/* Desktop Top Navigation Bar */}
+      {/* Desktop Navigation & Category/Watchlist Bar */}
       <nav className="bg-theme-surface border-b border-theme-border hidden sm:block">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          {/* Left: Navigation Tabs */}
           <div className="flex items-center space-x-1">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -85,10 +111,93 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
               );
             })}
           </div>
+
+          {/* Right: Category Dropdown & Watchlist Button */}
+          <div className="flex items-center gap-2 py-1.5 flex-shrink-0">
+            {/* Category Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <label
+                htmlFor="nav-category-select"
+                className="text-[11px] font-mono uppercase tracking-wider text-theme-text-muted hidden md:inline"
+              >
+                Category:
+              </label>
+              <select
+                id="nav-category-select"
+                value={filters.selectedCategory || 'All'}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="bg-theme-card border border-theme-border rounded px-2.5 py-1 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent transition-colors max-w-[170px] sm:max-w-[210px] truncate"
+              >
+                <option value="All">All Categories</option>
+                {categories
+                  .filter((c) => c !== 'All')
+                  .map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Watchlist Quick Toggle Button */}
+            <button
+              onClick={handleWatchlistToggle}
+              title="Show only articles matching your watchlist keywords"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-all uppercase tracking-wider font-bold ${
+                filters.watchlistOnly
+                  ? 'bg-amber-500 text-black shadow-sm'
+                  : 'text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30'
+              }`}
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>Watchlist</span>
+              {settings.watchlistKeywords.length > 0 && (
+                <span
+                  className={`text-[10px] px-1 rounded-full ${
+                    filters.watchlistOnly
+                      ? 'bg-black text-amber-500'
+                      : 'bg-amber-500/20 text-amber-500'
+                  }`}
+                >
+                  {settings.watchlistKeywords.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </nav>
 
-      {/* Mobile Bottom Navigation Bar (Requirement 20: Mobile can use bottom navigation) */}
+      {/* Mobile Category Dropdown & Watchlist Bar (Visible on mobile above search bar) */}
+      <div className="sm:hidden bg-theme-surface border-b border-theme-border px-3 py-1.5 flex items-center justify-between gap-2 text-xs font-mono">
+        <select
+          value={filters.selectedCategory || 'All'}
+          onChange={(e) => handleCategoryChange(e.target.value)}
+          className="bg-theme-card border border-theme-border rounded px-2 py-1 text-xs font-mono text-theme-text flex-grow max-w-[62%]"
+        >
+          <option value="All">All Categories</option>
+          {categories
+            .filter((c) => c !== 'All')
+            .map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+        </select>
+
+        <button
+          onClick={handleWatchlistToggle}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-bold uppercase ${
+            filters.watchlistOnly
+              ? 'bg-amber-500 text-black'
+              : 'text-amber-500 bg-amber-500/10 border border-amber-500/30'
+          }`}
+        >
+          <Target className="w-3.5 h-3.5" />
+          <span>Watchlist</span>
+        </button>
+      </div>
+
+      {/* Mobile Bottom Navigation Bar */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-theme-surface/95 backdrop-blur-md border-t border-theme-border flex items-center justify-around py-1.5 px-2 safe-area-pb">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

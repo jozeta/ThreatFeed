@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { useSettings } from '../context/SettingsContext';
+import React, { useRef, useState } from 'react';
+import { useSettings, DEFAULT_NEWSPAPER_SECTIONS } from '../context/SettingsContext';
 import { useFeeds } from '../context/FeedContext';
 import { exportAllThreatFeedData, importThreatFeedData } from '../services/storage/indexeddb';
 import {
@@ -18,7 +18,17 @@ import {
   Type,
   Maximize2,
   Shield,
-  Eye
+  Eye,
+  EyeOff,
+  Target,
+  Layers,
+  Folder,
+  Plus,
+  X,
+  ArrowUp,
+  ArrowDown,
+  SlidersHorizontal,
+  Clock
 } from 'lucide-react';
 import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode } from '../types';
 
@@ -37,6 +47,66 @@ export const SettingsPage: React.FC = () => {
   const { feeds, articles } = useFeeds();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [newKeyword, setNewKeyword] = useState('');
+  const [newFolder, setNewFolder] = useState('');
+
+  const handleAddKeyword = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const val = newKeyword.trim();
+    if (!val) return;
+    if (!settings.watchlistKeywords.includes(val)) {
+      updateSettings({ watchlistKeywords: [...settings.watchlistKeywords, val] });
+    }
+    setNewKeyword('');
+  };
+
+  const handleRemoveKeyword = (kw: string) => {
+    updateSettings({
+      watchlistKeywords: settings.watchlistKeywords.filter((k) => k !== kw),
+    });
+  };
+
+  const handleAddPresetKeywords = (keywords: string[]) => {
+    const combined = Array.from(new Set([...settings.watchlistKeywords, ...keywords]));
+    updateSettings({ watchlistKeywords: combined });
+  };
+
+  const handleMoveSection = (idx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const currentSections = [...(settings.newspaperSections || [])].sort((a, b) => a.order - b.order);
+    if (targetIdx < 0 || targetIdx >= currentSections.length) return;
+    const temp = currentSections[idx];
+    currentSections[idx] = currentSections[targetIdx];
+    currentSections[targetIdx] = temp;
+    currentSections.forEach((s, i) => {
+      s.order = i;
+    });
+    updateSettings({ newspaperSections: currentSections });
+  };
+
+  const handleToggleSection = (id: string) => {
+    const updated = (settings.newspaperSections || []).map((s) =>
+      s.id === id ? { ...s, enabled: !s.enabled } : s
+    );
+    updateSettings({ newspaperSections: updated });
+  };
+
+  const handleAddFolder = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const val = newFolder.trim();
+    if (!val) return;
+    if (!settings.bookmarkFolders.includes(val)) {
+      updateSettings({ bookmarkFolders: [...settings.bookmarkFolders, val] });
+    }
+    setNewFolder('');
+  };
+
+  const handleRemoveFolder = (folderName: string) => {
+    if (folderName.toLowerCase() === 'general') return;
+    updateSettings({
+      bookmarkFolders: settings.bookmarkFolders.filter((f) => f !== folderName),
+    });
+  };
 
   // Full backup JSON export
   const handleExportJSON = async () => {
@@ -450,19 +520,29 @@ export const SettingsPage: React.FC = () => {
           <div className="space-y-2">
             {[
               {
+                id: 'corsfix' as ProxyMode,
+                name: 'CORSFix High-Speed Gateway (proxy.corsfix.com) — Recommended',
+                desc: 'Fast, reliable browser CORS gateway with automatic failover to direct fetch. Average latency ~250-400ms.',
+              },
+              {
+                id: 'rss2json' as ProxyMode,
+                name: 'RSS2JSON Feed API (api.rss2json.com)',
+                desc: 'Structured JSON converter with fast response times for RSS & Atom feeds.',
+              },
+              {
                 id: 'allorigins' as ProxyMode,
                 name: 'AllOrigins Gateway (api.allorigins.win)',
-                desc: 'Open-source CORS gateway. Recommended for complete cross-origin feed access without running any backend.',
+                desc: 'Public open-source gateway. May experience intermittent Cloudflare 520 timeouts or latency.',
               },
               {
                 id: 'direct' as ProxyMode,
                 name: 'Direct Browser Fetch (Strict Origin)',
-                desc: 'Direct browser fetch without proxies. Only feeds configured with CORS headers (Access-Control-Allow-Origin: *) will load.',
+                desc: 'Direct fetch without any proxy. Only feeds with CORS headers (Access-Control-Allow-Origin: *) will load.',
               },
               {
                 id: 'custom' as ProxyMode,
                 name: 'Custom User Proxy',
-                desc: 'Route requests through your own reverse proxy or CORS server.',
+                desc: 'Route requests through your own reverse proxy or Cloudflare Worker.',
               },
             ].map((opt) => (
               <label
@@ -508,26 +588,426 @@ export const SettingsPage: React.FC = () => {
           )}
         </div>
 
-        {/* Auto Refresh Interval */}
-        <div>
-          <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
-            Automatic Feed Refresh Interval
-          </label>
-          <select
-            value={settings.autoRefreshMinutes}
-            onChange={(e) => updateSettings({ autoRefreshMinutes: Number(e.target.value) as any })}
-            className="w-full sm:w-64 bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
-          >
-            <option value={0}>Manual Only (No Auto-Refresh)</option>
-            <option value={15}>Every 15 Minutes</option>
-            <option value={30}>Every 30 Minutes (Default)</option>
-            <option value={60}>Every 1 Hour</option>
-            <option value={180}>Every 3 Hours</option>
-          </select>
+        {/* Auto Refresh Interval & Cooldown */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-2">
+              Automatic Feed Refresh Interval
+            </label>
+            <select
+              value={settings.autoRefreshMinutes}
+              onChange={(e) => updateSettings({ autoRefreshMinutes: Number(e.target.value) as any })}
+              className="w-full sm:w-64 bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+            >
+              <option value={0}>Manual Only (No Auto-Refresh)</option>
+              <option value={15}>Every 15 Minutes</option>
+              <option value={30}>Every 30 Minutes (Default)</option>
+              <option value={60}>Every 1 Hour</option>
+              <option value={180}>Every 3 Hours</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">
+              Skip Feeds with Recent Content (Auto-Refresh Cooldown)
+            </label>
+            <p className="text-xs font-serif text-theme-text-muted mb-2">
+              If a feed has been fetched and its newest item is younger than this window, don't fetch from that feed during auto-refresh until its newest item is older than the threshold.
+            </p>
+            <select
+              value={settings.autoRefreshFeedCooldownHours ?? 4}
+              onChange={(e) => updateSettings({ autoRefreshFeedCooldownHours: Number(e.target.value) })}
+              className="w-full sm:w-64 bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+            >
+              <option value={2}>2h</option>
+              <option value={4}>4h (Default)</option>
+              <option value={6}>6h</option>
+              <option value={12}>12h</option>
+              <option value={24}>24h</option>
+              <option value={0}>Disabled (Always fetch)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Ingestion Constraints: Max Items & Max Age */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-theme-border">
+          {/* Max Articles to Fetch */}
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">
+              Max Articles to Fetch per Feed
+            </label>
+            <p className="text-xs font-serif text-theme-text-muted mb-2.5">
+              Limit the maximum number of latest dispatches ingested per source on each update. Default: 25 items.
+            </p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {[
+                { val: 10, label: '10' },
+                { val: 25, label: '25', sub: 'Default' },
+                { val: 50, label: '50' },
+                { val: 100, label: '100' },
+                { val: 0, label: 'All' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => updateSettings({ maxArticlesPerFeed: opt.val })}
+                  className={`py-2 px-1 text-center rounded border font-mono text-xs transition-colors flex flex-col items-center justify-center ${
+                    (settings.maxArticlesPerFeed ?? 25) === opt.val
+                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold shadow-sm'
+                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                  }`}
+                >
+                  <span className="font-bold">{opt.label}</span>
+                  {opt.sub && <span className="text-[9px] uppercase tracking-tighter opacity-80">{opt.sub}</span>}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] font-mono text-theme-text-muted mt-2 block">
+              Currently: <strong className="text-theme-text">{(settings.maxArticlesPerFeed ?? 25) === 0 ? 'All available items (No limit)' : `Latest ${settings.maxArticlesPerFeed ?? 25} items`}</strong>
+            </span>
+          </div>
+
+          {/* Max Article Age to Ingest */}
+          <div>
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">
+              Maximum Article Age to Fetch
+            </label>
+            <p className="text-xs font-serif text-theme-text-muted mb-2.5">
+              Ignore dispatches older than this cutoff. Default: not older than 30 days. Saved bookmarks are always preserved.
+            </p>
+            <div className="grid grid-cols-6 gap-1.5">
+              {[
+                { val: 7, label: '7d' },
+                { val: 14, label: '14d' },
+                { val: 30, label: '30d', sub: 'Default' },
+                { val: 60, label: '60d' },
+                { val: 90, label: '90d' },
+                { val: 0, label: 'All' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => updateSettings({ maxArticleAgeDays: opt.val })}
+                  className={`py-2 px-1 text-center rounded border font-mono text-xs transition-colors flex flex-col items-center justify-center ${
+                    (settings.maxArticleAgeDays ?? 30) === opt.val
+                      ? 'border-theme-accent bg-theme-accent-subtle text-theme-accent font-bold shadow-sm'
+                      : 'border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text'
+                  }`}
+                >
+                  <span className="font-bold">{opt.label}</span>
+                  {opt.sub && <span className="text-[9px] uppercase tracking-tighter opacity-80">{opt.sub}</span>}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] font-mono text-theme-text-muted mt-2 block">
+              Currently: <strong className="text-theme-text">{(settings.maxArticleAgeDays ?? 30) === 0 ? 'All time (No age cutoff)' : `Not older than ${settings.maxArticleAgeDays ?? 30} days`}</strong>
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* SECTION 5: DATA, BACKUP & PRINT */}
+      {/* SECTION 5: THREAT WATCHLIST & KEYWORD ALERTS */}
+      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
+          <Target className="w-5 h-5 text-amber-500" />
+          <div>
+            <h2 className="font-serif text-xl font-bold text-theme-text">Target Watchlist & Keyword Alerts</h2>
+            <p className="font-serif text-xs text-theme-text-muted">
+              Configure organizational assets, high-value vendors, or threat actors to receive visual badges and filterable alerts across all feeds.
+            </p>
+          </div>
+        </div>
+
+        {/* Existing Keywords List */}
+        <div className="space-y-3">
+          <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted">
+            Active Watchlist Keywords ({settings.watchlistKeywords.length})
+          </label>
+          <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-theme-card border border-theme-border min-h-[50px] items-center">
+            {settings.watchlistKeywords.map((kw) => (
+              <span
+                key={kw}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30"
+              >
+                <span>{kw}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveKeyword(kw)}
+                  className="hover:text-rose-500 rounded p-0.5"
+                  title={`Remove ${kw} from watchlist`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {settings.watchlistKeywords.length === 0 && (
+              <span className="text-xs font-mono text-theme-text-muted italic">
+                No watchlist keywords active. Add terms below or click a preset stack.
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Add New Keyword Form */}
+        <form onSubmit={handleAddKeyword} className="flex gap-2 max-w-md">
+          <input
+            type="text"
+            value={newKeyword}
+            onChange={(e) => setNewKeyword(e.target.value)}
+            placeholder="Add asset, vendor, or actor (e.g. Fortinet, LockBit, Okta)..."
+            className="flex-grow bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+          />
+          <button
+            type="submit"
+            disabled={!newKeyword.trim()}
+            className="px-3 py-2 rounded bg-theme-accent text-white font-mono text-xs font-bold disabled:opacity-50 flex items-center gap-1 hover:opacity-90 transition-opacity"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add</span>
+          </button>
+        </form>
+
+        {/* Preset Keyword Stacks */}
+        <div className="pt-2 space-y-2">
+          <span className="text-xs font-mono uppercase tracking-wider text-theme-text-muted block">
+            Add Recommended Intelligence Stacks:
+          </span>
+          <div className="flex flex-wrap gap-2 text-xs font-mono">
+            <button
+              type="button"
+              onClick={() => handleAddPresetKeywords(['AWS', 'Azure', 'Google Cloud', 'Kubernetes'])}
+              className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors"
+            >
+              + Cloud Infrastructure (AWS, Azure, GCP, K8s)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddPresetKeywords(['Okta', 'Active Directory', 'Entra ID', 'Kerberos'])}
+              className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors"
+            >
+              + Identity & Access (Okta, Entra ID, AD)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddPresetKeywords(['LockBit', 'Lazarus', 'APT28', 'Midnight Blizzard', 'Volt Typhoon'])}
+              className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors"
+            >
+              + Nation-State & APT Actors
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 6: EDITORIAL SECTIONS & MULTI-SOURCE CLUSTERING */}
+      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
+          <SlidersHorizontal className="w-5 h-5 text-theme-accent" />
+          <div>
+            <h2 className="font-serif text-xl font-bold text-theme-text">Editorial Newspaper Sections & Story Clustering</h2>
+            <p className="font-serif text-xs text-theme-text-muted">
+              Configure the order of sections displayed on the newspaper edition and deduplicate reporting across multiple feeds.
+            </p>
+          </div>
+        </div>
+
+        {/* Clustering Toggle */}
+        <div className="p-4 rounded-lg bg-theme-card border border-theme-border flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded bg-theme-surface text-theme-accent">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-serif text-sm font-bold text-theme-text">Multi-Source Story Clustering</h3>
+              <p className="font-serif text-xs text-theme-text-muted">
+                Group duplicate coverage of the same breach, CVE, or incident across different publications under a single lead card with an expandable sources drawer.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => updateSettings({ clusteringEnabled: !settings.clusteringEnabled })}
+            className={`px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all ${
+              settings.clusteringEnabled
+                ? 'bg-theme-accent text-white shadow-sm'
+                : 'bg-theme-surface text-theme-text-muted border border-theme-border hover:text-theme-text'
+            }`}
+          >
+            {settings.clusteringEnabled ? 'Clustering Active' : 'Clustering Disabled'}
+          </button>
+        </div>
+
+        {/* Section Grouping vs Chronological Mode Toggle */}
+        <div className="p-4 rounded-lg bg-theme-card border border-theme-border flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded bg-theme-surface text-theme-accent">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-serif text-sm font-bold text-theme-text">Editorial Section Grouping</h3>
+              <p className="font-serif text-xs text-theme-text-muted">
+                Group articles by categorized editorial blocks (e.g. Critical Threats, Security News, Threat Intel). When disabled, all articles are presented in strict chronological order (newest first).
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => updateSettings({ sectionsEnabled: !(settings.sectionsEnabled !== false) })}
+            className={`px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all ${
+              settings.sectionsEnabled !== false
+                ? 'bg-theme-accent text-white shadow-sm'
+                : 'bg-theme-surface text-theme-text-muted border border-theme-border hover:text-theme-text'
+            }`}
+          >
+            {settings.sectionsEnabled !== false ? 'Sections Enabled' : 'Sections Disabled (Chronological)'}
+          </button>
+        </div>
+
+        {/* Newspaper Sections Order & Visibility */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted">
+              Newspaper Section Ordering & Visibility
+            </label>
+            <button
+              type="button"
+              onClick={() => updateSettings({ newspaperSections: [...DEFAULT_NEWSPAPER_SECTIONS] })}
+              className="text-xs font-mono text-theme-accent hover:underline"
+            >
+              Reset to Default Order
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {[...(settings.newspaperSections || [])]
+              .sort((a, b) => a.order - b.order)
+              .map((sec, idx, arr) => (
+                <div
+                  key={sec.id}
+                  className={`p-3 rounded-lg border transition-all flex items-center gap-3 ${
+                    sec.enabled
+                      ? 'bg-theme-card border-theme-border'
+                      : 'bg-theme-card/40 border-theme-border/50 opacity-60'
+                  }`}
+                >
+                  {/* Up / Down Controls */}
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSection(idx, 'up')}
+                      disabled={idx === 0}
+                      className="p-1 rounded hover:bg-theme-surface text-theme-text-muted hover:text-theme-text disabled:opacity-20 transition-colors"
+                      title="Move section up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSection(idx, 'down')}
+                      disabled={idx === arr.length - 1}
+                      className="p-1 rounded hover:bg-theme-surface text-theme-text-muted hover:text-theme-text disabled:opacity-20 transition-colors"
+                      title="Move section down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Section Rank */}
+                  <span className="w-6 h-6 rounded flex items-center justify-center font-mono text-xs font-bold bg-theme-surface text-theme-accent flex-shrink-0 border border-theme-border">
+                    {idx + 1}
+                  </span>
+
+                  {/* Section Title */}
+                  <div className="flex-grow min-w-0">
+                    <span className="font-serif text-sm font-bold text-theme-text block truncate">
+                      {sec.title}
+                    </span>
+                    <span className="font-mono text-[11px] text-theme-text-muted block">
+                      {sec.minSeverity ? `Rule: Min Severity ${sec.minSeverity.toUpperCase()}` : `Rule: Category ${sec.category || 'General'}`}
+                    </span>
+                  </div>
+
+                  {/* Visibility Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSection(sec.id)}
+                    className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                      sec.enabled
+                        ? 'text-theme-accent bg-theme-accent/10 hover:bg-theme-accent/20'
+                        : 'text-theme-text-muted bg-theme-surface hover:text-theme-text'
+                    }`}
+                    title={sec.enabled ? 'Section is enabled' : 'Section is hidden'}
+                  >
+                    {sec.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                </div>
+              ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 7: RESEARCH & BOOKMARK FOLDERS */}
+      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
+          <Folder className="w-5 h-5 text-theme-accent" />
+          <div>
+            <h2 className="font-serif text-xl font-bold text-theme-text">Research & Bookmark Folders</h2>
+            <p className="font-serif text-xs text-theme-text-muted">
+              Organize bookmarked security advisories, vulnerability disclosures, and incident notes into analyst folders.
+            </p>
+          </div>
+        </div>
+
+        {/* Existing Folders List */}
+        <div className="space-y-3">
+          <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted">
+            Configured Folders ({settings.bookmarkFolders.length})
+          </label>
+          <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-theme-card border border-theme-border items-center">
+            {settings.bookmarkFolders.map((folder) => (
+              <span
+                key={folder}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-medium bg-theme-surface text-theme-text border border-theme-border"
+              >
+                <Folder className="w-3.5 h-3.5 text-theme-accent" />
+                <span>{folder}</span>
+                {folder.toLowerCase() !== 'general' && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFolder(folder)}
+                    className="hover:text-rose-500 rounded p-0.5 ml-1"
+                    title={`Delete folder "${folder}"`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Add Folder Form */}
+        <form onSubmit={handleAddFolder} className="flex gap-2 max-w-md">
+          <input
+            type="text"
+            value={newFolder}
+            onChange={(e) => setNewFolder(e.target.value)}
+            placeholder="New folder name (e.g. Critical Infrastructure, Ransomware)..."
+            className="flex-grow bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+          />
+          <button
+            type="submit"
+            disabled={!newFolder.trim()}
+            className="px-3 py-2 rounded bg-theme-accent text-white font-mono text-xs font-bold disabled:opacity-50 flex items-center gap-1 hover:opacity-90 transition-opacity"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Create Folder</span>
+          </button>
+        </form>
+      </section>
+
+      {/* SECTION 8: DATA, BACKUP & PRINT */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
         <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
           <Database className="w-5 h-5 text-theme-accent" />

@@ -5,7 +5,6 @@ import { useFilter } from './context/FilterContext';
 import { filterAndSortArticles } from './services/articles/filterSort';
 import { Header } from './components/Header/Header';
 import { FilterBar } from './components/FilterBar/FilterBar';
-import { NavigationTabs } from './components/Navigation/NavigationTabs';
 import { NewspaperView } from './components/Newspaper/NewspaperView';
 import { ListView } from './components/Layouts/ListView';
 import { ListThumbnailView } from './components/Layouts/ListThumbnailView';
@@ -42,8 +41,14 @@ export const App: React.FC = () => {
       ? { ...filters, readStatus: 'unread' as const }
       : filters;
 
-    return filterAndSortArticles(articles, effectiveFilters, settings.hideReadArticles, feeds);
-  }, [articles, filters, activeTab, settings.hideReadArticles, feeds]);
+    return filterAndSortArticles(
+      articles,
+      effectiveFilters,
+      settings.hideReadArticles,
+      feeds,
+      settings.watchlistKeywords
+    );
+  }, [articles, filters, activeTab, settings.hideReadArticles, feeds, settings.watchlistKeywords]);
 
   // Find index of active article for next / previous navigation in reader
   const activeArticleIndex = useMemo(() => {
@@ -82,16 +87,12 @@ export const App: React.FC = () => {
         </p>
       </div>
 
-      {/* Screen Masthead & Application Header */}
+      {/* Screen Masthead, Navigation & Controls Header */}
       <Header
         onOpenSettings={() => setActiveTab('settings')}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onToggleFilterDrawer={() => setIsFilterOpen(!isFilterOpen)}
         isFilterOpen={isFilterOpen}
-      />
-
-      {/* Navigation Tabs (Newspaper, Latest, Unread, Saved, Sources, Health, Settings) */}
-      <NavigationTabs
         activeTab={activeTab}
         onSelectTab={(tab) => {
           setActiveTab(tab);

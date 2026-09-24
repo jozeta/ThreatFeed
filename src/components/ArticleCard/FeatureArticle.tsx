@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
+import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
+import { useSettings } from '../../context/SettingsContext';
 
 interface FeatureArticleProps {
   article: Article;
@@ -10,6 +13,9 @@ interface FeatureArticleProps {
   orientation?: 'vertical' | 'horizontal';
   showBorder?: boolean;
   className?: string;
+  clusterCount?: number;
+  clusterSources?: string[];
+  onOpenCluster?: () => void;
 }
 
 export const FeatureArticle: React.FC<FeatureArticleProps> = ({
@@ -18,7 +24,15 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
   orientation = 'vertical',
   showBorder = true,
   className = '',
+  clusterCount = 1,
+  clusterSources = [],
+  onOpenCluster
 }) => {
+  const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
   return (
     <article
       onClick={onOpen}
@@ -47,10 +61,16 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
 
       {/* Content */}
       <div className="flex flex-col flex-grow min-w-0">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-theme-accent font-semibold truncate">
-            {article.sourceName}
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <SeverityBadge severity={article.severity} />
+            {watchlistMatch.matched && (
+              <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+            )}
+            <span className="font-mono text-[10px] uppercase tracking-wider text-theme-accent font-semibold truncate">
+              {article.sourceName}
+            </span>
+          </div>
           <div className="flex items-center gap-1.5">
             {!article.read && (
               <span className="w-1.5 h-1.5 rounded-full bg-theme-accent" />
@@ -71,8 +91,8 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
           </p>
         )}
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-          <div className="flex items-center gap-1 overflow-hidden">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-1 overflow-hidden">
             {article.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
@@ -81,6 +101,16 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
                 #{tag}
               </span>
             ))}
+            {article.cves && article.cves.slice(0, 2).map((cve) => (
+              <CveChip key={cve} cve={cve} />
+            ))}
+            {clusterCount > 1 && (
+              <ClusterPill
+                count={clusterCount}
+                sources={clusterSources}
+                onClick={onOpenCluster}
+              />
+            )}
           </div>
           <ArticleActions article={article} compact onOpenReader={onOpen} />
         </div>

@@ -1,14 +1,24 @@
-import { Article, Feed, FilterState } from '../../types';
+import { Article, Feed, FilterState, ThreatSeverity } from '../../types';
+import { checkWatchlistMatch } from '../intelligence/watchlist';
 
 function normalizeCategory(str: string): string {
   return str.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+const SEVERITY_WEIGHT: Record<ThreatSeverity, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  info: 0,
+};
+
 export function filterAndSortArticles(
   articles: Article[],
   filters: FilterState,
   hideReadArticles = false,
-  feeds: Feed[] = []
+  feeds: Feed[] = [],
+  watchlistKeywords: string[] = []
 ): Article[] {
   let result = [...articles];
 
@@ -27,7 +37,8 @@ export function filterAndSortArticles(
         article.sourceName.toLowerCase().includes(q) ||
         article.tags.some(t => t.toLowerCase().includes(q)) ||
         article.categories.some(c => c.toLowerCase().includes(q)) ||
-        (article.author && article.author.toLowerCase().includes(q))
+        (article.author && article.author.toLowerCase().includes(q)) ||
+        (article.cves && article.cves.some(cve => cve.toLowerCase().includes(q)))
       );
     });
   }
@@ -81,7 +92,21 @@ export function filterAndSortArticles(
     result = result.filter(a => a.bookmarked);
   }
 
-  // 8. Date Range
+  // 8. Watchlist Filter
+  if (filters.watchlistOnly && watchlistKeywords.length > 0) {
+    result = result.filter(a => checkWatchlistMatch(a, watchlistKeywords).matched);
+  }
+
+  // 9. Severity Filter
+  if (filters.severityFilter && filters.severityFilter !== 'all') {
+    const minWeight = SEVERITY_WEIGHT[filters.severityFilter] ?? 0;
+    result = result.filter(a => {
+      const artWeight = SEVERITY_WEIGHT[a.severity || 'info'] ?? 0;
+      return artWeight >= minWeight;
+    });
+  }
+
+  // 10. Date Range
   if (filters.dateRange !== 'all') {
     const now = Date.now();
     const oneDay = 24 * 60 * 60 * 1000;
@@ -107,6 +132,11 @@ export function filterAndSortArticles(
         return (new Date(b.readAt || 0).getTime()) - (new Date(a.readAt || 0).getTime());
       case 'recently_viewed':
         return (new Date(b.viewedAt || 0).getTime()) - (new Date(a.viewedAt || 0).getTime());
+      case 'severity': {
+        const scoreDiff = (b.severityScore ?? 0) - (a.severityScore ?? 0);
+        if (scoreDiff !== 0) return scoreDiff;
+        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+      }
       case 'newest':
       default:
         return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
@@ -115,3 +145,4 @@ export function filterAndSortArticles(
 
   return result;
 }
+

@@ -1,14 +1,32 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
+import { SeverityBadge, WatchlistBadge, ClusterPill } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
+import { useSettings } from '../../context/SettingsContext';
 
 interface ListArticleProps {
   article: Article;
   onOpen: () => void;
+  clusterCount?: number;
+  clusterSources?: string[];
+  onOpenCluster?: () => void;
 }
 
-export const ListArticle: React.FC<ListArticleProps> = ({ article, onOpen }) => {
+export const ListArticle: React.FC<ListArticleProps> = ({
+  article,
+  onOpen,
+  clusterCount,
+  clusterSources,
+  onOpenCluster,
+}) => {
+  const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
+
   return (
     <article
       onClick={onOpen}
@@ -29,6 +47,12 @@ export const ListArticle: React.FC<ListArticleProps> = ({ article, onOpen }) => 
           {formatRelativeTime(article.publishedAt)}
         </time>
 
+        {/* Badges */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <SeverityBadge severity={article.severity} score={article.severityScore} />
+          {watchlistMatch.matched && <WatchlistBadge terms={watchlistMatch.matchedTerms} />}
+        </div>
+
         {/* Headline */}
         <div className="min-w-0 flex-grow flex items-center gap-2">
           <h4 className="font-serif text-sm sm:text-base text-theme-text group-hover:text-theme-accent transition-colors truncate">
@@ -39,6 +63,12 @@ export const ListArticle: React.FC<ListArticleProps> = ({ article, onOpen }) => 
             <span className="text-[10px] font-mono px-1 rounded bg-theme-accent-subtle text-theme-accent flex-shrink-0">
               SAVED
             </span>
+          )}
+
+          {clusterCount && clusterCount > 1 && clusterSources && (
+            <div className="hidden sm:inline-flex flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+              <ClusterPill count={clusterCount} sources={clusterSources} onClick={onOpenCluster} />
+            </div>
           )}
         </div>
 
@@ -57,3 +87,4 @@ export const ListArticle: React.FC<ListArticleProps> = ({ article, onOpen }) => 
     </article>
   );
 };
+

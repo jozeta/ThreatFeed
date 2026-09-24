@@ -318,7 +318,7 @@
     {
       "id": "google-project-zero",
       "name": "Google Project Zero",
-      "url": "https://googleprojectzero.blogspot.com/feeds/posts/default",
+      "url": "https://projectzero.google/feed.xml",
       "category": "Vulnerabilities",
       "tags": [
         "zero-day",

@@ -1,6 +1,66 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserSettings } from '../types';
+import { UserSettings, NewspaperSectionConfig } from '../types';
 import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexeddb';
+import { DEFAULT_WATCHLIST_KEYWORDS } from '../services/intelligence/watchlist';
+
+export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
+  'General',
+  'Incident Response',
+  'Vulnerabilities & CVEs',
+  'Threat Actor Tracking'
+];
+
+export const DEFAULT_NEWSPAPER_SECTIONS: NewspaperSectionConfig[] = [
+  {
+    id: 'breaking-threats',
+    title: 'Critical Threat Dispatches & Zero-Days',
+    minSeverity: 'high',
+    enabled: true,
+    order: 0
+  },
+  {
+    id: 'sec-news',
+    title: 'Security News & Cybercrime',
+    category: 'Security News',
+    enabled: true,
+    order: 1
+  },
+  {
+    id: 'threat-intel',
+    title: 'Threat Intelligence & APT Reports',
+    category: 'Threat Intelligence',
+    enabled: true,
+    order: 2
+  },
+  {
+    id: 'vulns',
+    title: 'Vulnerabilities & Advisories',
+    category: 'Vulnerabilities',
+    enabled: true,
+    order: 3
+  },
+  {
+    id: 'red-team',
+    title: 'Red Team & Offensive Research',
+    category: 'Red Team / Offensive',
+    enabled: true,
+    order: 4
+  },
+  {
+    id: 'blue-team',
+    title: 'Blue Team & Defensive Engineering',
+    category: 'Blue Team / Defensive',
+    enabled: true,
+    order: 5
+  },
+  {
+    id: 'tech',
+    title: 'Tech, Gadgets & Platform News',
+    category: 'Tech & Gadgets',
+    enabled: true,
+    order: 6
+  }
+];
 
 export const DEFAULT_SETTINGS: UserSettings = {
   theme: 'dark',
@@ -15,14 +75,23 @@ export const DEFAULT_SETTINGS: UserSettings = {
   fontSize: 'base',
   headlineScale: 'prominent',
   autoRefreshMinutes: 30,
-  proxyMode: 'allorigins',
+  proxyMode: 'corsfix',
   hideReadArticles: false,
   reducedMotion: false,
+  maxArticlesPerFeed: 25,
+  maxArticleAgeDays: 30,
+  autoRefreshFeedCooldownHours: 4,
+  watchlistKeywords: DEFAULT_WATCHLIST_KEYWORDS,
+  newspaperSections: DEFAULT_NEWSPAPER_SECTIONS,
+  bookmarkFolders: DEFAULT_BOOKMARK_FOLDERS,
+  clusteringEnabled: true,
+  sectionsEnabled: true,
 };
 
 interface SettingsContextType {
   settings: UserSettings;
   updateSettings: (updates: Partial<UserSettings>) => void;
+  updateSetting: <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => void;
   resetSettings: () => void;
 }
 
@@ -36,13 +105,26 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     getSettingsFromDB().then((saved) => {
       if (saved) {
-        // Migrate defaults for new fields
+        // Migrate defaults for new fields: migrate degraded proxies to corsfix
+        const rawProxy = (saved as any).proxyMode;
+        const validProxy = (rawProxy === 'corsproxy' || rawProxy === 'allorigins') 
+          ? 'corsfix' 
+          : (rawProxy || 'corsfix');
+
         const migrated: UserSettings = {
           ...DEFAULT_SETTINGS,
           ...saved,
           fontFamily: saved.fontFamily || 'serif',
           containerWidth: saved.containerWidth || 'wide',
-          proxyMode: (saved as any).proxyMode === 'corsproxy' ? 'allorigins' : (saved.proxyMode || 'allorigins'),
+          proxyMode: validProxy,
+          maxArticlesPerFeed: typeof saved.maxArticlesPerFeed === 'number' ? saved.maxArticlesPerFeed : 25,
+          maxArticleAgeDays: typeof saved.maxArticleAgeDays === 'number' ? saved.maxArticleAgeDays : 30,
+          autoRefreshFeedCooldownHours: typeof saved.autoRefreshFeedCooldownHours === 'number' ? saved.autoRefreshFeedCooldownHours : 4,
+          watchlistKeywords: Array.isArray(saved.watchlistKeywords) ? saved.watchlistKeywords : DEFAULT_WATCHLIST_KEYWORDS,
+          newspaperSections: Array.isArray(saved.newspaperSections) && saved.newspaperSections.length > 0 ? saved.newspaperSections : DEFAULT_NEWSPAPER_SECTIONS,
+          bookmarkFolders: Array.isArray(saved.bookmarkFolders) && saved.bookmarkFolders.length > 0 ? saved.bookmarkFolders : DEFAULT_BOOKMARK_FOLDERS,
+          clusteringEnabled: typeof saved.clusteringEnabled === 'boolean' ? saved.clusteringEnabled : true,
+          sectionsEnabled: typeof saved.sectionsEnabled === 'boolean' ? saved.sectionsEnabled : true,
         };
         setSettings(migrated);
         saveSettingsToDB(migrated);
@@ -58,6 +140,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       saveSettingsToDB(next);
       return next;
     });
+  };
+
+  const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
+    updateSettings({ [key]: value });
   };
 
   const resetSettings = () => {
@@ -137,7 +223,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [settings, loaded]);
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, resetSettings }}>
+    <SettingsContext.Provider value={{ settings, updateSettings, updateSetting, resetSettings }}>
       {children}
     </SettingsContext.Provider>
   );

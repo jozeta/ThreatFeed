@@ -46,6 +46,10 @@
 /* ─────────────────────────────────────────────────────────────
    DYNAMIC CONTAINER WIDTHS
    ───────────────────────────────────────────────────────────── */
+.main-content-container {
+  width: 100%;
+}
+
 .width-mode-compact .main-content-container {
   max-width: 64rem !important; /* 1024px */
 }

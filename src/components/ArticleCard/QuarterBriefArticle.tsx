@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
+import { SeverityBadge, WatchlistBadge } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
+import { useSettings } from '../../context/SettingsContext';
 
 interface QuarterBriefArticleProps {
   article: Article;
@@ -15,6 +18,12 @@ export const QuarterBriefArticle: React.FC<QuarterBriefArticleProps> = ({
   onOpen,
   withImage = true,
 }) => {
+  const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
+
   return (
     <article
       onClick={onOpen}
@@ -34,10 +43,16 @@ export const QuarterBriefArticle: React.FC<QuarterBriefArticleProps> = ({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-1 mb-1.5">
-        <span className="font-mono text-[10px] font-bold text-theme-accent uppercase truncate">
-          {article.sourceName}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+        <div className="flex flex-wrap items-center gap-1">
+          <SeverityBadge severity={article.severity} />
+          {watchlistMatch.matched && (
+            <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+          )}
+          <span className="font-mono text-[10px] font-bold text-theme-accent uppercase truncate">
+            {article.sourceName}
+          </span>
+        </div>
         <time className="font-mono text-[10px] text-theme-text-muted flex-shrink-0">
           {formatRelativeTime(article.publishedAt)}
         </time>

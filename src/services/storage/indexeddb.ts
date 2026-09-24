@@ -31,6 +31,8 @@ interface ThreatFeedDB extends DBSchema {
       readAt?: string;
       viewedAt?: string;
       bookmarkedAt?: string;
+      bookmarkFolder?: string;
+      bookmarkNotes?: string;
     };
   };
   settings: {
@@ -117,7 +119,7 @@ export async function saveArticlesToDB(newArticles: Article[]): Promise<void> {
 
 export async function updateArticleStateInDB(
   id: string,
-  updates: Partial<Pick<Article, 'read' | 'viewed' | 'bookmarked' | 'customTags'>>
+  updates: Partial<Pick<Article, 'read' | 'viewed' | 'bookmarked' | 'customTags' | 'bookmarkFolder' | 'bookmarkNotes'>>
 ): Promise<void> {
   const db = await getDB();
   const tx = db.transaction(['articles', 'articleState'], 'readwrite');
@@ -153,6 +155,12 @@ export async function updateArticleStateInDB(
   if (updates.customTags !== undefined) {
     state.customTags = updates.customTags;
   }
+  if (updates.bookmarkFolder !== undefined) {
+    state.bookmarkFolder = updates.bookmarkFolder;
+  }
+  if (updates.bookmarkNotes !== undefined) {
+    state.bookmarkNotes = updates.bookmarkNotes;
+  }
 
   await stateStore.put(state);
 
@@ -162,6 +170,8 @@ export async function updateArticleStateInDB(
     if (updates.viewed !== undefined) article.viewedAt = state.viewedAt;
     if (updates.bookmarked !== undefined) article.bookmarkedAt = state.bookmarkedAt;
     if (updates.customTags !== undefined) article.customTags = state.customTags;
+    if (updates.bookmarkFolder !== undefined) article.bookmarkFolder = state.bookmarkFolder;
+    if (updates.bookmarkNotes !== undefined) article.bookmarkNotes = state.bookmarkNotes;
     await articleStore.put(article);
   }
 

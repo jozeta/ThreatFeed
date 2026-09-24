@@ -1,6 +1,7 @@
 import { Article, Feed } from '../../types';
 import { normalizeAndEnrichTags } from './tagNormalizer';
 import { sanitizeHtml, stripHtmlToText } from './sanitizer';
+import { extractCVEs, calculateThreatSeverity } from '../intelligence/iocExtractor';
 
 // Fast stable hash function for fallback IDs
 function simpleHash(str: string): string {
@@ -63,7 +64,8 @@ function extractImageUrl(element: Element, rawHtml: string): string | undefined 
 
   // 3. <img> tag in HTML description or content
   if (rawHtml) {
-    const imgMatch = rawHtml.match(/<img[^>]+src=["'](https?:\/\/[^"'\s>]+)["']/i);
+    const snippet = rawHtml.length > 50000 ? rawHtml.slice(0, 50000) : rawHtml;
+    const imgMatch = snippet.match(/<img[^>]+src=["'](https?:\/\/[^"'\s>]+)["']/i);
     if (imgMatch && imgMatch[1]) {
       // Filter out tracking 1x1 pixels or feedburner beacons
       const url = imgMatch[1];
@@ -178,16 +180,26 @@ function parseRssItem(item: Element, feed: Feed): Article | null {
 
   const rawHtmlForImage = contentEncoded || descriptionRaw;
   const image = extractImageUrl(item, rawHtmlForImage);
-  const cleanSummary = stripHtmlToText(descriptionRaw || contentEncoded);
+  const rawSummarySource = descriptionRaw || (contentEncoded ? contentEncoded.slice(0, 5000) : '');
+  const cleanSummary = stripHtmlToText(rawSummarySource);
   const sanitizedContent = sanitizeHtml(contentEncoded || descriptionRaw);
   const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
 
   const id = generateArticleId(feed.id, guid, url, title);
+  const cleanTitle = stripHtmlToText(title);
+  const detectedCves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
+  const { severity, score: severityScore } = calculateThreatSeverity({
+    title: cleanTitle,
+    description: cleanSummary,
+    tags: normalizedTags,
+    categories: Array.from(allCategories),
+    sourceId: feed.id
+  }, detectedCves);
 
   return {
     id,
     guid,
-    title: stripHtmlToText(title),
+    title: cleanTitle,
     url: normalizeUrl(url),
     sourceId: feed.id,
     sourceName: feed.name,
@@ -196,8 +208,12 @@ function parseRssItem(item: Element, feed: Feed): Article | null {
     image,
     author: stripHtmlToText(author),
     publishedAt,
+    fetchedAt: new Date().toISOString(),
     tags: normalizedTags,
     categories: Array.from(allCategories),
+    cves: detectedCves,
+    severity,
+    severityScore,
     read: false,
     viewed: false,
     bookmarked: false,
@@ -258,16 +274,26 @@ function parseAtomEntry(entry: Element, feed: Feed): Article | null {
 
   const rawHtmlForImage = contentRaw || summaryRaw;
   const image = extractImageUrl(entry, rawHtmlForImage);
-  const cleanSummary = stripHtmlToText(summaryRaw || contentRaw);
+  const rawSummarySource = summaryRaw || (contentRaw ? contentRaw.slice(0, 5000) : '');
+  const cleanSummary = stripHtmlToText(rawSummarySource);
   const sanitizedContent = sanitizeHtml(contentRaw || summaryRaw);
   const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
 
   const id = generateArticleId(feed.id, guid, url, title);
+  const cleanTitle = stripHtmlToText(title);
+  const detectedCves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
+  const { severity, score: severityScore } = calculateThreatSeverity({
+    title: cleanTitle,
+    description: cleanSummary,
+    tags: normalizedTags,
+    categories: Array.from(allCategories),
+    sourceId: feed.id
+  }, detectedCves);
 
   return {
     id,
     guid,
-    title: stripHtmlToText(title),
+    title: cleanTitle,
     url: normalizeUrl(url),
     sourceId: feed.id,
     sourceName: feed.name,
@@ -276,10 +302,98 @@ function parseAtomEntry(entry: Element, feed: Feed): Article | null {
     image,
     author: stripHtmlToText(author),
     publishedAt,
+    fetchedAt: new Date().toISOString(),
     tags: normalizedTags,
     categories: Array.from(allCategories),
+    cves: detectedCves,
+    severity,
+    severityScore,
     read: false,
     viewed: false,
     bookmarked: false,
   };
+}
+
+/**
+ * Parses json response from rss2json.com into normalized Article array.
+ */
+export function parseRss2Json(jsonData: any, feed: Feed): Article[] {
+  if (!jsonData || !Array.isArray(jsonData.items)) return [];
+  const articles: Article[] = [];
+
+  for (const item of jsonData.items) {
+    try {
+      const title = item.title || 'Untitled Security Report';
+      const url = item.link || '';
+      const guid = item.guid || url;
+      const author = item.author || feed.name;
+      const rawDate = item.pubDate || new Date().toISOString();
+      let publishedAt = new Date().toISOString();
+      try {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) publishedAt = d.toISOString();
+      } catch {}
+
+      const cleanSummary = stripHtmlToText(item.description || item.content || '');
+      const sanitizedContent = sanitizeHtml(item.content || item.description || '');
+
+      let image = item.thumbnail || item.enclosure?.link;
+      if (!image && (item.content || item.description)) {
+        const imgMatch = (item.content || item.description).match(/<img[^>]+src=["'](https?:\/\/[^"'\s>]+)["']/i);
+        if (imgMatch && imgMatch[1] && !imgMatch[1].includes('1x1') && !imgMatch[1].includes('feedburner')) {
+          image = imgMatch[1];
+        }
+      }
+
+      const allCategories = new Set<string>();
+      if (feed.category) allCategories.add(feed.category);
+      if (Array.isArray(item.categories)) {
+        item.categories.forEach((c: any) => {
+          if (c && typeof c === 'string') allCategories.add(c.trim());
+        });
+      }
+      if (feed.tags) {
+        feed.tags.forEach(t => allCategories.add(t));
+      }
+
+      const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
+      const id = generateArticleId(feed.id, guid, url, title);
+      const cleanTitle = stripHtmlToText(title);
+      const detectedCves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
+      const { severity, score: severityScore } = calculateThreatSeverity({
+        title: cleanTitle,
+        description: cleanSummary,
+        tags: normalizedTags,
+        categories: Array.from(allCategories),
+        sourceId: feed.id
+      }, detectedCves);
+
+      articles.push({
+        id,
+        guid,
+        title: cleanTitle,
+        url: normalizeUrl(url),
+        sourceId: feed.id,
+        sourceName: feed.name,
+        description: cleanSummary.slice(0, 450),
+        content: sanitizedContent,
+        image,
+        author: stripHtmlToText(author),
+        publishedAt,
+        fetchedAt: new Date().toISOString(),
+        tags: normalizedTags,
+        categories: Array.from(allCategories),
+        cves: detectedCves,
+        severity,
+        severityScore,
+        read: false,
+        viewed: false,
+        bookmarked: false,
+      });
+    } catch {
+      // Continue parsing next item if one is malformed
+    }
+  }
+
+  return articles;
 }

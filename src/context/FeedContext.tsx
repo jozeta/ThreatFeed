@@ -12,7 +12,7 @@ import {
   getAllFeedHealthFromDB,
   saveFeedHealthToDB
 } from '../services/storage/indexeddb';
-import { fetchAllFeeds, fetchFeed } from '../services/rss/fetcher';
+import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { deduplicateArticles } from '../services/articles/deduplication';
 import { useSettings } from './SettingsContext';
 
@@ -33,12 +33,15 @@ interface FeedContextType {
   activeArticle: Article | null;
   setActiveArticle: (article: Article | null) => void;
   refreshFeeds: (targetFeedId?: string) => Promise<void>;
+  refreshFailedFeeds: () => Promise<void>;
   toggleFeedEnabled: (feedId: string) => Promise<void>;
   addCustomFeed: (newFeed: Omit<Feed, 'id'>) => Promise<void>;
   updateFeed: (feed: Feed) => Promise<void>;
   removeFeed: (feedId: string) => Promise<void>;
   resetFeedsToDefault: () => Promise<void>;
   toggleBookmark: (articleId: string) => Promise<void>;
+  setBookmarkFolder: (articleId: string, folder: string) => Promise<void>;
+  setBookmarkNotes: (articleId: string, notes: string) => Promise<void>;
   toggleRead: (articleId: string) => Promise<void>;
   markViewed: (articleId: string) => Promise<void>;
   markAllAsRead: (ids?: string[]) => Promise<void>;
@@ -78,7 +81,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Load feeds
       let storedFeeds = await getFeedsFromDB();
       try {
-        const res = await fetch('/data/feeds.json');
+        const res = await fetch(`${import.meta.env.BASE_URL}data/feeds.json`);
         if (res.ok) {
           const data = await res.json();
           const defaultFeeds: Feed[] = data.feeds || [];
@@ -93,6 +96,10 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Also update any existing default feed whose URL was corrected/updated upstream
             const defaultMap = new Map(defaultFeeds.map(f => [f.id, f]));
             storedFeeds = storedFeeds.map(stored => {
+              const canonicalUrl = resolveCanonicalFeedUrl(stored.url);
+              if (canonicalUrl !== stored.url) {
+                return { ...stored, url: canonicalUrl };
+              }
               const def = defaultMap.get(stored.id);
               if (def && def.url !== stored.url && !stored.isCustom) {
                 return { ...stored, url: def.url, category: def.category, tags: def.tags };
@@ -118,7 +125,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 3. Load articles
       let storedArticles = await getAllArticlesFromDB();
       try {
-        const seedRes = await fetch('/data/seed-articles.json');
+        const seedRes = await fetch(`${import.meta.env.BASE_URL}data/seed-articles.json`);
         if (seedRes.ok) {
           const seedData: Article[] = await seedRes.json();
           if (Array.isArray(seedData) && seedData.length > 0) {
@@ -165,20 +172,33 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setIsRefreshing(true);
 
+    const maxItems = settings.maxArticlesPerFeed ?? 25;
+    const maxAgeDays = settings.maxArticleAgeDays ?? 30;
+
     try {
       if (singleFeedId) {
         const feed = feedsToFetch.find(f => f.id === singleFeedId);
         if (!feed) return;
 
         setRefreshProgress({ completed: 0, total: 1, currentFeedName: feed.name });
-        const { articles: newItems, health } = await fetchFeed(feed, settings.proxyMode, settings.customProxyUrl);
+        const { articles: newItems, health } = await fetchFeed(
+          feed,
+          settings.proxyMode,
+          settings.customProxyUrl,
+          maxItems,
+          maxAgeDays
+        );
         
         await saveFeedHealthToDB(health);
         setFeedHealth(prev => ({ ...prev, [feed.id]: health }));
 
         if (newItems.length > 0) {
           setArticles(prev => {
-            const merged = deduplicateArticles([...newItems, ...prev]);
+            let merged = deduplicateArticles([...newItems, ...prev]);
+            if (maxAgeDays > 0) {
+              const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
+              merged = merged.filter(a => a.bookmarked || isNaN(new Date(a.publishedAt).getTime()) || new Date(a.publishedAt).getTime() >= cutoffMs);
+            }
             saveArticlesToDB(merged);
             return merged;
           });
@@ -195,7 +215,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
           (completed, total, latestHealth) => {
             const curFeed = feedsToFetch.find(f => f.id === latestHealth.feedId);
             setRefreshProgress({ completed, total, currentFeedName: curFeed?.name });
-          }
+          },
+          maxItems,
+          maxAgeDays
         );
 
         // Save health to DB & state
@@ -206,7 +228,11 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Deduplicate and merge articles
         setArticles(prev => {
-          const merged = deduplicateArticles([...newItems, ...prev]);
+          let merged = deduplicateArticles([...newItems, ...prev]);
+          if (maxAgeDays > 0) {
+            const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
+            merged = merged.filter(a => a.bookmarked || isNaN(new Date(a.publishedAt).getTime()) || new Date(a.publishedAt).getTime() >= cutoffMs);
+          }
           saveArticlesToDB(merged);
           return merged;
         });
@@ -222,7 +248,59 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshFeeds = useCallback(async (targetFeedId?: string) => {
     await refreshFeedsInternal(feeds, targetFeedId);
-  }, [feeds, settings.proxyMode, settings.customProxyUrl, isRefreshing]);
+  }, [feeds, settings.proxyMode, settings.customProxyUrl, settings.maxArticlesPerFeed, settings.maxArticleAgeDays, isRefreshing]);
+
+  const refreshFailedFeeds = useCallback(async () => {
+    const failedList = feeds.filter(f => {
+      const h = feedHealth[f.id];
+      return f.enabled && (!h || h.status !== 'healthy');
+    });
+    if (failedList.length === 0) return;
+    await refreshFeedsInternal(failedList);
+  }, [feeds, feedHealth, settings.proxyMode, settings.customProxyUrl, settings.maxArticlesPerFeed, settings.maxArticleAgeDays, isRefreshing]);
+
+  // Auto-refresh logic with age cooldown filtering
+  const autoRefreshFeeds = useCallback(async () => {
+    const cooldownHours = settings.autoRefreshFeedCooldownHours ?? 4;
+    let feedsToFetch = feeds.filter(f => f.enabled);
+
+    if (cooldownHours > 0) {
+      const now = Date.now();
+      const cutoffMs = now - (cooldownHours * 60 * 60 * 1000);
+
+      feedsToFetch = feedsToFetch.filter(feed => {
+        // If feed has never been fetched, always fetch it
+        const health = feedHealth[feed.id];
+        if (!health?.lastFetchedAt) return true;
+
+        // Find newest article belonging to this feed
+        const feedArticles = articles.filter(a => a.sourceId === feed.id);
+        if (feedArticles.length === 0) return true;
+
+        let newestPubTime = 0;
+        for (const a of feedArticles) {
+          const t = new Date(a.publishedAt).getTime();
+          if (!isNaN(t) && t > newestPubTime) {
+            newestPubTime = t;
+          }
+        }
+
+        if (newestPubTime === 0) return true;
+
+        // If newest item is younger than cooldownHours (newestPubTime > cutoffMs),
+        // skip this feed during the auto-refresh interval window
+        const isYoungerThanCooldown = newestPubTime > cutoffMs;
+        return !isYoungerThanCooldown;
+      });
+    }
+
+    if (feedsToFetch.length === 0) {
+      console.log(`[Auto-Refresh] All feeds have dispatches younger than ${cooldownHours}h. Skipping cycle.`);
+      return;
+    }
+
+    await refreshFeedsInternal(feedsToFetch);
+  }, [feeds, feedHealth, articles, settings.autoRefreshFeedCooldownHours, refreshFeedsInternal]);
 
   // Auto-refresh timer
   useEffect(() => {
@@ -230,11 +308,11 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const intervalMs = settings.autoRefreshMinutes * 60 * 1000;
     const timer = setInterval(() => {
-      refreshFeeds();
+      autoRefreshFeeds();
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [settings.autoRefreshMinutes, refreshFeeds]);
+  }, [settings.autoRefreshMinutes, autoRefreshFeeds]);
 
   // Feed management operations
   const toggleFeedEnabled = async (feedId: string) => {
@@ -245,7 +323,12 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addCustomFeed = async (newFeedData: Omit<Feed, 'id'>) => {
     const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newFeed: Feed = { ...newFeedData, id, isCustom: true };
+    const newFeed: Feed = {
+      ...newFeedData,
+      url: resolveCanonicalFeedUrl(newFeedData.url),
+      id,
+      isCustom: true
+    };
     const updated = [...feeds, newFeed];
     setFeeds(updated);
     await saveSingleFeedToDB(newFeed);
@@ -254,9 +337,13 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateFeed = async (updatedFeed: Feed) => {
-    const updated = feeds.map(f => f.id === updatedFeed.id ? updatedFeed : f);
+    const canonicalFeed: Feed = {
+      ...updatedFeed,
+      url: resolveCanonicalFeedUrl(updatedFeed.url)
+    };
+    const updated = feeds.map(f => f.id === canonicalFeed.id ? canonicalFeed : f);
     setFeeds(updated);
-    await saveSingleFeedToDB(updatedFeed);
+    await saveSingleFeedToDB(canonicalFeed);
   };
 
   const removeFeed = async (feedId: string) => {
@@ -272,7 +359,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resetFeedsToDefault = async () => {
     try {
-      const res = await fetch('/data/feeds.json');
+      const res = await fetch(`${import.meta.env.BASE_URL}data/feeds.json`);
       if (res.ok) {
         const data = await res.json();
         const defaultFeeds: Feed[] = data.feeds || [];
@@ -291,11 +378,28 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) return;
 
     const newBookmarked = !target.bookmarked;
-    await updateArticleStateInDB(articleId, { bookmarked: newBookmarked });
+    const folder = newBookmarked ? (target.bookmarkFolder || 'General') : target.bookmarkFolder;
+    await updateArticleStateInDB(articleId, { bookmarked: newBookmarked, bookmarkFolder: folder });
 
-    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, bookmarked: newBookmarked } : a));
+    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, bookmarked: newBookmarked, bookmarkFolder: folder } : a));
     if (activeArticle && activeArticle.id === articleId) {
-      setActiveArticle({ ...activeArticle, bookmarked: newBookmarked });
+      setActiveArticle({ ...activeArticle, bookmarked: newBookmarked, bookmarkFolder: folder });
+    }
+  };
+
+  const setBookmarkFolder = async (articleId: string, folder: string) => {
+    await updateArticleStateInDB(articleId, { bookmarkFolder: folder, bookmarked: true });
+    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, bookmarkFolder: folder, bookmarked: true } : a));
+    if (activeArticle && activeArticle.id === articleId) {
+      setActiveArticle({ ...activeArticle, bookmarkFolder: folder, bookmarked: true });
+    }
+  };
+
+  const setBookmarkNotes = async (articleId: string, notes: string) => {
+    await updateArticleStateInDB(articleId, { bookmarkNotes: notes });
+    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, bookmarkNotes: notes } : a));
+    if (activeArticle && activeArticle.id === articleId) {
+      setActiveArticle({ ...activeArticle, bookmarkNotes: notes });
     }
   };
 
@@ -366,12 +470,15 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeArticle,
         setActiveArticle,
         refreshFeeds,
+        refreshFailedFeeds,
         toggleFeedEnabled,
         addCustomFeed,
         updateFeed,
         removeFeed,
         resetFeedsToDefault,
         toggleBookmark,
+        setBookmarkFolder,
+        setBookmarkNotes,
         toggleRead,
         markViewed,
         markAllAsRead,

@@ -9,6 +9,8 @@ export const INITIAL_FILTERS: FilterState = {
   readStatus: 'all',
   viewedStatus: 'all',
   bookmarkedOnly: false,
+  watchlistOnly: false,
+  severityFilter: 'all',
   dateRange: 'all',
   sortBy: 'newest',
 };
@@ -42,6 +44,8 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     filters.readStatus !== 'all' ||
     filters.viewedStatus !== 'all' ||
     filters.bookmarkedOnly ||
+    filters.watchlistOnly ||
+    (filters.severityFilter && filters.severityFilter !== 'all') ||
     filters.dateRange !== 'all' ||
     filters.sortBy !== 'newest'
   );

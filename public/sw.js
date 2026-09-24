@@ -1,11 +1,11 @@
 // ThreatFeed Service Worker for Offline First / Caching
-const CACHE_NAME = 'threatfeed-v1';
+const CACHE_NAME = 'threatfeed-v2';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icon.svg',
-  '/data/feeds.json'
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './icon.svg',
+  './data/feeds.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         }).catch(() => {
           if (event.request.destination === 'document') {
-            return caches.match('/index.html');
+            return caches.match('./index.html');
           }
         });
       })

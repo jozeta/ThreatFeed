@@ -14,7 +14,16 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
  */
 export function sanitizeHtml(rawHtml: string): string {
   if (!rawHtml) return '';
-  return DOMPurify.sanitize(rawHtml, {
+  let content = rawHtml;
+  // Strip out huge inline base64 images (>10KB) that bloat IndexedDB and freeze DOM rendering
+  if (content.length > 100000 && content.includes('data:image')) {
+    content = content.replace(/data:image\/[a-zA-Z0-9.+_-]+;base64,[A-Za-z0-9+/=]{10000,}/g, '');
+  }
+  // Cap oversized payloads to prevent browser thread locking
+  if (content.length > 300000) {
+    content = content.slice(0, 300000) + '... <p><em>[Article content truncated for length]</em></p>';
+  }
+  return DOMPurify.sanitize(content, {
     ALLOWED_TAGS: [
       'b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li',
       'blockquote', 'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',

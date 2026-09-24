@@ -15,7 +15,7 @@ export const ListView: React.FC<ListViewProps> = ({ articles, isLoading, onOpenA
   }
 
   return (
-    <div className="main-content-container mx-auto px-4 sm:px-6 py-6">
+    <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="bg-theme-surface rounded-lg border border-theme-border overflow-hidden divide-y divide-theme-border/60">
         {articles.map((article) => (
           <ListArticle

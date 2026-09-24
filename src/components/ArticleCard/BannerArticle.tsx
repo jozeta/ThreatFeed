@@ -1,18 +1,33 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
 import { useSettings } from '../../context/SettingsContext';
+import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { AlertCircle, Zap } from 'lucide-react';
 
 interface BannerArticleProps {
   article: Article;
   onOpen: () => void;
+  clusterCount?: number;
+  clusterSources?: string[];
+  onOpenCluster?: () => void;
 }
 
-export const BannerArticle: React.FC<BannerArticleProps> = ({ article, onOpen }) => {
+export const BannerArticle: React.FC<BannerArticleProps> = ({
+  article,
+  onOpen,
+  clusterCount = 1,
+  clusterSources = [],
+  onOpenCluster
+}) => {
   const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
 
   const isBreaking = article.tags.some(t => 
     ['zero-day', '0-day', 'cve', 'ransomware', 'exploit', 'critical'].includes(t.toLowerCase())
@@ -32,7 +47,11 @@ export const BannerArticle: React.FC<BannerArticleProps> = ({ article, onOpen })
       }`}
     >
       <div className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-theme-border/60">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <SeverityBadge severity={article.severity} score={article.severityScore} />
+          {watchlistMatch.matched && (
+            <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+          )}
           {isBreaking ? (
             <span className="inline-flex items-center gap-1 font-mono text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/30">
               <Zap className="w-3 h-3 fill-rose-500" />
@@ -92,6 +111,16 @@ export const BannerArticle: React.FC<BannerArticleProps> = ({ article, onOpen })
                   #{tag}
                 </span>
               ))}
+              {article.cves && article.cves.slice(0, 3).map((cve) => (
+                <CveChip key={cve} cve={cve} />
+              ))}
+              {clusterCount > 1 && (
+                <ClusterPill
+                  count={clusterCount}
+                  sources={clusterSources}
+                  onClick={onOpenCluster}
+                />
+              )}
             </div>
 
             <ArticleActions article={article} onOpenReader={onOpen} />

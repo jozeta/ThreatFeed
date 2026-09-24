@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Article } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
+import { useSettings } from '../../context/SettingsContext';
 import { formatFullDateTime } from '../../utils/date';
 import { ArticleImage } from '../Common/ArticleImage';
+import { SeverityBadge, WatchlistBadge, CveChip } from '../Common/ThreatBadges';
+import { extractIOCs } from '../../services/intelligence/iocExtractor';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import {
   X,
   ExternalLink,
@@ -14,7 +18,11 @@ import {
   ChevronRight,
   Plus,
   Shield,
-  Tag as TagIcon
+  Tag as TagIcon,
+  Folder,
+  Copy,
+  Terminal,
+  FileText
 } from 'lucide-react';
 
 interface ReaderModalProps {
@@ -34,10 +42,24 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   hasNext = false,
   hasPrev = false,
 }) => {
-  const { toggleBookmark, toggleRead, markViewed, addCustomTagToArticle } = useFeeds();
+  const { toggleBookmark, toggleRead, markViewed, addCustomTagToArticle, setBookmarkFolder, setBookmarkNotes } = useFeeds();
+  const { settings, updateSettings } = useSettings();
   const [newTagInput, setNewTagInput] = useState('');
   const [showAddTag, setShowAddTag] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedIOCs, setCopiedIOCs] = useState(false);
+  const [showFolderMenu, setShowFolderMenu] = useState(false);
+  const [newFolderInput, setNewFolderInput] = useState('');
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesInput, setNotesInput] = useState(article.bookmarkNotes || '');
+
+  const extractedIOCs = useMemo(() => {
+    return extractIOCs(`${article.title} ${article.description || ''} ${article.content || ''}`);
+  }, [article]);
+
+  const watchlistMatch = useMemo(() => {
+    return checkWatchlistMatch(article, settings.watchlistKeywords);
+  }, [article, settings.watchlistKeywords]);
 
   // Automatically mark as viewed and read when opened
   useEffect(() => {
@@ -89,6 +111,20 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleCopyAllIOCs = () => {
+    if (extractedIOCs.length === 0) return;
+    const lines = [
+      `# ThreatFeed IOC Export: ${article.title}`,
+      `# Source: ${article.sourceName} (${article.url})`,
+      `# Timestamp: ${new Date().toISOString()}`,
+      '',
+      ...extractedIOCs.map(i => `${i.type.toUpperCase().padEnd(12)}: ${i.value}`)
+    ].join('\n');
+    navigator.clipboard.writeText(lines);
+    setCopiedIOCs(true);
+    setTimeout(() => setCopiedIOCs(false), 2000);
   };
 
   const handleAddTagSubmit = (e: React.FormEvent) => {
@@ -156,16 +192,95 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               <Check className="w-4 h-4 stroke-[2.5]" />
             </button>
 
-            {/* Bookmark */}
-            <button
-              onClick={() => toggleBookmark(article.id)}
-              title="Bookmark article (b)"
-              className={`p-2 rounded hover:bg-theme-card transition-colors ${
-                article.bookmarked ? 'text-theme-accent fill-current' : 'text-theme-text-muted'
-              }`}
-            >
-              <Bookmark className={`w-4 h-4 ${article.bookmarked ? 'fill-theme-accent' : ''}`} />
-            </button>
+            {/* Bookmark & Folder assignment */}
+            <div className="relative flex items-center">
+              <button
+                onClick={() => toggleBookmark(article.id)}
+                title="Bookmark article (b)"
+                className={`p-2 rounded hover:bg-theme-card transition-colors ${
+                  article.bookmarked ? 'text-theme-accent fill-current' : 'text-theme-text-muted'
+                }`}
+              >
+                <Bookmark className={`w-4 h-4 ${article.bookmarked ? 'fill-theme-accent' : ''}`} />
+              </button>
+
+              {article.bookmarked && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowFolderMenu(!showFolderMenu)}
+                    title="Change Bookmark Folder"
+                    className="ml-1 px-2 py-1 rounded bg-theme-card border border-theme-border hover:border-theme-accent text-[11px] font-mono flex items-center gap-1 text-theme-text transition-colors"
+                  >
+                    <Folder className="w-3 h-3 text-theme-accent" />
+                    <span className="truncate max-w-[85px]">{article.bookmarkFolder || 'General'}</span>
+                  </button>
+
+                  {showFolderMenu && (
+                    <div className="absolute right-0 top-full mt-1.5 w-52 rounded-lg bg-theme-surface border border-theme-border shadow-xl p-2 z-30 font-mono text-xs">
+                      <div className="text-[10px] uppercase font-bold text-theme-text-muted px-2 py-1">Assign Folder</div>
+                      <div className="max-h-40 overflow-y-auto space-y-0.5">
+                        {settings.bookmarkFolders.map(f => (
+                          <button
+                            key={f}
+                            onClick={() => {
+                              setBookmarkFolder(article.id, f);
+                              setShowFolderMenu(false);
+                            }}
+                            className={`w-full text-left px-2 py-1 rounded flex items-center justify-between transition-colors ${
+                              (article.bookmarkFolder || 'General') === f
+                                ? 'bg-theme-accent text-white font-bold'
+                                : 'text-theme-text hover:bg-theme-card'
+                            }`}
+                          >
+                            <span className="truncate">{f}</span>
+                            {(article.bookmarkFolder || 'General') === f && <Check className="w-3 h-3" />}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-theme-border/60 flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={newFolderInput}
+                          onChange={(e) => setNewFolderInput(e.target.value)}
+                          placeholder="New folder..."
+                          className="px-2 py-1 bg-theme-card border border-theme-border rounded text-[11px] text-theme-text focus:outline-none flex-grow"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const trimmed = newFolderInput.trim();
+                              if (trimmed) {
+                                if (!settings.bookmarkFolders.includes(trimmed)) {
+                                  updateSettings({ bookmarkFolders: [...settings.bookmarkFolders, trimmed] });
+                                }
+                                setBookmarkFolder(article.id, trimmed);
+                                setNewFolderInput('');
+                                setShowFolderMenu(false);
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const trimmed = newFolderInput.trim();
+                            if (trimmed) {
+                              if (!settings.bookmarkFolders.includes(trimmed)) {
+                                updateSettings({ bookmarkFolders: [...settings.bookmarkFolders, trimmed] });
+                              }
+                              setBookmarkFolder(article.id, trimmed);
+                              setNewFolderInput('');
+                              setShowFolderMenu(false);
+                            }
+                          }}
+                          className="p-1 rounded bg-theme-accent text-white font-bold"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Share */}
             <button
@@ -200,6 +315,10 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         <article className="p-6 sm:p-10 flex-grow max-w-3xl mx-auto w-full">
           {/* Metadata banner */}
           <div className="flex flex-wrap items-center gap-2 mb-4 text-xs font-mono text-theme-text-muted pb-3 border-b border-theme-border/60">
+            <SeverityBadge severity={article.severity} score={article.severityScore} showScore={true} />
+            {watchlistMatch.matched && (
+              <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+            )}
             <span className="text-theme-accent font-bold uppercase tracking-wider">
               {article.sourceName}
             </span>
@@ -215,6 +334,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               {article.categories[0] || 'Security Report'}
             </span>
           </div>
+
+          {/* Watchlist Alert Banner */}
+          {watchlistMatch.matched && (
+            <div className="mb-5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-xs font-mono text-amber-600 dark:text-amber-300">
+              <span className="font-bold uppercase tracking-wider">🎯 Watchlist Alert:</span>
+              <span>Matched target keyword(s): <strong>{watchlistMatch.matchedTerms.join(', ')}</strong></span>
+            </div>
+          )}
 
           {/* Headline */}
           <h1 className="font-serif text-2xl sm:text-4xl font-extrabold text-theme-text leading-tight mb-6">
@@ -252,6 +379,64 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
+
+          {/* Extracted IOCs & CVEs Drawer */}
+          {extractedIOCs.length > 0 && (
+            <div className="mb-8 rounded-lg bg-theme-card/60 border border-theme-border p-4 font-mono text-xs">
+              <div className="flex items-center justify-between pb-3 border-b border-theme-border/60">
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-theme-accent" />
+                  <span className="font-bold text-theme-text uppercase tracking-wider">
+                    Extracted Threat Indicators & Disclosed CVEs ({extractedIOCs.length})
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopyAllIOCs}
+                  className="px-2.5 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border text-theme-text text-[11px] flex items-center gap-1.5 transition-colors font-mono"
+                >
+                  {copiedIOCs ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedIOCs ? 'Copied All IOCs' : 'Copy All IOCs'}</span>
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5 items-center">
+                {extractedIOCs.map((ioc, idx) => {
+                  if (ioc.type === 'cve') {
+                    return <CveChip key={idx} cve={ioc.value} />;
+                  }
+                  if (ioc.type === 'mitre') {
+                    return (
+                      <a
+                        key={idx}
+                        href={`https://attack.mitre.org/techniques/${ioc.value.replace('.', '/')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Inspect ${ioc.value} on MITRE ATT&CK`}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/25 transition-colors"
+                      >
+                        <span>ATT&CK: {ioc.value}</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                      </a>
+                    );
+                  }
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        navigator.clipboard.writeText(ioc.value);
+                      }}
+                      title={`Click to copy ${ioc.type}: ${ioc.value}`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-theme-surface hover:bg-theme-card text-theme-text-muted hover:text-theme-text border border-theme-border transition-colors"
+                    >
+                      <span className="opacity-60">{ioc.type === 'ipv4' ? 'IP:' : 'HASH:'}</span>
+                      <span>{ioc.value.length > 20 ? `${ioc.value.slice(0, 10)}...${ioc.value.slice(-6)}` : ioc.value}</span>
+                      <Copy className="w-2.5 h-2.5 opacity-50" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Article Summary or Content */}
           <div className="prose prose-slate dark:prose-invert max-w-none font-serif text-base sm:text-lg text-theme-text/90 leading-relaxed space-y-4 mb-8">
@@ -328,6 +513,67 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Analyst Notes Section */}
+          <div className="mt-6 pt-6 border-t border-theme-border">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 font-mono text-xs text-theme-text-muted uppercase tracking-wider">
+                <FileText className="w-4 h-4 text-theme-accent" />
+                <span>Analyst Notes & Assessment</span>
+              </div>
+              {!isEditingNotes && (
+                <button
+                  onClick={() => setIsEditingNotes(true)}
+                  className="text-xs font-mono text-theme-accent hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>{article.bookmarkNotes ? 'Edit Notes' : 'Add Note'}</span>
+                </button>
+              )}
+            </div>
+
+            {isEditingNotes ? (
+              <div className="space-y-2">
+                <textarea
+                  value={notesInput}
+                  onChange={(e) => setNotesInput(e.target.value)}
+                  placeholder="Record private investigation notes, triage findings, or internal CVE context..."
+                  rows={3}
+                  className="w-full p-2.5 rounded bg-theme-card border border-theme-border focus:border-theme-accent text-xs font-mono text-theme-text focus:outline-none"
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      setNotesInput(article.bookmarkNotes || '');
+                      setIsEditingNotes(false);
+                    }}
+                    className="px-3 py-1 rounded text-xs font-mono text-theme-text-muted hover:text-theme-text"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBookmarkNotes(article.id, notesInput.trim());
+                      setIsEditingNotes(false);
+                    }}
+                    className="px-3 py-1 rounded bg-theme-accent text-white font-mono text-xs font-bold"
+                  >
+                    Save Notes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              article.bookmarkNotes ? (
+                <div className="p-3 rounded bg-theme-card/60 border border-theme-border/60 text-xs font-mono text-theme-text whitespace-pre-wrap">
+                  {article.bookmarkNotes}
+                </div>
+              ) : (
+                <p className="text-xs font-mono text-theme-text-muted italic">
+                  No analyst notes attached. Click "Add Note" to record findings.
+                </p>
+              )
+            )}
           </div>
         </article>
 

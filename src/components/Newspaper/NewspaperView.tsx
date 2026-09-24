@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Article } from '../../types';
+import React, { useMemo, useState } from 'react';
+import { Article, StoryCluster, NewspaperSectionConfig, ThreatSeverity } from '../../types';
 import { HeroArticle } from '../ArticleCard/HeroArticle';
 import { FeatureArticle } from '../ArticleCard/FeatureArticle';
 import { TextArticle } from '../ArticleCard/TextArticle';
@@ -8,7 +8,22 @@ import { QuarterBriefArticle } from '../ArticleCard/QuarterBriefArticle';
 import { ThumbnailArticle } from '../ArticleCard/ThumbnailArticle';
 import { NewspaperSkeleton } from '../Common/NewspaperSkeleton';
 import { EmptyState } from '../Common/EmptyState';
-import { Flame, ShieldAlert, Cpu, Radio, Sparkles, ShieldCheck } from 'lucide-react';
+import { ClusterModal } from './ClusterModal';
+import { CustomizeSectionsModal } from './CustomizeSectionsModal';
+import { useSettings } from '../../context/SettingsContext';
+import { clusterArticles } from '../../services/articles/clustering';
+import {
+  Flame,
+  ShieldAlert,
+  Cpu,
+  Sparkles,
+  ShieldCheck,
+  SlidersHorizontal,
+  Layers,
+  Shield,
+  Binary,
+  Clock,
+} from 'lucide-react';
 
 interface NewspaperViewProps {
   articles: Article[];
@@ -17,52 +32,18 @@ interface NewspaperViewProps {
 }
 
 // Section types that guarantee 100% horizontal & vertical space filling with zero gaps
-type EditorialSection =
-  | {
-      type: 'full-banner';
-      items: [Article];
-      title?: string;
-      icon?: React.ReactNode;
-    }
-  | {
-      type: 'feature-left-stack-right';
-      main: Article;
-      side: Article[];
-      title?: string;
-      icon?: React.ReactNode;
-    }
-  | {
-      type: 'stack-left-feature-right';
-      side: Article[];
-      main: Article;
-      title?: string;
-      icon?: React.ReactNode;
-    }
-  | {
-      type: 'duo-half';
-      items: [Article, Article];
-      title?: string;
-      icon?: React.ReactNode;
-    }
-  | {
-      type: 'trio-columns';
-      items: [Article, Article, Article];
-      title?: string;
-      icon?: React.ReactNode;
-    }
-  | {
-      type: 'quad-briefs';
-      items: [Article, Article, Article, Article];
-      title?: string;
-      icon?: React.ReactNode;
-    };
+type EditorialBlock =
+  | { type: 'full-banner'; items: [Article] }
+  | { type: 'duo-half'; items: [Article, Article] }
+  | { type: 'trio-columns'; items: [Article, Article, Article] }
+  | { type: 'quad-briefs'; items: [Article, Article, Article, Article] }
+  | { type: 'feature-left-stack-right'; main: Article; side: Article[] };
 
 // Deterministic hash to provide stable organic randomness per article
 function getArticleHash(id: string): number {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = (hash << 5) - hash + id.charCodeAt(i);
-    hash |= 0;
   }
   return Math.abs(hash);
 }
@@ -89,7 +70,6 @@ function calculateImportance(article: Article): number {
     }
   }
 
-  // Sources with high editorial weight
   const topSources = [
     'cisa-advisories',
     'google-project-zero',
@@ -103,10 +83,39 @@ function calculateImportance(article: Article): number {
 
   if (article.image) score += 2;
   if (article.bookmarked) score += 1;
+  if (article.severity === 'critical') score += 4;
+  else if (article.severity === 'high') score += 2;
 
-  // Add organic pseudo-randomness (0 to 2)
   const pseudoRandom = getArticleHash(article.id) % 3;
   return score + pseudoRandom;
+}
+
+const SEVERITY_RANK: Record<ThreatSeverity, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  info: 0,
+};
+
+function getSectionIcon(sectionId: string) {
+  switch (sectionId) {
+    case 'breaking-threats':
+    case 'critical-intel':
+      return <ShieldAlert className="w-4 h-4 text-rose-500" />;
+    case 'threat-intel':
+      return <Flame className="w-4 h-4 text-orange-500" />;
+    case 'vulns':
+      return <ShieldCheck className="w-4 h-4 text-amber-500" />;
+    case 'red-team':
+      return <Binary className="w-4 h-4 text-red-400" />;
+    case 'blue-team':
+      return <Shield className="w-4 h-4 text-blue-400" />;
+    case 'tech':
+      return <Cpu className="w-4 h-4 text-theme-accent" />;
+    default:
+      return <Sparkles className="w-4 h-4 text-theme-accent" />;
+  }
 }
 
 export const NewspaperView: React.FC<NewspaperViewProps> = ({
@@ -114,6 +123,206 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   isLoading,
   onOpenArticle,
 }) => {
+  const { settings, updateSetting } = useSettings();
+  const [selectedCluster, setSelectedCluster] = useState<StoryCluster | null>(null);
+  const [isCustomizingSections, setIsCustomizingSections] = useState(false);
+
+  // Compute story clusters across feeds
+  const clusters = useMemo(() => {
+    if (!settings.clusteringEnabled) return [];
+    return clusterArticles(articles);
+  }, [articles, settings.clusteringEnabled]);
+
+  // Fast cluster lookup by primary article ID
+  const clusterMap = useMemo(() => {
+    const map = new Map<string, StoryCluster>();
+    clusters.forEach((c) => {
+      map.set(c.primaryArticle.id, c);
+    });
+    return map;
+  }, [clusters]);
+
+  // Set of related article IDs hidden from main page when clustering is active
+  const clusteredSecondaryIds = useMemo(() => {
+    if (!settings.clusteringEnabled) return new Set<string>();
+    const ids = new Set<string>();
+    clusters.forEach((c) => {
+      c.relatedArticles.forEach((r) => ids.add(r.id));
+    });
+    return ids;
+  }, [clusters, settings.clusteringEnabled]);
+
+  // Distinct articles to display on the newspaper front
+  const primaryDisplayArticles = useMemo(() => {
+    if (!settings.clusteringEnabled) return articles;
+    return articles.filter((a) => !clusteredSecondaryIds.has(a.id));
+  }, [articles, clusteredSecondaryIds, settings.clusteringEnabled]);
+
+  // Helper to extract cluster props for any article
+  const getClusterProps = (article: Article) => {
+    const cluster = clusterMap.get(article.id);
+    if (!cluster || cluster.clusterSize <= 1) return {};
+    return {
+      clusterCount: cluster.clusterSize,
+      clusterSources: cluster.relatedArticles.map((r) => r.sourceName),
+      onOpenCluster: () => setSelectedCluster(cluster),
+    };
+  };
+
+  // Chronological sort of all articles (newest first)
+  const chronologicalStories = useMemo(() => {
+    return [...primaryDisplayArticles].sort((a, b) => {
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    });
+  }, [primaryDisplayArticles]);
+
+  // Partition chronological remaining stories into gap-free blocks
+  const chronologicalBlocks = useMemo(() => {
+    const remaining = chronologicalStories.slice(5);
+    const blocks: EditorialBlock[] = [];
+    let idx = 0;
+    let cycle = 0;
+
+    while (idx < remaining.length) {
+      const count = remaining.length - idx;
+
+      if (count === 1) {
+        blocks.push({ type: 'full-banner', items: [remaining[idx]] });
+        idx += 1;
+        break;
+      }
+
+      if (count === 2) {
+        blocks.push({ type: 'duo-half', items: [remaining[idx], remaining[idx + 1]] });
+        idx += 2;
+        break;
+      }
+
+      if (count === 3) {
+        blocks.push({
+          type: 'trio-columns',
+          items: [remaining[idx], remaining[idx + 1], remaining[idx + 2]],
+        });
+        idx += 3;
+        break;
+      }
+
+      switch (cycle % 4) {
+        case 0:
+          blocks.push({
+            type: 'feature-left-stack-right',
+            main: remaining[idx],
+            side: [remaining[idx + 1], remaining[idx + 2], remaining[idx + 3]],
+          });
+          idx += 4;
+          break;
+        case 1:
+          blocks.push({
+            type: 'quad-briefs',
+            items: [
+              remaining[idx],
+              remaining[idx + 1],
+              remaining[idx + 2],
+              remaining[idx + 3],
+            ],
+          });
+          idx += 4;
+          break;
+        case 2:
+          blocks.push({
+            type: 'duo-half',
+            items: [remaining[idx], remaining[idx + 1]],
+          });
+          idx += 2;
+          break;
+        case 3:
+          blocks.push({
+            type: 'full-banner',
+            items: [remaining[idx]],
+          });
+          idx += 1;
+          break;
+      }
+      cycle++;
+    }
+
+    return blocks;
+  }, [chronologicalStories]);
+
+  // Group articles by user configured sections
+  const sectionedGroups = useMemo(() => {
+    if (settings.sectionsEnabled === false) return null;
+
+    const configs = [...(settings.newspaperSections || [])]
+      .filter((s) => s.enabled)
+      .sort((a, b) => a.order - b.order);
+
+    if (configs.length === 0) return null;
+
+    const usedIds = new Set<string>();
+    const groups: { config: NewspaperSectionConfig; articles: Article[] }[] = [];
+
+    for (const conf of configs) {
+      const matched = primaryDisplayArticles.filter((a) => {
+        if (usedIds.has(a.id)) return false;
+
+        // Check severity match
+        if (conf.minSeverity) {
+          const reqRank = SEVERITY_RANK[conf.minSeverity] ?? 0;
+          const artRank = SEVERITY_RANK[a.severity || 'info'] ?? 0;
+          return artRank >= reqRank;
+        }
+
+        // Check category match
+        if (conf.category) {
+          const catLower = conf.category.toLowerCase();
+          const matchCat = a.categories.some((c) => c.toLowerCase().includes(catLower));
+          const matchTag = a.tags.some((t) => t.toLowerCase().includes(catLower));
+          return matchCat || matchTag;
+        }
+
+        return false;
+      });
+
+      // Sort matched articles by editorial importance
+      matched.sort((a, b) => {
+        const impDiff = calculateImportance(b) - calculateImportance(a);
+        if (Math.abs(impDiff) <= 1) {
+          return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+        }
+        return impDiff;
+      });
+
+      if (matched.length > 0) {
+        matched.forEach((a) => usedIds.add(a.id));
+        groups.push({ config: conf, articles: matched });
+      }
+    }
+
+    // Capture remaining unmatched articles
+    const remainingUnmatched = primaryDisplayArticles.filter((a) => !usedIds.has(a.id));
+    if (remainingUnmatched.length > 0) {
+      remainingUnmatched.sort((a, b) => {
+        const impDiff = calculateImportance(b) - calculateImportance(a);
+        if (Math.abs(impDiff) <= 1) {
+          return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+        }
+        return impDiff;
+      });
+      groups.push({
+        config: {
+          id: 'wire-general',
+          title: 'Intelligence Wire & Dispatches',
+          enabled: true,
+          order: 999,
+        },
+        articles: remainingUnmatched,
+      });
+    }
+
+    return groups;
+  }, [primaryDisplayArticles, settings.newspaperSections, settings.sectionsEnabled]);
+
   if (isLoading && articles.length === 0) {
     return <NewspaperSkeleton />;
   }
@@ -122,411 +331,448 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     return <EmptyState />;
   }
 
-  // Sort articles by importance & publication to create an editorial hierarchy
-  const sortedStories = useMemo(() => {
-    return [...articles].sort((a, b) => {
-      const impDiff = calculateImportance(b) - calculateImportance(a);
-      if (Math.abs(impDiff) <= 1) {
-        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-      }
-      return impDiff;
-    });
-  }, [articles]);
-
-  // Section 1: Lead story + Side column
-  // If there are at least 5 articles, provide 4 side stories to match the Hero's vertical height
-  const heroStory = sortedStories[0];
-  const sideHighlightCount = Math.min(4, Math.max(0, sortedStories.length - 1));
-  const sideHighlights = sortedStories.slice(1, 1 + sideHighlightCount);
-
-  // Group the rest of articles into variable, gap-free editorial sections
-  const remaining = sortedStories.slice(1 + sideHighlightCount);
-
-  const editorialSections = useMemo(() => {
-    const sections: EditorialSection[] = [];
-    let index = 0;
-    let cycle = 0;
-
-    while (index < remaining.length) {
-      const count = remaining.length - index;
-
-      // Strict remainder handling: Always pair or trio remaining articles so no grid slot is empty
-      if (count === 1) {
-        sections.push({
-          type: 'full-banner',
-          items: [remaining[index]],
-          title: 'Special Threat Dispatch',
-          icon: <ShieldAlert className="w-4 h-4 text-rose-500" />,
-        });
-        index += 1;
-        break;
-      }
-
-      if (count === 2) {
-        sections.push({
-          type: 'duo-half',
-          items: [remaining[index], remaining[index + 1]],
-          title: 'Threat Analysis & Research',
-          icon: <Cpu className="w-4 h-4 text-theme-accent" />,
-        });
-        index += 2;
-        break;
-      }
-
-      if (count === 3) {
-        sections.push({
-          type: 'trio-columns',
-          items: [remaining[index], remaining[index + 1], remaining[index + 2]],
-          title: 'Security Wire & Reports',
-          icon: <Sparkles className="w-4 h-4 text-amber-500" />,
-        });
-        index += 3;
-        break;
-      }
-
-      // When count >= 4, rotate through organic asymmetric layouts:
-      switch (cycle % 6) {
-        case 0:
-          // Pattern A: Full-Width Cinematic Banner (Takes 100% width)
-          sections.push({
-            type: 'full-banner',
-            items: [remaining[index]],
-            title: 'Critical Threat Intelligence Briefing',
-            icon: <ShieldAlert className="w-4 h-4 text-rose-500" />,
-          });
-          index += 1;
-          break;
-
-        case 1:
-          // Pattern B: Feature Left (7 cols) + 3 Articles Stacked Right (5 cols)
-          // The 3 stacked articles fill the vertical space beside the feature story with NO gap!
-          if (count >= 4) {
-            sections.push({
-              type: 'feature-left-stack-right',
-              main: remaining[index],
-              side: [remaining[index + 1], remaining[index + 2], remaining[index + 3]],
-              title: 'Lead Investigation & Dispatches',
-              icon: <Flame className="w-4 h-4 text-orange-500" />,
-            });
-            index += 4;
-          } else {
-            sections.push({
-              type: 'trio-columns',
-              items: [remaining[index], remaining[index + 1], remaining[index + 2]],
-            });
-            index += 3;
-          }
-          break;
-
-        case 2:
-          // Pattern C: Four 1/4 Width Telemetry Columns (Takes 4 articles across 100%)
-          if (count >= 4) {
-            sections.push({
-              type: 'quad-briefs',
-              items: [
-                remaining[index],
-                remaining[index + 1],
-                remaining[index + 2],
-                remaining[index + 3],
-              ],
-              title: 'Telemetry & Rapid Dispatches',
-              icon: <Radio className="w-4 h-4 text-theme-accent" />,
-            });
-            index += 4;
-          } else {
-            sections.push({
-              type: 'trio-columns',
-              items: [remaining[index], remaining[index + 1], remaining[index + 2]],
-            });
-            index += 3;
-          }
-          break;
-
-        case 3:
-          // Pattern D: Dual Half-Width Stories (Takes 2 articles across 100%)
-          sections.push({
-            type: 'duo-half',
-            items: [remaining[index], remaining[index + 1]],
-            title: 'Exploit Research & Analysis',
-            icon: <Cpu className="w-4 h-4 text-theme-accent" />,
-          });
-          index += 2;
-          break;
-
-        case 4:
-          // Pattern E: 3 Articles Stacked Left (5 cols) + Horizontal Feature Right (7 cols)
-          // The 3 stacked articles fill the vertical space beside the feature story with NO gap!
-          if (count >= 4) {
-            sections.push({
-              type: 'stack-left-feature-right',
-              side: [remaining[index], remaining[index + 1], remaining[index + 2]],
-              main: remaining[index + 3],
-              title: 'Vulnerability Disclosures & Advisories',
-              icon: <ShieldCheck className="w-4 h-4 text-emerald-500" />,
-            });
-            index += 4;
-          } else {
-            sections.push({
-              type: 'trio-columns',
-              items: [remaining[index], remaining[index + 1], remaining[index + 2]],
-            });
-            index += 3;
-          }
-          break;
-
-        case 5:
-          // Pattern F: Trio Columns (Takes 3 articles across 100%)
-          sections.push({
-            type: 'trio-columns',
-            items: [remaining[index], remaining[index + 1], remaining[index + 2]],
-            title: 'Global Cybersecurity Dispatches',
-            icon: <Sparkles className="w-4 h-4 text-amber-500" />,
-          });
-          index += 3;
-          break;
-      }
-
-      cycle++;
-    }
-
-    return sections;
-  }, [remaining]);
+  const isSectionsActive = settings.sectionsEnabled !== false;
 
   return (
     <div className="newspaper-container main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: THE FRONT PAGE LEAD (Hero Story + Side Column Stack)
-          Both columns stretch to equal height (items-stretch), zero gaps!
+          EDITORIAL MASTHEAD CONTROLS BAR
+          Zero clutter, toggle between Section Grouping and Chronological Order
           ───────────────────────────────────────────────────────────── */}
-      <section className="newspaper-row mb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-          {/* Main Hero Story (Takes 8 cols if side column exists, or full 12 cols if single) */}
-          <div
-            className={`${
-              sideHighlights.length > 0
-                ? 'lg:col-span-8 lg:border-r lg:border-theme-border lg:pr-8'
-                : 'lg:col-span-12'
-            } flex flex-col justify-between`}
-          >
-            <HeroArticle article={heroStory} onOpen={() => onOpenArticle(heroStory)} />
-          </div>
-
-          {/* Right Column Stack: Up to 4 stories stacked so vertical height balances the Hero */}
-          {sideHighlights.length > 0 && (
-            <div className="lg:col-span-4 flex flex-col justify-between h-full">
-              <div className="flex items-center gap-2 pb-2 mb-3 border-b-2 border-theme-accent">
-                <Flame className="w-4 h-4 text-theme-accent" />
-                <h3 className="font-mono text-xs font-black uppercase tracking-widest text-theme-text">
-                  TOP DEVELOPMENTS · INTEL WIRE
-                </h3>
-              </div>
-
-              <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
-                {sideHighlights.map((story, idx) => (
-                  <div
-                    key={story.id}
-                    className="py-2.5 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
-                  >
-                    {idx === 0 ? (
-                      <ThumbnailArticle
-                        article={story}
-                        variant="newspaper"
-                        showBorder={false}
-                        onOpen={() => onOpenArticle(story)}
-                      />
-                    ) : (
-                      <TextArticle
-                        article={story}
-                        showDivider={false}
-                        className="h-full flex flex-col justify-between"
-                        onOpen={() => onOpenArticle(story)}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-6 border-b border-theme-border/60 text-xs font-mono text-theme-text-muted gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <span className="font-bold uppercase tracking-wider text-theme-text">
+            {isSectionsActive ? 'EDITORIAL SECTION EDITION' : 'CHRONOLOGICAL DISPATCH STREAM'}
+          </span>
+          <span className="text-theme-border">·</span>
+          <span>{primaryDisplayArticles.length} stories</span>
+          {clusters.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-theme-accent bg-theme-accent/10 px-2 py-0.5 rounded">
+              <Layers className="w-3 h-3" />
+              {clusters.filter((c) => c.clusterSize > 1).length} clusters
+            </span>
           )}
         </div>
-      </section>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Section Mode Toggle (Requirement: Disable sections -> Chronological order) */}
+          <button
+            onClick={() => updateSetting('sectionsEnabled', !isSectionsActive)}
+            title={
+              isSectionsActive
+                ? 'Disable sections to view all articles in strict chronological order'
+                : 'Enable editorial section grouping'
+            }
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded transition-colors text-xs font-mono font-bold ${
+              !isSectionsActive
+                ? 'bg-theme-accent text-white shadow-sm'
+                : 'bg-theme-surface text-theme-text hover:bg-theme-card border border-theme-border hover:border-theme-accent'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>{isSectionsActive ? 'Sections: ON' : 'Chronological (Sections OFF)'}</span>
+          </button>
+
+          {/* Clustering Toggle */}
+          <button
+            onClick={() => updateSetting('clusteringEnabled', !settings.clusteringEnabled)}
+            title="Toggle multi-source story clustering"
+            className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+              settings.clusteringEnabled
+                ? 'bg-theme-surface text-theme-accent border border-theme-accent/40 font-bold'
+                : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface border border-theme-border'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Clustering: {settings.clusteringEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Customize Sections Button (Only shown/enabled when sections are on) */}
+          {isSectionsActive && (
+            <button
+              onClick={() => setIsCustomizingSections(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border hover:border-theme-accent text-theme-text transition-colors font-medium"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-theme-accent" />
+              <span>Customize Sections</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2+: FLOWING ASYMMETRIC EDITORIAL SECTIONS (Continuous variation)
-          Zero empty grid slots, and side columns packed with stacked articles!
+          MODE A: SECTIONS ENABLED (Categorized Editorial Blocks)
           ───────────────────────────────────────────────────────────── */}
-      <div className="space-y-12">
-        {editorialSections.map((sec, secIdx) => {
-          return (
-            <div key={secIdx} className="pt-6 border-t-2 border-theme-border">
-              {/* Optional Section Masthead Bar */}
-              {sec.title && (
-                <div className="flex items-center justify-between mb-6 pb-2 border-b border-theme-border">
+      {isSectionsActive && sectionedGroups && sectionedGroups.length > 0 ? (
+        <div className="space-y-12">
+          {sectionedGroups.map((group, gIdx) => {
+            const items = group.articles;
+            const isFirstSection = gIdx === 0;
+
+            return (
+              <section key={group.config.id} className="pt-2">
+                {/* Section Header */}
+                <div className="flex items-center justify-between mb-6 pb-2 border-b-2 border-theme-accent">
                   <div className="flex items-center gap-2">
-                    {sec.icon}
-                    <h2 className="font-serif text-xl sm:text-2xl font-bold text-theme-text tracking-tight">
-                      {sec.title}
+                    {getSectionIcon(group.config.id)}
+                    <h2 className="font-serif text-xl sm:text-2xl font-bold text-theme-text tracking-tight uppercase">
+                      {group.config.title}
                     </h2>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-theme-surface text-theme-text-muted border border-theme-border">
+                      {items.length}
+                    </span>
                   </div>
                   <span className="font-mono text-[11px] text-theme-text-muted uppercase hidden sm:inline">
-                    EDITION WIRE · VERIFIED TELEMETRY
+                    SECTION {gIdx + 1}
                   </span>
                 </div>
-              )}
 
-              {/* RENDER BASED ON ASYMMETRIC PATTERN */}
-
-              {/* 1. Full-Width Banner (100% width, cinematic edge-to-edge) */}
-              {sec.type === 'full-banner' && sec.items[0] && (
-                <div className="w-full">
-                  <BannerArticle
-                    article={sec.items[0]}
-                    onOpen={() => onOpenArticle(sec.items[0])}
-                  />
-                </div>
-              )}
-
-              {/* 2. Feature Left (7 cols) + 3 Articles Stacked Right (5 cols) */}
-              {sec.type === 'feature-left-stack-right' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-                  <div className="lg:col-span-7 lg:border-r lg:border-theme-border lg:pr-8 flex flex-col justify-between h-full">
-                    <FeatureArticle
-                      article={sec.main}
-                      orientation="vertical"
-                      showBorder={false}
-                      className="h-full flex flex-col justify-between"
-                      onOpen={() => onOpenArticle(sec.main)}
-                    />
-                  </div>
-                  <div className="lg:col-span-5 flex flex-col justify-between h-full">
-                    <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
-                      {sec.side.map((story, sIdx) => (
-                        <div
-                          key={story.id}
-                          className="py-3 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
-                        >
-                          {sIdx === 0 ? (
-                            <ThumbnailArticle
-                              article={story}
-                              variant="newspaper"
-                              showBorder={false}
-                              onOpen={() => onOpenArticle(story)}
-                            />
-                          ) : (
-                            <TextArticle
-                              article={story}
-                              showDivider={false}
-                              className="h-full flex flex-col justify-between"
-                              onOpen={() => onOpenArticle(story)}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 3. Four 1/4 Width Telemetry Columns (25% each across 100%) */}
-              {sec.type === 'quad-briefs' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
-                  {sec.items.map((story) => (
-                    <div key={story.id} className="h-full">
-                      <QuarterBriefArticle
-                        article={story}
-                        onOpen={() => onOpenArticle(story)}
-                        withImage={true}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* 4. Dual Half-Width Stories (50% each across 100%) */}
-              {sec.type === 'duo-half' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-                  <div className="p-5 rounded-xl bg-theme-surface border border-theme-border flex flex-col justify-between h-full">
-                    <FeatureArticle
-                      article={sec.items[0]}
-                      orientation="vertical"
-                      showBorder={false}
-                      className="h-full flex flex-col justify-between"
-                      onOpen={() => onOpenArticle(sec.items[0])}
-                    />
-                  </div>
-                  <div className="p-5 rounded-xl bg-theme-surface border border-theme-border flex flex-col justify-between h-full">
-                    <FeatureArticle
-                      article={sec.items[1]}
-                      orientation="vertical"
-                      showBorder={false}
-                      className="h-full flex flex-col justify-between"
-                      onOpen={() => onOpenArticle(sec.items[1])}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 5. 3 Articles Stacked Left (5 cols) + Horizontal Feature Right (7 cols) */}
-              {sec.type === 'stack-left-feature-right' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-                  <div className="lg:col-span-5 lg:border-r lg:border-theme-border lg:pr-8 flex flex-col justify-between h-full order-2 lg:order-1">
-                    <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
-                      {sec.side.map((story, sIdx) => (
-                        <div
-                          key={story.id}
-                          className="py-3 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
-                        >
-                          {sIdx === 0 ? (
-                            <ThumbnailArticle
-                              article={story}
-                              variant="newspaper"
-                              showBorder={false}
-                              onOpen={() => onOpenArticle(story)}
-                            />
-                          ) : (
-                            <TextArticle
-                              article={story}
-                              showDivider={false}
-                              className="h-full flex flex-col justify-between"
-                              onOpen={() => onOpenArticle(story)}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="lg:col-span-7 flex flex-col justify-between h-full order-1 lg:order-2">
-                    <FeatureArticle
-                      article={sec.main}
-                      orientation="horizontal"
-                      showBorder={false}
-                      className="h-full flex flex-col justify-between"
-                      onOpen={() => onOpenArticle(sec.main)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 6. Trio Columns (33.3% each across 100%) */}
-              {sec.type === 'trio-columns' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-                  {sec.items.map((story) => (
+                {/* Section Layout */}
+                {isFirstSection ? (
+                  /* Lead Hero + Side Column Stack for first section */
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-8">
                     <div
-                      key={story.id}
-                      className="p-4 rounded-lg bg-theme-surface border border-theme-border flex flex-col justify-between h-full"
+                      className={`${
+                        items.length > 1
+                          ? 'lg:col-span-8 lg:border-r lg:border-theme-border lg:pr-8'
+                          : 'lg:col-span-12'
+                      } flex flex-col justify-between`}
                     >
-                      <QuarterBriefArticle
-                        article={story}
-                        onOpen={() => onOpenArticle(story)}
-                        withImage={true}
+                      <HeroArticle
+                        article={items[0]}
+                        onOpen={() => onOpenArticle(items[0])}
+                        {...getClusterProps(items[0])}
                       />
                     </div>
-                  ))}
+
+                    {items.length > 1 && (
+                      <div className="lg:col-span-4 flex flex-col justify-between h-full">
+                        <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
+                          {items.slice(1, 5).map((story, idx) => (
+                            <div
+                              key={story.id}
+                              className="py-2.5 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
+                            >
+                              {idx === 0 ? (
+                                <ThumbnailArticle
+                                  article={story}
+                                  variant="newspaper"
+                                  showBorder={false}
+                                  onOpen={() => onOpenArticle(story)}
+                                />
+                              ) : (
+                                <TextArticle
+                                  article={story}
+                                  showDivider={false}
+                                  className="h-full flex flex-col justify-between"
+                                  onOpen={() => onOpenArticle(story)}
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : items.length === 1 ? (
+                  /* Single story banner */
+                  <div className="w-full">
+                    <BannerArticle
+                      article={items[0]}
+                      onOpen={() => onOpenArticle(items[0])}
+                      {...getClusterProps(items[0])}
+                    />
+                  </div>
+                ) : items.length === 2 ? (
+                  /* Dual column half */
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+                    <div className="p-5 rounded-xl bg-theme-surface border border-theme-border flex flex-col justify-between h-full">
+                      <FeatureArticle
+                        article={items[0]}
+                        orientation="vertical"
+                        showBorder={false}
+                        className="h-full flex flex-col justify-between"
+                        onOpen={() => onOpenArticle(items[0])}
+                        {...getClusterProps(items[0])}
+                      />
+                    </div>
+                    <div className="p-5 rounded-xl bg-theme-surface border border-theme-border flex flex-col justify-between h-full">
+                      <FeatureArticle
+                        article={items[1]}
+                        orientation="vertical"
+                        showBorder={false}
+                        className="h-full flex flex-col justify-between"
+                        onOpen={() => onOpenArticle(items[1])}
+                        {...getClusterProps(items[1])}
+                      />
+                    </div>
+                  </div>
+                ) : items.length === 3 ? (
+                  /* Trio columns */
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+                    {items.map((story) => (
+                      <div
+                        key={story.id}
+                        className="p-4 rounded-lg bg-theme-surface border border-theme-border flex flex-col justify-between h-full"
+                      >
+                        <QuarterBriefArticle
+                          article={story}
+                          onOpen={() => onOpenArticle(story)}
+                          withImage={true}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : items.length === 4 ? (
+                  /* Quad briefs across 4 columns */
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
+                    {items.map((story) => (
+                      <div key={story.id} className="h-full">
+                        <QuarterBriefArticle
+                          article={story}
+                          onOpen={() => onOpenArticle(story)}
+                          withImage={true}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Feature Left + Stack Right for 5+ items */
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+                    <div className="lg:col-span-7 lg:border-r lg:border-theme-border lg:pr-8 flex flex-col justify-between h-full">
+                      <FeatureArticle
+                        article={items[0]}
+                        orientation="vertical"
+                        showBorder={false}
+                        className="h-full flex flex-col justify-between"
+                        onOpen={() => onOpenArticle(items[0])}
+                        {...getClusterProps(items[0])}
+                      />
+                    </div>
+                    <div className="lg:col-span-5 flex flex-col justify-between h-full">
+                      <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
+                        {items.slice(1, 4).map((story, sIdx) => (
+                          <div
+                            key={story.id}
+                            className="py-3 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
+                          >
+                            {sIdx === 0 ? (
+                              <ThumbnailArticle
+                                article={story}
+                                variant="newspaper"
+                                showBorder={false}
+                                onOpen={() => onOpenArticle(story)}
+                              />
+                            ) : (
+                              <TextArticle
+                                article={story}
+                                showDivider={false}
+                                className="h-full flex flex-col justify-between"
+                                onOpen={() => onOpenArticle(story)}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODE B: SECTIONS DISABLED (Strict Chronological Order Stream)
+          ───────────────────────────────────────────────────────────── */}
+      {!isSectionsActive && chronologicalStories.length > 0 && (
+        <div className="space-y-10">
+          {/* Chronological Lead Row (Newest article as Hero + Next 4 Newest as Stack) */}
+          <section className="newspaper-row">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+              {/* Newest Article as Hero Story */}
+              <div
+                className={`${
+                  chronologicalStories.length > 1
+                    ? 'lg:col-span-8 lg:border-r lg:border-theme-border lg:pr-8'
+                    : 'lg:col-span-12'
+                } flex flex-col justify-between`}
+              >
+                <HeroArticle
+                  article={chronologicalStories[0]}
+                  onOpen={() => onOpenArticle(chronologicalStories[0])}
+                  {...getClusterProps(chronologicalStories[0])}
+                />
+              </div>
+
+              {/* Next 4 Articles in Descending Chronological Order */}
+              {chronologicalStories.length > 1 && (
+                <div className="lg:col-span-4 flex flex-col justify-between h-full">
+                  <div className="flex items-center gap-2 pb-2 mb-3 border-b-2 border-theme-accent">
+                    <Clock className="w-4 h-4 text-theme-accent" />
+                    <h3 className="font-mono text-xs font-black uppercase tracking-widest text-theme-text">
+                      LATEST DISPATCHES · CHRONOLOGICAL
+                    </h3>
+                  </div>
+
+                  <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
+                    {chronologicalStories.slice(1, 5).map((story, idx) => (
+                      <div
+                        key={story.id}
+                        className="py-2.5 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
+                      >
+                        {idx === 0 ? (
+                          <ThumbnailArticle
+                            article={story}
+                            variant="newspaper"
+                            showBorder={false}
+                            onOpen={() => onOpenArticle(story)}
+                          />
+                        ) : (
+                          <TextArticle
+                            article={story}
+                            showDivider={false}
+                            className="h-full flex flex-col justify-between"
+                            onOpen={() => onOpenArticle(story)}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-          );
-        })}
-      </div>
+          </section>
+
+          {/* Flowing Chronological Blocks for Remaining Articles */}
+          <div className="space-y-12">
+            {chronologicalBlocks.map((blk, bIdx) => (
+              <div key={bIdx} className="pt-6 border-t border-theme-border/80">
+                {blk.type === 'full-banner' && (
+                  <div className="w-full">
+                    <BannerArticle
+                      article={blk.items[0]}
+                      onOpen={() => onOpenArticle(blk.items[0])}
+                      {...getClusterProps(blk.items[0])}
+                    />
+                  </div>
+                )}
+
+                {blk.type === 'duo-half' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+                    <div className="p-5 rounded-xl bg-theme-surface border border-theme-border flex flex-col justify-between h-full">
+                      <FeatureArticle
+                        article={blk.items[0]}
+                        orientation="vertical"
+                        showBorder={false}
+                        className="h-full flex flex-col justify-between"
+                        onOpen={() => onOpenArticle(blk.items[0])}
+                        {...getClusterProps(blk.items[0])}
+                      />
+                    </div>
+                    <div className="p-5 rounded-xl bg-theme-surface border border-theme-border flex flex-col justify-between h-full">
+                      <FeatureArticle
+                        article={blk.items[1]}
+                        orientation="vertical"
+                        showBorder={false}
+                        className="h-full flex flex-col justify-between"
+                        onOpen={() => onOpenArticle(blk.items[1])}
+                        {...getClusterProps(blk.items[1])}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {blk.type === 'trio-columns' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+                    {blk.items.map((story) => (
+                      <div
+                        key={story.id}
+                        className="p-4 rounded-lg bg-theme-surface border border-theme-border flex flex-col justify-between h-full"
+                      >
+                        <QuarterBriefArticle
+                          article={story}
+                          onOpen={() => onOpenArticle(story)}
+                          withImage={true}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {blk.type === 'quad-briefs' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
+                    {blk.items.map((story) => (
+                      <div key={story.id} className="h-full">
+                        <QuarterBriefArticle
+                          article={story}
+                          onOpen={() => onOpenArticle(story)}
+                          withImage={true}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {blk.type === 'feature-left-stack-right' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+                    <div className="lg:col-span-7 lg:border-r lg:border-theme-border lg:pr-8 flex flex-col justify-between h-full">
+                      <FeatureArticle
+                        article={blk.main}
+                        orientation="vertical"
+                        showBorder={false}
+                        className="h-full flex flex-col justify-between"
+                        onOpen={() => onOpenArticle(blk.main)}
+                        {...getClusterProps(blk.main)}
+                      />
+                    </div>
+                    <div className="lg:col-span-5 flex flex-col justify-between h-full">
+                      <div className="flex flex-col flex-grow justify-between divide-y divide-theme-border/60">
+                        {blk.side.map((story, sIdx) => (
+                          <div
+                            key={story.id}
+                            className="py-3 first:pt-0 last:pb-0 flex-1 flex flex-col justify-between"
+                          >
+                            {sIdx === 0 ? (
+                              <ThumbnailArticle
+                                article={story}
+                                variant="newspaper"
+                                showBorder={false}
+                                onOpen={() => onOpenArticle(story)}
+                              />
+                            ) : (
+                              <TextArticle
+                                article={story}
+                                showDivider={false}
+                                className="h-full flex flex-col justify-between"
+                                onOpen={() => onOpenArticle(story)}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cluster Modal */}
+      <ClusterModal
+        cluster={selectedCluster}
+        onClose={() => setSelectedCluster(null)}
+        onOpenArticle={onOpenArticle}
+      />
+
+      {/* Customize Sections Modal */}
+      <CustomizeSectionsModal
+        isOpen={isCustomizingSections}
+        onClose={() => setIsCustomizingSections(false)}
+      />
     </div>
   );
 };

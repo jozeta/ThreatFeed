@@ -17,15 +17,20 @@ import {
   WifiOff,
   X,
   Keyboard,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Radio,
+  Activity
 } from 'lucide-react';
-import { LayoutMode } from '../../types';
+import { LayoutMode, ActiveNavTab } from '../../types';
+import { NavigationTabs } from '../Navigation/NavigationTabs';
 
 interface HeaderProps {
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onToggleFilterDrawer: () => void;
   isFilterOpen: boolean;
+  activeTab: ActiveNavTab;
+  onSelectTab: (tab: ActiveNavTab) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenShortcuts,
   onToggleFilterDrawer,
   isFilterOpen,
+  activeTab,
+  onSelectTab,
 }) => {
   const {
     articles,
@@ -43,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
     refreshFeeds,
     markAllAsRead,
     isOffline,
+    feedHealth,
   } = useFeeds();
 
   const { settings, updateSettings } = useSettings();
@@ -53,6 +61,9 @@ export const Header: React.FC<HeaderProps> = ({
   const unreadCount = articles.filter((a) => !a.read).length;
   const bookmarkedCount = articles.filter((a) => a.bookmarked).length;
   const activeSourcesCount = feeds.filter((f) => f.enabled).length;
+  const errorFeedsCount = Object.values(feedHealth || {}).filter(
+    (h) => h.status !== 'healthy'
+  ).length;
 
   const cycleTheme = () => {
     if (settings.theme === 'dark') updateSettings({ theme: 'light' });
@@ -75,47 +86,120 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Editorial Top Status Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 border-b border-theme-border/50 text-[11px] font-mono text-theme-text-muted flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold tracking-wider text-theme-accent uppercase">
-            DEFENSE EDITION
-          </span>
-          <span className="hidden sm:inline text-theme-border">|</span>
-          <span className="hidden sm:inline">
-            {totalArticles.toLocaleString()} DISPATCHES · {unreadCount} UNREAD · {bookmarkedCount} BOOKMARKED · {activeSourcesCount} FEEDS
-          </span>
-        </div>
+      <div className="border-b border-theme-border/50">
+        <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-1.5 text-[11px] font-mono text-theme-text-muted flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="font-semibold tracking-wider text-theme-accent uppercase">
+              DEFENSE EDITION
+            </span>
+            <span className="hidden sm:inline text-theme-border">|</span>
+            <span className="hidden sm:inline">
+              {totalArticles.toLocaleString()} DISPATCHES · {unreadCount} UNREAD · {bookmarkedCount} BOOKMARKED · {activeSourcesCount} FEEDS
+            </span>
+          </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-2">
           {/* Refresh status */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 mr-1 hidden md:flex">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
                 isRefreshing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'
               }`}
             />
-            <span className="hidden md:inline">
+            <span className="hidden lg:inline text-[10px]">
               {isRefreshing
-                ? `Updating feeds (${refreshProgress.completed}/${refreshProgress.total})...`
+                ? `Updating (${refreshProgress.completed}/${refreshProgress.total})...`
                 : lastUpdated
-                ? `Updated ${formatRelativeTime(lastUpdated.toISOString())}`
+                ? `${formatRelativeTime(lastUpdated.toISOString())}`
                 : 'Ready'}
             </span>
           </div>
 
+          {/* Keys button */}
           <button
             onClick={onOpenShortcuts}
             title="Keyboard shortcuts (?)"
-            className="hover:text-theme-text p-1 transition-colors hidden sm:flex items-center gap-1"
+            className="hover:text-theme-text p-1.5 rounded hover:bg-theme-card transition-colors hidden sm:flex items-center gap-1"
           >
-            <Keyboard className="w-3 h-3" />
+            <Keyboard className="w-3.5 h-3.5" />
             <span>KEYS</span>
+          </button>
+
+          {/* Refresh button (icon only) */}
+          <button
+            onClick={() => refreshFeeds()}
+            disabled={isRefreshing}
+            title="Refresh feeds (r)"
+            className="p-1.5 rounded hover:bg-theme-card text-theme-text-muted hover:text-theme-text transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-theme-accent' : ''}`} />
+          </button>
+
+          {/* Sources button (icon only) */}
+          <button
+            onClick={() => onSelectTab('sources')}
+            title="Intelligence Sources & Feeds"
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === 'sources'
+                ? 'bg-theme-accent text-white shadow-sm font-bold'
+                : 'hover:bg-theme-card text-theme-text-muted hover:text-theme-text'
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Health button (icon only, with error badge) */}
+          <button
+            onClick={() => onSelectTab('health')}
+            title={`Feed Health & Diagnostics ${errorFeedsCount > 0 ? `(${errorFeedsCount} issues)` : '(Healthy)'}`}
+            className={`p-1.5 rounded transition-colors relative ${
+              activeTab === 'health'
+                ? 'bg-theme-accent text-white shadow-sm font-bold'
+                : 'hover:bg-theme-card text-theme-text-muted hover:text-theme-text'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            {errorFeedsCount > 0 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 absolute top-1 right-1" />
+            )}
+          </button>
+
+          {/* Theme switcher (icon only) */}
+          <button
+            onClick={cycleTheme}
+            title={`Current theme: ${settings.theme}. Click to switch.`}
+            className="p-1.5 rounded hover:bg-theme-card text-theme-text-muted hover:text-theme-text transition-colors"
+          >
+            {settings.theme === 'dark' ? (
+              <Moon className="w-3.5 h-3.5 text-theme-accent" />
+            ) : settings.theme === 'light' ? (
+              <Sun className="w-3.5 h-3.5 text-amber-500" />
+            ) : (
+              <Monitor className="w-3.5 h-3.5" />
+            )}
+          </button>
+
+          {/* Settings button (icon only) */}
+          <button
+            onClick={() => {
+              onOpenSettings();
+              onSelectTab('settings');
+            }}
+            title="Settings & Preferences"
+            className={`p-1.5 rounded transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-theme-accent text-white shadow-sm font-bold'
+                : 'hover:bg-theme-card text-theme-text-muted hover:text-theme-text'
+            }`}
+          >
+            <SettingsIcon className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
+    </div>
 
       {/* Main Newspaper Masthead */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center relative">
+      <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center relative">
         <div className="inline-block cursor-pointer" onClick={() => resetFilters()}>
           <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-theme-text uppercase select-none hover:opacity-90 transition-opacity">
             THREATFEED
@@ -133,8 +217,12 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Interactive Controls & Navigation Toolbar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 border-t border-theme-border/60 flex flex-wrap items-center justify-between gap-3">
+      {/* Navigation Tabs with Category Dropdown & Watchlist Button */}
+      <NavigationTabs activeTab={activeTab} onSelectTab={onSelectTab} />
+
+      {/* Interactive Controls & Navigation Toolbar (Row with the search bar) */}
+      <div className="border-t border-theme-border/60">
+        <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {/* Left: Search & Filters */}
         <div className="flex items-center gap-2 flex-grow sm:flex-grow-0">
           {/* Quick Search */}
@@ -228,43 +316,9 @@ export const Header: React.FC<HeaderProps> = ({
             <CheckCheck className="w-4 h-4" />
             <span className="hidden lg:inline">Mark Read</span>
           </button>
-
-          {/* Refresh button */}
-          <button
-            onClick={() => refreshFeeds()}
-            disabled={isRefreshing}
-            title="Refresh feeds (r)"
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text hover:border-theme-accent text-xs font-mono transition-colors flex items-center gap-1.5 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-theme-accent' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={cycleTheme}
-            title={`Current theme: ${settings.theme}. Click to switch.`}
-            className="p-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text transition-colors"
-          >
-            {settings.theme === 'dark' ? (
-              <Moon className="w-4 h-4 text-theme-accent" />
-            ) : settings.theme === 'light' ? (
-              <Sun className="w-4 h-4 text-amber-500" />
-            ) : (
-              <Monitor className="w-4 h-4" />
-            )}
-          </button>
-
-          {/* Settings button */}
-          <button
-            onClick={onOpenSettings}
-            title="Settings & Appearance"
-            className="p-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text transition-colors"
-          >
-            <SettingsIcon className="w-4 h-4" />
-          </button>
         </div>
       </div>
-    </header>
-  );
+    </div>
+  </header>
+);
 };

@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
+import { SeverityBadge, WatchlistBadge } from '../Common/ThreatBadges';
+import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
+import { useSettings } from '../../context/SettingsContext';
 
 interface ThumbnailArticleProps {
   article: Article;
@@ -17,6 +20,11 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
   variant = 'card',
   showBorder = true,
 }) => {
+  const { settings } = useSettings();
+  const watchlistMatch = useMemo(
+    () => checkWatchlistMatch(article, settings.watchlistKeywords),
+    [article, settings.watchlistKeywords]
+  );
   if (variant === 'newspaper') {
     return (
       <article
@@ -39,10 +47,16 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
         {/* Content */}
         <div className="flex flex-col flex-grow min-w-0 justify-between">
           <div>
-            <div className="flex items-center justify-between gap-1 mb-1">
-              <span className="font-mono text-[10px] font-bold text-theme-accent uppercase truncate">
-                {article.sourceName}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <SeverityBadge severity={article.severity} />
+                {watchlistMatch.matched && (
+                  <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+                )}
+                <span className="font-mono text-[10px] font-bold text-theme-accent uppercase truncate">
+                  {article.sourceName}
+                </span>
+              </div>
               <time className="font-mono text-[10px] text-theme-text-muted flex-shrink-0">
                 {formatRelativeTime(article.publishedAt)}
               </time>
@@ -84,8 +98,12 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
       {/* Content */}
       <div className="flex flex-col flex-grow min-w-0 justify-between">
         <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <div className="flex items-center gap-2 truncate">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-1.5 truncate">
+              <SeverityBadge severity={article.severity} />
+              {watchlistMatch.matched && (
+                <WatchlistBadge terms={watchlistMatch.matchedTerms} />
+              )}
               <span className="font-mono text-xs font-semibold text-theme-accent truncate">
                 {article.sourceName}
               </span>
