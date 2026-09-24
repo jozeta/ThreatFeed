@@ -169,11 +169,18 @@ function parseRssItem(item: Element, feed: Feed): Article | null {
     rawCategories.push(...feed.tags);
   }
 
+  // Guarantee feed.category is always present in categories
+  const allCategories = new Set<string>();
+  if (feed.category) {
+    allCategories.add(feed.category);
+  }
+  rawCategories.forEach(c => allCategories.add(c));
+
   const rawHtmlForImage = contentEncoded || descriptionRaw;
   const image = extractImageUrl(item, rawHtmlForImage);
   const cleanSummary = stripHtmlToText(descriptionRaw || contentEncoded);
   const sanitizedContent = sanitizeHtml(contentEncoded || descriptionRaw);
-  const normalizedTags = normalizeAndEnrichTags(rawCategories, title, cleanSummary);
+  const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
 
   const id = generateArticleId(feed.id, guid, url, title);
 
@@ -190,7 +197,7 @@ function parseRssItem(item: Element, feed: Feed): Article | null {
     author: stripHtmlToText(author),
     publishedAt,
     tags: normalizedTags,
-    categories: rawCategories.length > 0 ? Array.from(new Set(rawCategories)) : [feed.category],
+    categories: Array.from(allCategories),
     read: false,
     viewed: false,
     bookmarked: false,
@@ -242,11 +249,18 @@ function parseAtomEntry(entry: Element, feed: Feed): Article | null {
     rawCategories.push(...feed.tags);
   }
 
+  // Guarantee feed.category is always present in categories
+  const allCategories = new Set<string>();
+  if (feed.category) {
+    allCategories.add(feed.category);
+  }
+  rawCategories.forEach(c => allCategories.add(c));
+
   const rawHtmlForImage = contentRaw || summaryRaw;
   const image = extractImageUrl(entry, rawHtmlForImage);
   const cleanSummary = stripHtmlToText(summaryRaw || contentRaw);
   const sanitizedContent = sanitizeHtml(contentRaw || summaryRaw);
-  const normalizedTags = normalizeAndEnrichTags(rawCategories, title, cleanSummary);
+  const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
 
   const id = generateArticleId(feed.id, guid, url, title);
 
@@ -263,7 +277,7 @@ function parseAtomEntry(entry: Element, feed: Feed): Article | null {
     author: stripHtmlToText(author),
     publishedAt,
     tags: normalizedTags,
-    categories: rawCategories.length > 0 ? Array.from(new Set(rawCategories)) : [feed.category],
+    categories: Array.from(allCategories),
     read: false,
     viewed: false,
     bookmarked: false,

@@ -475,7 +475,7 @@
     {
       "id": "specterops",
       "name": "SpecterOps Posts",
-      "url": "https://posts.specterops.io/feed",
+      "url": "https://specterops.io/feed/",
       "category": "Red Team",
       "tags": [
         "red-team",

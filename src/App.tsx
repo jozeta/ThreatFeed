@@ -20,7 +20,7 @@ import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
 
 export const App: React.FC = () => {
-  const { articles, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
+  const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
   const { settings } = useSettings();
   const { filters, updateFilter } = useFilter();
 
@@ -42,8 +42,8 @@ export const App: React.FC = () => {
       ? { ...filters, readStatus: 'unread' as const }
       : filters;
 
-    return filterAndSortArticles(articles, effectiveFilters, settings.hideReadArticles);
-  }, [articles, filters, activeTab, settings.hideReadArticles]);
+    return filterAndSortArticles(articles, effectiveFilters, settings.hideReadArticles, feeds);
+  }, [articles, filters, activeTab, settings.hideReadArticles, feeds]);
 
   // Find index of active article for next / previous navigation in reader
   const activeArticleIndex = useMemo(() => {

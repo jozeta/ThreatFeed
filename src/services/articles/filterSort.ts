@@ -1,9 +1,14 @@
-import { Article, FilterState } from '../../types';
+import { Article, Feed, FilterState } from '../../types';
+
+function normalizeCategory(str: string): string {
+  return str.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 export function filterAndSortArticles(
   articles: Article[],
   filters: FilterState,
-  hideReadArticles = false
+  hideReadArticles = false,
+  feeds: Feed[] = []
 ): Article[] {
   let result = [...articles];
 
@@ -27,11 +32,21 @@ export function filterAndSortArticles(
     });
   }
 
-  // 2. Category
+  // 2. Category (normalized match against article categories, tags, or parent feed category)
   if (filters.selectedCategory) {
-    result = result.filter(a =>
-      a.categories.some(c => c.toLowerCase() === filters.selectedCategory?.toLowerCase())
-    );
+    const targetCat = normalizeCategory(filters.selectedCategory);
+    const feedCategoryMap = new Map(feeds.map(f => [f.id, normalizeCategory(f.category)]));
+
+    result = result.filter(a => {
+      // Direct article categories match
+      if (a.categories && a.categories.some(c => normalizeCategory(c) === targetCat)) return true;
+      // Tags match
+      if (a.tags && a.tags.some(t => normalizeCategory(t) === targetCat)) return true;
+      // Parent feed category match
+      const parentFeedCat = feedCategoryMap.get(a.sourceId);
+      if (parentFeedCat && parentFeedCat === targetCat) return true;
+      return false;
+    });
   }
 
   // 3. Source

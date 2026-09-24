@@ -89,10 +89,21 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Automatically merge newly introduced default feeds while preserving user customizations
             const existingIds = new Set(storedFeeds.map(f => f.id));
             const newFeeds = defaultFeeds.filter(f => !existingIds.has(f.id));
+            
+            // Also update any existing default feed whose URL was corrected/updated upstream
+            const defaultMap = new Map(defaultFeeds.map(f => [f.id, f]));
+            storedFeeds = storedFeeds.map(stored => {
+              const def = defaultMap.get(stored.id);
+              if (def && def.url !== stored.url && !stored.isCustom) {
+                return { ...stored, url: def.url, category: def.category, tags: def.tags };
+              }
+              return stored;
+            });
+
             if (newFeeds.length > 0) {
               storedFeeds = [...storedFeeds, ...newFeeds];
-              await saveFeedsToDB(storedFeeds);
             }
+            await saveFeedsToDB(storedFeeds);
           }
         }
       } catch (fetchErr) {
@@ -106,19 +117,27 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 3. Load articles
       let storedArticles = await getAllArticlesFromDB();
-      if (!storedArticles || storedArticles.length === 0) {
-        try {
-          const seedRes = await fetch('/data/seed-articles.json');
-          if (seedRes.ok) {
-            const seedData = await seedRes.json();
-            if (Array.isArray(seedData) && seedData.length > 0) {
+      try {
+        const seedRes = await fetch('/data/seed-articles.json');
+        if (seedRes.ok) {
+          const seedData: Article[] = await seedRes.json();
+          if (Array.isArray(seedData) && seedData.length > 0) {
+            if (!storedArticles || storedArticles.length === 0) {
               storedArticles = seedData;
               await saveArticlesToDB(storedArticles);
+            } else {
+              // Ensure articles from newly added categories are merged into cache
+              const existingArticleIds = new Set(storedArticles.map(a => a.id));
+              const newSeeds = seedData.filter(s => !existingArticleIds.has(s.id));
+              if (newSeeds.length > 0) {
+                storedArticles = deduplicateArticles([...storedArticles, ...newSeeds]);
+                await saveArticlesToDB(storedArticles);
+              }
             }
           }
-        } catch (seedErr) {
-          console.warn('Could not load /data/seed-articles.json:', seedErr);
         }
+      } catch (seedErr) {
+        console.warn('Could not load /data/seed-articles.json:', seedErr);
       }
       setArticles(storedArticles || []);
 
