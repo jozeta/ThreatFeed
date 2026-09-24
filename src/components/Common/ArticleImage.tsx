@@ -73,6 +73,7 @@ export const ArticleImage: React.FC<ArticleImageProps> = ({
         alt={alt}
         loading="lazy"
         decoding="async"
+        referrerPolicy="no-referrer"
         onLoad={() => setIsLoaded(true)}
         onError={() => setLoadFailed(true)}
         className={`w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105 ${
