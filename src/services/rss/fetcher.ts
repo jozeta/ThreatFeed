@@ -1,7 +1,7 @@
 import { Article, Feed, FeedHealth, ProxyMode } from '../../types';
 import { parseFeedXml } from './parser';
 
-const TIMEOUT_MS = 12000;
+const TIMEOUT_MS = 15000;
 
 export function buildFetchUrl(targetUrl: string, proxyMode: ProxyMode, customProxyUrl?: string): string {
   switch (proxyMode) {
@@ -24,27 +24,8 @@ export async function fetchFeed(
   proxyMode: ProxyMode = 'allorigins',
   customProxyUrl?: string
 ): Promise<{ articles: Article[]; health: FeedHealth }> {
-  // Strategy 1: Fetch using configured proxy mode
-  const primaryUrl = buildFetchUrl(feed.url, proxyMode, customProxyUrl);
-  const primaryResult = await doFetch(feed, primaryUrl, proxyMode);
-
-  if (primaryResult.articles.length > 0) {
-    return primaryResult;
-  }
-
-  // Strategy 2: If proxy mode was not direct, and it failed with 401/403 or network error, attempt direct fetch as fallback
-  if (proxyMode !== 'direct') {
-    try {
-      const fallbackResult = await doFetch(feed, feed.url, 'direct');
-      if (fallbackResult.articles.length > 0) {
-        return fallbackResult;
-      }
-    } catch {
-      // Fallback failed, return primary result with diagnostics
-    }
-  }
-
-  return primaryResult;
+  const fetchUrl = buildFetchUrl(feed.url, proxyMode, customProxyUrl);
+  return doFetch(feed, fetchUrl, proxyMode);
 }
 
 async function doFetch(
@@ -139,8 +120,8 @@ async function doFetch(
     } else if (err instanceof TypeError && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
       status = mode === 'direct' ? 'cors_error' : 'network_error';
       errorMessage = mode === 'direct'
-        ? 'CORS restriction prevented direct browser access. Use AllOrigins proxy in Settings.'
-        : 'Network error or proxy unavailable.';
+        ? 'CORS restriction prevented direct browser access. Use AllOrigins gateway in Settings.'
+        : 'Network error or gateway unavailable.';
     }
 
     return {
@@ -156,8 +137,10 @@ async function doFetch(
   }
 }
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
- * Concurrently fetches feeds with a concurrency queue limit to prevent overwhelming the browser
+ * Concurrently fetches feeds with polite spacing to avoid overwhelming public gateways
  */
 export async function fetchAllFeeds(
   feeds: Feed[],
@@ -171,7 +154,7 @@ export async function fetchAllFeeds(
   const allArticles: Article[] = [];
   const healthMap: Record<string, FeedHealth> = {};
 
-  const CONCURRENCY_LIMIT = 4;
+  const CONCURRENCY_LIMIT = 3;
   const queue = [...activeFeeds];
 
   async function worker() {
@@ -187,6 +170,9 @@ export async function fetchAllFeeds(
       if (onProgress) {
         onProgress(completed, total, result.health);
       }
+
+      // Small delay between requests to be polite to the gateway
+      await delay(200);
     }
   }
 
