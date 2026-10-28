@@ -1,7 +1,0 @@
-name = "threatfeed-proxy"
-main = "worker.js"
-compatibility_date = "2025-01-01"
-
-[vars]
-# Comma-separated browser origins allowed to use this proxy. Add your own domain if you host ThreatFeed elsewhere.
-ALLOWED_ORIGINS = "https://jozeta.github.io,http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"

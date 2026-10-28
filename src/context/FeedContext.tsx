@@ -50,6 +50,7 @@ export function isBackedOff(health: FeedHealth | undefined, now = Date.now()): b
 interface FeedContextType {
   feeds: Feed[];
   cveIntel: Record<string, CveIntel>;
+  snapshotGeneratedAt: string | null; // when the server snapshot in use was built by the GitHub Action
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -88,6 +89,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [cveIntel, setCveIntel] = useState<Record<string, CveIntel>>({});
+  const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -197,6 +199,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedIntel = (await getStoredValue<Record<string, CveIntel>>('cveIntel')) || {};
       cveIntelRef.current = storedIntel;
       setCveIntel(storedIntel);
+      setSnapshotGeneratedAt(await getStoredValue<string>('snapshotGeneratedAt'));
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -317,6 +320,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             for (const h of healths) await saveFeedHealthToDB(h);
             await applyFetched(snapshot.articles.filter(a => covered.has(a.sourceId)));
             setLastUpdated(new Date(snapshot.generatedAt));
+            setSnapshotGeneratedAt(snapshot.generatedAt);
+            await saveStoredValue('snapshotGeneratedAt', snapshot.generatedAt);
             feedsToFetch = feedsToFetch.filter(f => !covered.has(f.id));
           }
         }
@@ -580,6 +585,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = useMemo<FeedContextType>(() => ({
     feeds,
     cveIntel,
+    snapshotGeneratedAt,
     articles,
     feedHealth,
     isRefreshing,
@@ -604,7 +610,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

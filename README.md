@@ -60,12 +60,12 @@ Pre-configured with curated, verified security feeds organized by category:
   - **RSS2JSON (`api.rss2json.com`)**: RSS2JSON → CORSFix → direct fetch
   - **AllOrigins (`api.allorigins.win`)**: AllOrigins → CORSFix → direct fetch → RSS2JSON (AllOrigins is currently unreliable, so saved AllOrigins settings are moved to CORSFix on load)
   - **Direct Browser Fetch (Strict Origin)**: only works for feeds that send `Access-Control-Allow-Origin` headers
-  - **Custom User Proxy**: your own reverse proxy or Cloudflare Worker (use `%s` in the URL as a placeholder for the encoded feed URL, otherwise the feed URL is appended). A ready-made Worker is included; see [Self-Hosted Proxy](#-self-hosted-proxy-cloudflare-worker).
+  - **Custom User Proxy**: your own reverse proxy or Cloudflare Worker (use `%s` in the URL as a placeholder for the encoded feed URL, otherwise the feed URL is appended).
 - Feeds are fetched by 6 concurrent workers, with progress shown during refresh.
 - Optional auto-refresh (15 min to 3 h). A per-feed cooldown (default 1 h) skips feeds that were fetched successfully within that window; manual refresh always fetches everything.
 - Requests to public proxies are paced and shared across all fetch workers: an HTTP 429 pauses that proxy for every worker (honouring `Retry-After`, otherwise exponential backoff with jitter) and the feed is retried up to 3 times.
 - Articles appear while a refresh is still running (merged about once a second) instead of after the slowest feed.
-- Individual retry buttons for every feed, plus a Feed Health page with per-gateway diagnostics and latency probes.
+- Individual retry buttons for every feed, plus a Feed Health page with per-gateway diagnostics and latency probes. Each feed shows when it was last updated and how (**GitHub Action** snapshot, a proxy, or a direct fetch), failed feeds show their last attempt and last success, and a status card shows how old the server snapshot is and when the next one is due.
 
 ### 6. Distraction-Free Article Reader
 - Dedicated reading view with full typography controls.
@@ -179,29 +179,6 @@ Without a local snapshot, the dev server falls back to fetching feeds live throu
 In the browser (Settings → Data Source, on by default), the app loads the snapshot on startup and on each refresh, and only fetches live the feeds it doesn't cover, which are the ones you added yourself. With 120 default feeds this replaces a multi-minute proxied refresh with a few seconds, and avoids the public proxies' blocking and rate limits entirely. A failed snapshot step doesn't block a deploy; the app then falls back to live fetching.
 
 `.github/workflows/ci.yml` runs the tests and a build for pull requests and other branches.
-
----
-
-## 🛡️ Self-Hosted Proxy (Cloudflare Worker)
-
-The free public proxies are shared and get blocked: many sites refuse connections from CORSFix's servers ("Proxy Can't Reach Site" in Feed Health), and heavy use is rate-limited. `proxy/worker.js` is a small Cloudflare Worker you can run on Cloudflare's free plan instead. In testing it fetched 114 of 120 feeds in about 20 seconds, versus 47 through CORSFix.
-
-```bash
-cd proxy
-npx wrangler login        # once, opens the browser
-npx wrangler deploy       # prints https://threatfeed-proxy.<your-subdomain>.workers.dev
-```
-
-Then in ThreatFeed: **Settings → CORS Gateway → Custom User Proxy**, and enter:
-
-```
-https://threatfeed-proxy.<your-subdomain>.workers.dev/?url=
-```
-
-The Worker is not an open proxy:
-- Only browser origins in `ALLOWED_ORIGINS` (`proxy/wrangler.toml`) may use it. By default that is the GitHub Pages site and localhost; add your own domain if you host ThreatFeed elsewhere.
-- It only fetches `http(s)` URLs on public hostnames, only returns feed-like content types, and caps responses at 20 MB.
-- Feeds are cached for 5 minutes at Cloudflare's edge, so repeated refreshes are cheap.
 
 ---
 

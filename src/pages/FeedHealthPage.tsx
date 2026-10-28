@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { describeUpdateSource } from '../services/rss/updateSource';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { formatRelativeTime, formatFullDateTime } from '../utils/date';
@@ -25,7 +26,8 @@ import {
   Calendar,
   ArrowUpRight,
   FileText,
-  Filter
+  Filter,
+  Workflow
 } from 'lucide-react';
 
 interface FeedHealthPageProps {
@@ -41,10 +43,21 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
     refreshFailedFeeds,
     isRefreshing,
     refreshProgress,
-    toggleFeedEnabled
+    toggleFeedEnabled,
+    snapshotGeneratedAt
   } = useFeeds();
 
   const { settings, updateSettings } = useSettings();
+
+  // Re-render every 30s so "updated X ago" stays current while the page is open
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const snapshotFeedCount = Object.values(feedHealth).filter((h) => h.gatewayUsed === 'snapshot').length;
+  const snapshotAgeMin = snapshotGeneratedAt ? (Date.now() - new Date(snapshotGeneratedAt).getTime()) / 60000 : null;
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -181,11 +194,11 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
     if (failing.length === 0) {
       lines.push('All enabled feeds are healthy!');
     } else {
-      lines.push('| Feed Name | Status | Last Fetched | Gateway | Latency | Diagnostic Error | URL |');
+      lines.push('| Feed Name | Status | Last Fetched | Updated Via | Latency | Diagnostic Error | URL |');
       lines.push('|---|---|---|---|---|---|---|');
       failing.forEach(f => {
         const h = feedHealth[f.id];
-        lines.push(`| ${f.name} | ${h?.status || 'Unknown'} | ${h?.lastFetchedAt ? formatRelativeTime(h.lastFetchedAt) : 'Never'} | ${h?.gatewayUsed || '—'} | ${h?.latencyMs ? `${h.latencyMs}ms` : '—'} | ${h?.errorMessage || '—'} | ${f.url} |`);
+        lines.push(`| ${f.name} | ${h?.status || 'Unknown'} | ${h?.lastFetchedAt ? formatRelativeTime(h.lastFetchedAt) : 'Never'} | ${h?.gatewayUsed ? describeUpdateSource(h.gatewayUsed).label : '—'} | ${h?.latencyMs ? `${h.latencyMs}ms` : '—'} | ${h?.errorMessage || '—'} | ${f.url} |`);
       });
     }
 
@@ -369,6 +382,35 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
           </div>
         </div>
       )}
+
+      {/* Server snapshot status: how the default feeds are kept up to date */}
+      <div className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center gap-3 ${
+        snapshotAgeMin !== null && snapshotAgeMin > 90 ? 'bg-amber-500/5 border-amber-500/30' : 'bg-theme-surface border-theme-border'
+      }`}>
+        <Workflow className="w-6 h-6 text-theme-accent flex-shrink-0" />
+        {snapshotGeneratedAt && settings.dataSource !== 'live' ? (
+          <div className="text-xs font-mono space-y-0.5">
+            <p className="text-theme-text">
+              <span className="font-bold">Server snapshot</span> built{' '}
+              <span title={formatFullDateTime(snapshotGeneratedAt)} className="font-bold text-theme-accent cursor-help">{formatRelativeTime(snapshotGeneratedAt)}</span>{' '}
+              by the GitHub Action · covers {snapshotFeedCount} feed{snapshotFeedCount === 1 ? '' : 's'}
+            </p>
+            <p className="text-theme-text-muted font-serif">
+              Rebuilt every 30 minutes (GitHub may start runs a few minutes late)
+              {snapshotAgeMin !== null && snapshotAgeMin > 90
+                ? '. This snapshot is older than expected: check the "Deploy to GitHub Pages" workflow runs on GitHub.'
+                : `; the next one is due ${snapshotAgeMin !== null && snapshotAgeMin < 30 ? `in about ${Math.max(1, Math.round(30 - snapshotAgeMin))} min` : 'any minute'}.`}
+              {' '}Feeds not in the snapshot (ones you added) are fetched live through the {settings.proxyMode} gateway.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs font-serif text-theme-text-muted">
+            {settings.dataSource === 'live'
+              ? 'Data source is set to "Live only": every feed is fetched in your browser through the CORS gateway. Switch to the server snapshot in Settings → Data Source.'
+              : 'No server snapshot loaded (local development builds have none unless you run "npm run snapshot"): feeds are fetched live through the CORS gateway.'}
+          </p>
+        )}
+      </div>
 
       {/* Telemetry Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -667,15 +709,32 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
                       </div>
 
                       <div className="text-theme-text-muted whitespace-nowrap">
-                        {health?.lastFetchedAt ? (
-                          <span
-                            title={formatFullDateTime(health.lastFetchedAt)}
-                            className="inline-flex items-center gap-1.5 cursor-help hover:text-theme-text transition-colors"
-                          >
-                            <Clock className="w-3 h-3 text-theme-text-muted/70 flex-shrink-0" />
-                            <span>{formatRelativeTime(health.lastFetchedAt)}</span>
-                          </span>
-                        ) : (
+                        {health?.lastFetchedAt ? (() => {
+                          const source = describeUpdateSource(health.gatewayUsed);
+                          const failed = health.status !== 'healthy';
+                          const tooltip = [
+                            source.detail,
+                            `Last attempt: ${formatFullDateTime(health.lastFetchedAt)}`,
+                            `Last success: ${health.lastSuccessAt ? formatFullDateTime(health.lastSuccessAt) : 'never'}`,
+                          ].join('\n');
+                          return (
+                            <span title={tooltip} className="inline-flex items-center gap-1.5 cursor-help hover:text-theme-text transition-colors">
+                              <Clock className="w-3 h-3 text-theme-text-muted/70 flex-shrink-0" />
+                              <span>
+                                {failed
+                                  ? `Tried ${formatRelativeTime(health.lastFetchedAt)}${health.lastSuccessAt ? ` · last OK ${formatRelativeTime(health.lastSuccessAt)}` : ''}`
+                                  : `Updated ${formatRelativeTime(health.lastSuccessAt || health.lastFetchedAt)}`}
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                source.kind === 'snapshot'
+                                  ? 'bg-theme-accent/10 text-theme-accent border-theme-accent/30'
+                                  : 'bg-theme-card text-theme-text-muted border-theme-border'
+                              }`}>
+                                {source.label}
+                              </span>
+                            </span>
+                          );
+                        })() : (
                           <span className="text-theme-text-muted/50">Never</span>
                         )}
                       </div>
@@ -712,9 +771,12 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
 
                           {/* Gateway Info */}
                           <div>
-                            <span className="text-[10px] uppercase text-theme-text-muted block">Gateway Used</span>
-                            <span className="px-2 py-0.5 rounded bg-theme-card border border-theme-border text-xs font-bold text-theme-text uppercase inline-block mt-0.5">
-                              {health?.gatewayUsed || settings.proxyMode}
+                            <span className="text-[10px] uppercase text-theme-text-muted block">Updated Via</span>
+                            <span
+                              title={describeUpdateSource(health?.gatewayUsed || settings.proxyMode).detail}
+                              className="px-2 py-0.5 rounded bg-theme-card border border-theme-border text-xs font-bold text-theme-text inline-block mt-0.5 cursor-help"
+                            >
+                              {describeUpdateSource(health?.gatewayUsed || settings.proxyMode).label}
                             </span>
                           </div>
 
