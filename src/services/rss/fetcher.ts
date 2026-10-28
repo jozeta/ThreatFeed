@@ -74,8 +74,8 @@ interface AttemptResult {
 }
 
 /**
- * A proxy that answered but couldn't connect to the feed's site (CORSFix: 502 "target_unreachable";
- * the bundled Cloudflare Worker uses the same marker). Usually the site blocks the proxy's servers.
+ * A proxy that answered but couldn't connect to the feed's site (CORSFix: 502 "target_unreachable").
+ * Usually the site blocks the proxy's servers.
  */
 function isProxyUnreachable(status: number, body: string): boolean {
   return (status === 502 || status === 504) && body.includes('target_unreachable');
@@ -447,7 +447,7 @@ export async function fetchFeed(
   else if (lastResult?.errorMessage?.includes('XML')) status = 'invalid_xml';
 
   const errorSummary = unreachableVia
-    ? `${unreachableVia} can't reach this site; the site probably blocks proxy servers. Use your own proxy instead: deploy the Cloudflare Worker in proxy/ and set it as the Custom Proxy in Settings.`
+    ? `${unreachableVia} can't reach this site; the site probably blocks proxy servers. Default feeds are kept current by the GitHub Action snapshot instead; for a feed you added, try another gateway or a custom proxy in Settings.`
     : isCors
     ? 'CORS restriction: Server does not allow direct browser access. Switch to CORSFix Gateway in Settings or Health tab.'
     : lastResult?.errorMessage || 'All fetch tiers exhausted without valid feed response.';

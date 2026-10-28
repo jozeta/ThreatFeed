@@ -584,12 +584,9 @@ export const SettingsPage: React.FC = () => {
                 type="text"
                 value={settings.customProxyUrl || ''}
                 onChange={(e) => updateSettings({ customProxyUrl: e.target.value })}
-                placeholder="https://threatfeed-proxy.<your-subdomain>.workers.dev/?url="
+                placeholder="https://my-proxy.internal/?url="
                 className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
               />
-              <p className="text-xs font-serif text-theme-text-muted mt-2">
-                Deploy the bundled Cloudflare Worker with <code className="font-mono">cd proxy && npx wrangler deploy</code>, then paste its URL followed by <code className="font-mono">/?url=</code>. See "Self-Hosted Proxy" in the README.
-              </p>
             </div>
           )}
         </div>
