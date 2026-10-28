@@ -7,7 +7,7 @@ import { downloadText } from '../services/intelligence/iocExport';
 import { SeverityBadge, CveChip } from '../components/Common/ThreatBadges';
 import { Sparkline } from '../components/Common/Sparkline';
 import { formatRelativeTime } from '../utils/date';
-import { ClipboardList, Copy, Check, Download, ShieldAlert, Target, Layers, Skull, TrendingUp, Server } from 'lucide-react';
+import { ClipboardList, Copy, Check, Download, ShieldAlert, Target, Layers, Skull, TrendingUp, Server, Database } from 'lucide-react';
 
 interface BriefingPageProps {
   onOpenArticle: (article: Article) => void;
@@ -34,14 +34,14 @@ const Section: React.FC<{ icon: React.ReactNode; title: string; count?: number; 
 const Empty: React.FC<{ text: string }> = ({ text }) => <p className="text-xs font-serif italic text-theme-text-muted">{text}</p>;
 
 export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSearch }) => {
-  const { articles, cveIntel } = useFeeds();
+  const { articles, cveIntel, incidents } = useFeeds();
   const { settings } = useSettings();
   const [windowHours, setWindowHours] = useState(24);
   const [copied, setCopied] = useState(false);
 
   const briefing = useMemo(
-    () => buildBriefing(articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours),
-    [articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours]
+    () => buildBriefing(articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, Date.now(), incidents),
+    [articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, incidents]
   );
 
   const markdown = () => briefingToMarkdown(briefing);
@@ -73,7 +73,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
     );
   };
 
-  const ransomwareTotal = briefing.ransomware.victims.length;
+  const ransomwareTotal = briefing.ransomware.count;
 
   return (
     <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -153,6 +153,20 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
                 ))}
               </ul>
             ) : <Empty text="No new leak-site victims in this window." />}
+          </Section>
+
+          <Section icon={<Database className="w-4 h-4 text-rose-500" />} title="New Breaches (HIBP)" count={briefing.breaches.length}>
+            {briefing.breaches.length ? (
+              <ul className="space-y-2 text-xs">
+                {briefing.breaches.slice(0, 8).map((b) => (
+                  <li key={b.name}>
+                    <span className="font-serif font-bold text-theme-text">{b.title}</span>{' '}
+                    <span className="font-mono text-rose-500">{b.records.toLocaleString('en-US')} accounts</span>
+                    <p className="font-mono text-[11px] text-theme-text-muted">{b.dataClasses.slice(0, 4).join(', ')}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : <Empty text={incidents ? 'No breaches added to Have I Been Pwned in this window.' : 'Breach data arrives with the server snapshot.'} />}
           </Section>
 
           <Section icon={<TrendingUp className="w-4 h-4 text-theme-accent" />} title="Trending This Week" count={briefing.trending.length}>

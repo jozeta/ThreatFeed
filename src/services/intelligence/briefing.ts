@@ -1,9 +1,10 @@
-import { Article, CveIntel, StoryCluster } from '../../types';
+import { Article, BreachRecord, CveIntel, IncidentData, StoryCluster } from '../../types';
+import { groupDisplayName } from '../../utils/countries';
 import { clusterArticles } from '../articles/clustering';
 import { checkWatchlistMatch } from './watchlist';
 import { stackMatches } from './stack';
 import { computeTrending, TrendingEntity } from './trending';
-import { ransomwareVictims, RansomwareVictim } from './ransomware';
+import { ransomwareVictims } from './ransomware';
 
 export interface BriefingStory {
   cluster: StoryCluster;
@@ -25,7 +26,8 @@ export interface Briefing {
   watchlist: BriefingStory[];
   stack: BriefingStory[];
   newKev: KevEntry[]; // CVEs in the news that CISA added to KEV in the last few days
-  ransomware: { victims: RansomwareVictim[]; byGroup: [string, number][] };
+  ransomware: { count: number; byGroup: [string, number][] };
+  breaches: BreachRecord[]; // added to Have I Been Pwned in the window
   trending: TrendingEntity[];
 }
 
@@ -38,7 +40,8 @@ export function buildBriefing(
   watchlistKeywords: string[],
   stackKeywords: string[],
   windowHours = 24,
-  now = Date.now()
+  now = Date.now(),
+  incidents: IncidentData | null = null // structured leak-site victims + HIBP breaches from the snapshot
 ): Briefing {
   const since = now - windowHours * HOUR_MS;
   const inWindow = articles.filter(a => new Date(a.publishedAt).getTime() >= since);
@@ -73,8 +76,13 @@ export function buildBriefing(
     }
   }
 
+  // Leak-site activity: structured victims when the snapshot has them, else the parsed RSS posts
+  const leakGroups = incidents?.victims.length
+    ? incidents.victims.filter(v => new Date(v.discoveredAt).getTime() >= since).map(v => groupDisplayName(v.group))
+    : victims.map(v => v.group);
   const byGroup = new Map<string, number>();
-  for (const v of victims) byGroup.set(v.group, (byGroup.get(v.group) || 0) + 1);
+  for (const g of leakGroups) byGroup.set(g, (byGroup.get(g) || 0) + 1);
+  const sinceIso = new Date(since).toISOString();
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -84,8 +92,9 @@ export function buildBriefing(
     watchlist: stories.filter(s => s.watchlistTerms.length > 0).slice(0, 15),
     stack: stories.filter(s => s.stackTerms.length > 0).slice(0, 15),
     newKev: [...kevMap.values()].sort((a, b) => (b.intel.kevDateAdded || '').localeCompare(a.intel.kevDateAdded || '')),
-    ransomware: { victims, byGroup: [...byGroup.entries()].sort((a, b) => b[1] - a[1]) },
-    trending: computeTrending(articles, stackKeywords, 7, now).slice(0, 10),
+    ransomware: { count: leakGroups.length, byGroup: [...byGroup.entries()].sort((a, b) => b[1] - a[1]) },
+    breaches: (incidents?.breaches ?? []).filter(b => b.addedAt >= sinceIso),
+    trending: computeTrending(articles, stackKeywords, 7, now, incidents?.victims.length ? incidents.victims : undefined).slice(0, 10),
   };
 }
 
@@ -120,8 +129,14 @@ export function briefingToMarkdown(b: Briefing): string {
   storyList('Watchlist Hits', b.watchlist, s => ` · _${s.watchlistTerms.slice(0, 3).join(', ')}_`);
   storyList('Relevant to Your Stack', b.stack, s => ` · _${s.stackTerms.slice(0, 3).join(', ')}_`);
 
-  if (b.ransomware.victims.length > 0) {
-    out.push('## Ransomware Activity', '', `${b.ransomware.victims.length} new leak-site victims: ${b.ransomware.byGroup.map(([g, n]) => `${g} (${n})`).join(', ')}`, '');
+  if (b.ransomware.count > 0) {
+    out.push('## Ransomware Activity', '', `${b.ransomware.count} new leak-site victims: ${b.ransomware.byGroup.slice(0, 12).map(([g, n]) => `${g} (${n})`).join(', ')}`, '');
+  }
+
+  if (b.breaches.length > 0) {
+    out.push('## New Breaches (Have I Been Pwned)', '');
+    for (const br of b.breaches) out.push(`- **${br.title}**${br.domain ? ` (${br.domain})` : ''}: ${br.records.toLocaleString('en-US')} accounts · ${br.dataClasses.slice(0, 5).join(', ')}`);
+    out.push('');
   }
 
   if (b.trending.length > 0) {

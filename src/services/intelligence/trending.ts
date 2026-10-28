@@ -1,4 +1,5 @@
-import { Article } from '../../types';
+import { Article, LeakSiteVictim } from '../../types';
+import { groupDisplayName } from '../../utils/countries';
 import { containsTerm } from '../../utils/textMatch';
 import { WATCHLIST_PRESETS } from './watchlist';
 import { ransomwareVictims } from './ransomware';
@@ -24,12 +25,19 @@ const CVE_LIST_SOURCES = new Set(['cvefeed-latest', 'msrc-update-guide', 'zdi-ad
  * most in the last `days` days, compared with the `days` before. Ransomware groups also count
  * their leak-site posts (ransomware.live), which is where their activity actually shows.
  */
-export function computeTrending(articles: Article[], extraProducts: string[] = [], days = 7, now = Date.now()): TrendingEntity[] {
+export function computeTrending(
+  articles: Article[],
+  extraProducts: string[] = [],
+  days = 7,
+  now = Date.now(),
+  leakSiteVictims?: LeakSiteVictim[] // structured victims from the snapshot; replaces parsing the RSS feed
+): TrendingEntity[] {
   const start = now - days * DAY_MS;
   const prevStart = start - days * DAY_MS;
   const recent = articles.filter(a => new Date(a.publishedAt).getTime() >= prevStart);
 
-  const groups = new Set([...presetTerms('ransomware').filter(t => /^[A-Z]/.test(t)), ...ransomwareVictims(recent).map(v => v.group)]);
+  const victimGroups = leakSiteVictims ? leakSiteVictims.map(v => groupDisplayName(v.group)) : ransomwareVictims(recent).map(v => v.group);
+  const groups = new Set([...presetTerms('ransomware').filter(t => /^[A-Z]/.test(t)), ...victimGroups]);
   const vocab: { kind: EntityKind; terms: string[] }[] = [
     { kind: 'ransomware', terms: [...groups] },
     { kind: 'actor', terms: presetTerms('apt') },
@@ -59,6 +67,8 @@ export function computeTrending(articles: Article[], extraProducts: string[] = [
     if (!CVE_LIST_SOURCES.has(a.sourceId)) {
       for (const cve of new Set(a.cves || [])) bump('cve', cve, t);
     }
+    // With structured victims, leak-site posts are counted from that data below instead of from the RSS feed
+    if (leakSiteVictims && a.sourceId === 'ransomware-live') continue;
     const victimGroup = a.sourceId === 'ransomware-live' ? a.title.match(/^\W*(.+?) has just published/u)?.[1] : undefined;
     for (const { kind, terms } of vocab) {
       for (const term of terms) {
@@ -67,6 +77,11 @@ export function computeTrending(articles: Article[], extraProducts: string[] = [
         }
       }
     }
+  }
+
+  for (const v of leakSiteVictims ?? []) {
+    const t = new Date(v.discoveredAt).getTime();
+    if (t >= prevStart) bump('ransomware', groupDisplayName(v.group), t);
   }
 
   return [...stats.values()]

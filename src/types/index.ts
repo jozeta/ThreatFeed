@@ -64,6 +64,46 @@ export interface Article {
 export type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
 /** Exploitation intelligence for one CVE (from the snapshot: CISA KEV + FIRST EPSS) */
+/** A victim posted on a ransomware leak site (via the Ransomware.live API, built into the snapshot) */
+export interface LeakSiteVictim {
+  id: string;
+  victim: string;
+  group: string;
+  country?: string; // ISO 3166-1 alpha-2
+  sector?: string;
+  discoveredAt: string;
+  attackedAt?: string;
+  domain?: string;
+  description?: string;
+  url?: string; // the ransomware.live page; never the leak site itself
+}
+
+export interface RansomwareGroupProfile {
+  name: string;
+  description?: string;
+  url: string;
+}
+
+/** A verified breach from Have I Been Pwned */
+export interface BreachRecord {
+  name: string;
+  title: string;
+  domain?: string;
+  breachDate: string;
+  addedAt: string;
+  records: number;
+  dataClasses: string[];
+  verified: boolean;
+  description?: string;
+}
+
+export interface IncidentData {
+  updatedAt: string;
+  victims: LeakSiteVictim[];
+  groups: Record<string, RansomwareGroupProfile>;
+  breaches: BreachRecord[];
+}
+
 export interface CveIntel {
   kev: boolean;
   kevDateAdded?: string;

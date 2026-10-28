@@ -172,7 +172,7 @@ export const App: React.FC = () => {
             <BriefingPage onOpenArticle={handleOpenArticle} onSearch={handleSearch} />
           )}
 
-          {activeTab === 'ransomware' && <RansomwarePage />}
+          {activeTab === 'ransomware' && <RansomwarePage onOpenArticle={handleOpenArticle} />}
 
           {activeTab === 'bookmarks' && (
             <BookmarksPage onOpenArticle={handleOpenArticle} />
