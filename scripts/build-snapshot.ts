@@ -28,7 +28,7 @@ const OUT = resolve(root, 'public/data/snapshot.json');
 const USER_AGENT = 'ThreatFeed snapshot bot (+https://github.com/jozeta/ThreatFeed)';
 const MAX_ARTICLES_PER_FEED = 25;
 const MAX_AGE_DAYS = 30;
-const MAX_CONTENT_CHARS = 20000; // keeps the snapshot small; the reader links to the original for the rest
+const MAX_CONTENT_CHARS = 10000; // keeps the snapshot small; the reader links to the original for the rest
 const CONCURRENCY = 8;
 const TIMEOUT_MS = 20000;
 
