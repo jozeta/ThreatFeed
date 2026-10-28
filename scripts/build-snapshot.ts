@@ -18,10 +18,13 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, D
 
 const { parseFeedXml } = await import('../src/services/rss/parser');
 const { filterAndLimitArticles } = await import('../src/services/rss/fetcher');
+const { normalizeVictim, normalizeGroup, normalizeBreach, mergeVictims } = await import('../src/services/intelligence/incidents');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
 type CveIntel = import('../src/types').CveIntel;
+type IncidentData = import('../src/types').IncidentData;
+type LeakSiteVictim = import('../src/types').LeakSiteVictim;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
@@ -130,10 +133,67 @@ for (const cve of cves) {
   if (entry.kev || entry.epss !== undefined) cveIntel[cve] = entry;
 }
 
+/**
+ * Ransomware leak-site victims (Ransomware.live) and verified breaches (Have I Been Pwned).
+ * The victims endpoint only returns the latest ~100, so history accumulates by carrying over the
+ * victims from the previously published snapshot (PREVIOUS_SNAPSHOT_URL, set in the workflow).
+ * Every source is optional: a failure or rate limit just means less data, never a failed build.
+ */
+async function loadIncidents(): Promise<IncidentData> {
+  const getJson = async (url: string) => {
+    const { status, text } = await fetchText(url, 'application/json');
+    if (status !== 200) throw new Error(`HTTP ${status}`);
+    const data = JSON.parse(text);
+    if (data && !Array.isArray(data) && typeof data.message === 'string') throw new Error(data.message); // rate limited
+    return data;
+  };
+  const tryJson = async (label: string, url: string) => {
+    try {
+      return await getJson(url);
+    } catch (err) {
+      console.warn(`  ${label} unavailable: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
+  };
+  const victimsFrom = (list: unknown): LeakSiteVictim[] =>
+    Array.isArray(list) ? list.map(normalizeVictim).filter((v): v is LeakSiteVictim => v !== null) : [];
+
+  const previousUrl = process.env.PREVIOUS_SNAPSHOT_URL;
+  const previous = previousUrl ? await tryJson('previous snapshot', previousUrl) : null;
+  const recent = await tryJson('Ransomware.live recent victims', 'https://api.ransomware.live/v2/recentvictims');
+  const now = new Date();
+  const month = await tryJson('Ransomware.live month victims', `https://api.ransomware.live/v2/victims/${now.getUTCFullYear()}/${now.getUTCMonth() + 1}`);
+  // Carried-over victims were normalized by an earlier run; still check their shape since they come over the network
+  const carried: LeakSiteVictim[] = (Array.isArray(previous?.incidents?.victims) ? previous.incidents.victims : []).filter((v: any) =>
+    v && typeof v.id === 'string' && typeof v.victim === 'string' && typeof v.group === 'string' && !isNaN(Date.parse(v.discoveredAt))
+  );
+  const victims = mergeVictims([carried, victimsFrom(month), victimsFrom(recent)]);
+
+  const groupNames = new Set(victims.map(v => v.group.toLowerCase()));
+  const groups: IncidentData['groups'] = { ...(previous?.incidents?.groups ?? {}) };
+  const groupList = await tryJson('Ransomware.live groups', 'https://api.ransomware.live/v2/groups');
+  for (const raw of Array.isArray(groupList) ? groupList : []) {
+    const profile = normalizeGroup(raw);
+    if (profile && groupNames.has(profile.name.toLowerCase())) groups[profile.name.toLowerCase()] = profile;
+  }
+  for (const key of Object.keys(groups)) if (!groupNames.has(key)) delete groups[key];
+
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const hibp = await tryJson('Have I Been Pwned breaches', 'https://haveibeenpwned.com/api/v3/breaches');
+  const breaches = Array.isArray(hibp)
+    ? hibp.map(normalizeBreach).filter((b): b is NonNullable<typeof b> => b !== null && b.addedAt >= ninetyDaysAgo).sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+    : previous?.incidents?.breaches ?? [];
+
+  return { updatedAt: new Date().toISOString(), victims, groups, breaches };
+}
+
+const incidents = await loadIncidents();
+
 mkdirSync(dirname(OUT), { recursive: true });
-const json = JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), feedHealth, cveIntel, articles });
+const json = JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), feedHealth, cveIntel, incidents, articles });
 writeFileSync(OUT, json);
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${[...kev.keys()].filter(k => cveIntel[k]).length} in KEV), ${(json.length / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.log(`Incidents: ${incidents.victims.length} leak-site victims (30d), ${Object.keys(incidents.groups).length} group profiles, ${incidents.breaches.length} HIBP breaches (90d)`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

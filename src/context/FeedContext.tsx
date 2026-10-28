@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Article, CveIntel, Feed, FeedHealth } from '../types';
+import { Article, CveIntel, Feed, FeedHealth, IncidentData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -52,6 +52,7 @@ interface FeedContextType {
   feeds: Feed[];
   cveIntel: Record<string, CveIntel>;
   snapshotGeneratedAt: string | null; // when the server snapshot in use was built by the GitHub Action
+  incidents: IncidentData | null; // ransomware leak-site victims + HIBP breaches from the snapshot
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -91,6 +92,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [cveIntel, setCveIntel] = useState<Record<string, CveIntel>>({});
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<IncidentData | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -219,6 +221,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cveIntelRef.current = storedIntel;
       setCveIntel(storedIntel);
       setSnapshotGeneratedAt(await getStoredValue<string>('snapshotGeneratedAt'));
+      setIncidents(await getStoredValue<IncidentData>('incidents'));
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -343,6 +346,10 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLastUpdated(new Date(snapshot.generatedAt));
             setSnapshotGeneratedAt(snapshot.generatedAt);
             await saveStoredValue('snapshotGeneratedAt', snapshot.generatedAt);
+            if (snapshot.incidents) {
+              setIncidents(snapshot.incidents);
+              await saveStoredValue('incidents', snapshot.incidents);
+            }
             feedsToFetch = feedsToFetch.filter(f => !covered.has(f.id));
           }
         }
@@ -607,6 +614,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     feeds,
     cveIntel,
     snapshotGeneratedAt,
+    incidents,
     articles,
     feedHealth,
     isRefreshing,
@@ -631,7 +639,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

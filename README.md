@@ -121,7 +121,10 @@ Every article is enriched in the browser while its feed is parsed, and the resul
 
 ### 12. Intelligence Views
 - **Daily Briefing** tab: the last 24 hours (or 3 / 7 days) in one page: critical and high severity stories, watchlist hits, stories about your stack, CVEs newly added to CISA KEV, ransomware leak-site activity by group, and trending entities. Copy or download it as Markdown.
-- **Ransomware Tracker** tab: leak-site victims from Ransomware.live with group, sector and country (best-effort, read from each post), filterable by group, country and text, plus the most active groups.
+- **Ransomware & Breaches** tab, built from structured data in the snapshot:
+  - **Leak-site victims** from the [Ransomware.live](https://www.ransomware.live) API (30 days, accumulated across snapshot runs): a daily activity chart, filters by period, group, country, sector and text, quick chips for your own country and the Nordics, top groups / sectors / countries, and a panel per group with its profile, victims and coverage in your feeds. Links go to Ransomware.live, never to the leak sites themselves.
+  - **Data breaches** added to [Have I Been Pwned](https://haveibeenpwned.com) in the last 90 days, with account counts and exposed data types (high-risk types such as passwords and ID numbers highlighted).
+  - **Incident news**: articles from your feeds that report ransomware attacks or data breaches, grouped by story (keyword-based, so the occasional round-up post slips in).
 - **Trending**: CVEs, ransomware groups, threat actors and frequently exploited products mentioned most this week compared with last week, with per-day sparklines. Shown on top of the newspaper and in the briefing; click one to search for it.
 - **My Stack**: list the products you run (Settings → My Stack). Matching articles get a "Your stack" badge, rank higher within newspaper sections, and get their own briefing section.
 - **Watchlist alerts**: optional desktop notifications summarising new watchlist matches after each refresh (Settings → Watchlist Alerts).
@@ -174,7 +177,7 @@ Without a local snapshot, the dev server falls back to fetching feeds live throu
 
 ## 📦 Feed Snapshot & CVE Intelligence
 
-`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned. The result, `data/snapshot.json` (about 1.7 MB compressed), ships with the site.
+`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned, plus ransomware leak-site victims (Ransomware.live) and recent breaches (Have I Been Pwned). The result, `data/snapshot.json` (about 1.8 MB compressed), ships with the site.
 
 In the browser (Settings → Data Source, on by default), the app loads the snapshot on startup and on each refresh, and only fetches live the feeds it doesn't cover: the ones you added yourself, plus any default feed the snapshot failed to fetch (some sites block GitHub's servers but still answer the proxy). With 120 default feeds this replaces a multi-minute proxied refresh with a few seconds, and avoids the public proxies' blocking and rate limits entirely. A failed snapshot step doesn't block a deploy; the app then falls back to live fetching.
 

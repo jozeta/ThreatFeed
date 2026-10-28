@@ -33,6 +33,9 @@ jobs:
       # A failed snapshot shouldn't block a deploy: the app falls back to live fetching without it.
       - run: npm run snapshot
         continue-on-error: true
+        env:
+          # Carries ransomware victim history over between runs (the API only returns the latest ~100)
+          PREVIOUS_SNAPSHOT_URL: https://jozeta.github.io/ThreatFeed/data/snapshot.json
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'

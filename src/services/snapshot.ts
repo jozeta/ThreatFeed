@@ -1,9 +1,10 @@
-import { Article, CveIntel, FeedHealth } from '../types';
+import { Article, CveIntel, FeedHealth, IncidentData } from '../types';
 
 export interface FeedSnapshot {
   generatedAt: string;
   feedHealth: Record<string, FeedHealth>;
   cveIntel: Record<string, CveIntel>;
+  incidents: IncidentData | null; // absent in snapshots built before incident data existed
   articles: Article[];
 }
 
@@ -22,6 +23,7 @@ export async function loadSnapshot(): Promise<FeedSnapshot | null> {
       generatedAt: String(data.generatedAt),
       feedHealth: data.feedHealth,
       cveIntel: data.cveIntel && typeof data.cveIntel === 'object' ? data.cveIntel : {},
+      incidents: data.incidents && Array.isArray(data.incidents.victims) && Array.isArray(data.incidents.breaches) ? data.incidents : null,
       articles: data.articles,
     };
   } catch {

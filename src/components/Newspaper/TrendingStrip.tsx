@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Article } from '../../types';
+import { useFeeds } from '../../context/FeedContext';
 import { computeTrending } from '../../services/intelligence/trending';
 import { Sparkline } from '../Common/Sparkline';
 import { TrendingUp } from 'lucide-react';
@@ -10,7 +11,11 @@ export const TrendingStrip: React.FC<{ articles: Article[]; stackKeywords: strin
   stackKeywords,
   onSearch,
 }) => {
-  const trending = useMemo(() => computeTrending(articles, stackKeywords).slice(0, 8), [articles, stackKeywords]);
+  const { incidents } = useFeeds();
+  const trending = useMemo(
+    () => computeTrending(articles, stackKeywords, 7, Date.now(), incidents?.victims.length ? incidents.victims : undefined).slice(0, 8),
+    [articles, stackKeywords, incidents]
+  );
   if (trending.length === 0) return null;
 
   return (
