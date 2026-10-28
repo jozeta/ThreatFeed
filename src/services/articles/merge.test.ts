@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeFetchedArticles } from './merge';
+import { findDemoBookmarks, mergeFetchedArticles } from './merge';
 import { deduplicateArticles } from './deduplication';
 import { article } from '../../test/fixtures';
 
@@ -44,5 +44,19 @@ describe('deduplicateArticles', () => {
       article('g', { title: 'other', url: 'https://example.com/a', publishedAt: at(0) }),
     ]);
     expect(kept.map(a => a.id)).toEqual(['a', 'c']);
+  });
+});
+
+describe('findDemoBookmarks', () => {
+  it('only picks seeded bookmarks the user never touched', () => {
+    const articles = [
+      article('seed-demo', { bookmarked: true }), // seeded, no state record -> demo
+      article('seed-mine', { bookmarked: true }), // seeded, but the user bookmarked it -> keep
+      article('seed-unbookmarked'), // seeded, not bookmarked
+      article('real', { bookmarked: true }), // not a seed
+    ];
+    const seedIds = new Set(['seed-demo', 'seed-mine', 'seed-unbookmarked']);
+    const stateIds = new Set(['seed-mine', 'real']);
+    expect(findDemoBookmarks(articles, seedIds, stateIds).map(a => a.id)).toEqual(['seed-demo']);
   });
 });

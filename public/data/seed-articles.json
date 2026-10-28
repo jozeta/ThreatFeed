@@ -25,7 +25,7 @@
     ],
     "read": false,
     "viewed": false,
-    "bookmarked": true
+    "bookmarked": false
   },
   {
     "id": "offsec-evasive-syscall-loaders",
@@ -108,7 +108,7 @@
     ],
     "read": false,
     "viewed": false,
-    "bookmarked": true
+    "bookmarked": false
   },
   {
     "id": "huntress-m365-illicit-consent-hunting",
@@ -407,7 +407,7 @@
     ],
     "read": false,
     "viewed": false,
-    "bookmarked": true
+    "bookmarked": false
   },
   {
     "id": "cisa-ics-integrators-advisory",

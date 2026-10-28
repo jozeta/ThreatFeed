@@ -122,6 +122,12 @@ export async function saveArticlesToDB(newArticles: Article[]): Promise<void> {
   await tx.done;
 }
 
+/** Ids of articles the user has interacted with (read, bookmarked, tagged...); seeded flags never create one. */
+export async function getArticleStateIds(): Promise<Set<string>> {
+  const db = await getDB();
+  return new Set(await db.getAllKeys('articleState'));
+}
+
 export async function deleteArticlesFromDB(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const db = await getDB();
