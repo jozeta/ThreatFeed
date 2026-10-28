@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    # Refresh the feed snapshot (and redeploy) every 30 minutes
-    - cron: '*/30 * * * *'
+    # Refresh the feed snapshot (and redeploy) every 30 minutes, at :07 and :37. GitHub delays or drops
+    # scheduled runs at busy times like the top and half of the hour, so avoid :00 and :30.
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 permissions:
