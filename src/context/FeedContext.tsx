@@ -127,6 +127,13 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (res.ok) {
           const data = await res.json();
           const defaultFeeds: Feed[] = data.feeds || [];
+          // Default feeds retired upstream (broken at the source) are dropped from existing installs too
+          const retired = new Set<string>(Array.isArray(data.retiredFeedIds) ? data.retiredFeedIds : []);
+          if (storedFeeds && retired.size > 0) {
+            const toRetire = storedFeeds.filter(f => !f.isCustom && retired.has(f.id));
+            for (const f of toRetire) await deleteFeedFromDB(f.id); // also drops its health record
+            storedFeeds = storedFeeds.filter(f => !toRetire.includes(f));
+          }
           if (!storedFeeds || storedFeeds.length === 0) {
             storedFeeds = defaultFeeds;
             await saveFeedsToDB(storedFeeds);
@@ -314,7 +321,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const snapshot = await loadSnapshot();
           if (snapshot) {
             await applyCveIntel(snapshot.cveIntel);
-            const covered = new Set(feedsToFetch.filter(f => f.enabled && snapshot.feedHealth[f.id]).map(f => f.id));
+            // Only feeds the snapshot fetched successfully count as covered; ones that failed on GitHub's
+            // servers (some sites block data-centre IPs) are tried live through the gateway below
+            const covered = new Set(feedsToFetch.filter(f => f.enabled && snapshot.feedHealth[f.id]?.status === 'healthy').map(f => f.id));
             const healths = [...covered].map(id => snapshot.feedHealth[id]);
             setFeedHealth(prev => ({ ...prev, ...Object.fromEntries(healths.map(h => [h.feedId, h])) }));
             for (const h of healths) await saveFeedHealthToDB(h);

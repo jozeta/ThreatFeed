@@ -174,9 +174,9 @@ Without a local snapshot, the dev server falls back to fetching feeds live throu
 
 ## 📦 Feed Snapshot & CVE Intelligence
 
-`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned. The result, `data/snapshot.json` (about 2 MB compressed), ships with the site.
+`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned. The result, `data/snapshot.json` (about 1.7 MB compressed), ships with the site.
 
-In the browser (Settings → Data Source, on by default), the app loads the snapshot on startup and on each refresh, and only fetches live the feeds it doesn't cover, which are the ones you added yourself. With 120 default feeds this replaces a multi-minute proxied refresh with a few seconds, and avoids the public proxies' blocking and rate limits entirely. A failed snapshot step doesn't block a deploy; the app then falls back to live fetching.
+In the browser (Settings → Data Source, on by default), the app loads the snapshot on startup and on each refresh, and only fetches live the feeds it doesn't cover: the ones you added yourself, plus any default feed the snapshot failed to fetch (some sites block GitHub's servers but still answer the proxy). With 120 default feeds this replaces a multi-minute proxied refresh with a few seconds, and avoids the public proxies' blocking and rate limits entirely. A failed snapshot step doesn't block a deploy; the app then falls back to live fetching.
 
 `.github/workflows/ci.yml` runs the tests and a build for pull requests and other branches.
 
