@@ -12,6 +12,7 @@ import {
   getAllFeedHealthFromDB,
   saveFeedHealthToDB,
   deleteArticlesFromDB,
+  getArticleStateIds,
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
@@ -21,7 +22,7 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
-import { isExpired, mergeFetchedArticles } from '../services/articles/merge';
+import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
 
 interface RefreshProgress {
@@ -177,31 +178,42 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const feedById = new Map(storedFeeds.map(f => [f.id, f]));
       const isKept = (a: Article) => a.bookmarked || (feedById.has(a.sourceId) && !isExpired(a, maxAgeDays));
 
-      const cachedArticles = await getAllArticlesFromDB();
-      let storedArticles = cachedArticles.filter(isKept);
-      const keptIds = new Set(storedArticles.map(a => a.id));
-      await deleteArticlesFromDB(cachedArticles.filter(a => !keptIds.has(a.id)).map(a => a.id));
-
+      let seeds: Article[] = [];
       try {
         const seedRes = await fetch(`${import.meta.env.BASE_URL}data/seed-articles.json`);
         if (seedRes.ok) {
           const seedData: unknown = await seedRes.json();
           if (Array.isArray(seedData)) {
-            // Seed articles fill the page on first run (whatever their age; the first refresh prunes them).
-            // Later, only seeds that are new and still in range are added.
-            const isFirstRun = cachedArticles.length === 0;
-            const newSeeds = seedData
-              .map(sanitizeStoredArticle)
-              .filter((s): s is Article => s !== null && !keptIds.has(s.id) && (isFirstRun || isKept(s)));
-            if (newSeeds.length > 0) {
-              storedArticles = deduplicateArticles([...storedArticles, ...newSeeds]);
-              const addedIds = new Set(storedArticles.map(a => a.id));
-              await saveArticlesToDB(newSeeds.filter(s => addedIds.has(s.id)));
-            }
+            seeds = seedData.map(sanitizeStoredArticle).filter((s): s is Article => s !== null);
           }
         }
       } catch (seedErr) {
         console.warn('Could not load /data/seed-articles.json:', seedErr);
+      }
+
+      let cachedArticles = await getAllArticlesFromDB();
+
+      // Earlier versions shipped three seed articles pre-bookmarked as a demo; clear those (not the user's own)
+      const demoBookmarks = findDemoBookmarks(cachedArticles, new Set(seeds.map(s => s.id)), await getArticleStateIds());
+      if (demoBookmarks.length > 0) {
+        const cleared = demoBookmarks.map(a => ({ ...a, bookmarked: false, bookmarkedAt: undefined, bookmarkFolder: undefined }));
+        await saveArticlesToDB(cleared);
+        const clearedById = new Map(cleared.map(a => [a.id, a]));
+        cachedArticles = cachedArticles.map(a => clearedById.get(a.id) ?? a);
+      }
+
+      let storedArticles = cachedArticles.filter(isKept);
+      const keptIds = new Set(storedArticles.map(a => a.id));
+      await deleteArticlesFromDB(cachedArticles.filter(a => !keptIds.has(a.id)).map(a => a.id));
+
+      // Seed articles fill the page on first run (whatever their age; the first refresh prunes them).
+      // Later, only seeds that are new and still in range are added.
+      const isFirstRun = cachedArticles.length === 0;
+      const newSeeds = seeds.filter(s => !keptIds.has(s.id) && (isFirstRun || isKept(s)));
+      if (newSeeds.length > 0) {
+        storedArticles = deduplicateArticles([...storedArticles, ...newSeeds]);
+        const addedIds = new Set(storedArticles.map(a => a.id));
+        await saveArticlesToDB(newSeeds.filter(s => addedIds.has(s.id)));
       }
       const storedIntel = (await getStoredValue<Record<string, CveIntel>>('cveIntel')) || {};
       cveIntelRef.current = storedIntel;

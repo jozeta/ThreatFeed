@@ -22,6 +22,14 @@ function withUserState(fresh: Article, existing: Article): Article {
   return merged;
 }
 
+/**
+ * Seed articles that earlier versions shipped pre-bookmarked as a demo. A bookmark the user made always
+ * has an article state record (written by updateArticleStateInDB); a seeded one doesn't.
+ */
+export function findDemoBookmarks(articles: Article[], seedIds: Set<string>, stateIds: Set<string>): Article[] {
+  return articles.filter(a => a.bookmarked && seedIds.has(a.id) && !stateIds.has(a.id));
+}
+
 export function isExpired(article: Article, maxAgeDays: number): boolean {
   if (maxAgeDays <= 0) return false;
   const t = new Date(article.publishedAt).getTime();
