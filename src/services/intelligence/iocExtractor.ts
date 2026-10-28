@@ -1,4 +1,5 @@
-import { Article, ExtractedIOC, ThreatSeverity } from '../../types';
+import { Article, CveIntel, ExtractedIOC, ThreatSeverity } from '../../types';
+import { containsTerm } from '../../utils/textMatch';
 
 // Regex patterns
 const CVE_REGEX = /\bCVE-\d{4}-\d{4,7}\b/gi;
@@ -66,11 +67,12 @@ export function extractIOCs(text: string): ExtractedIOC[] {
   const ips = text.match(IPV4_REGEX);
   if (ips) {
     for (const ip of ips) {
+      const [o1, o2] = ip.split('.').map(Number);
       if (
-        ip.startsWith('127.') ||
-        ip.startsWith('10.') ||
-        ip.startsWith('192.168.') ||
-        ip.startsWith('172.16.') ||
+        o1 === 127 ||
+        o1 === 10 ||
+        (o1 === 192 && o2 === 168) ||
+        (o1 === 172 && o2 >= 16 && o2 <= 31) ||
         ip === '0.0.0.0' ||
         ip === '255.255.255.255'
       ) {
@@ -93,10 +95,17 @@ export interface ThreatSeverityResult {
 /**
  * Calculates threat severity based on zero-day indicators, exploit status,
  * CVE presence, and threat-actor attribution keywords.
+ *
+ * Keywords are only matched against evidence about this specific article: its title,
+ * description, and `tags` — which callers must set to the publisher's own per-item categories.
+ * Feed-level tags and keyword-derived tags are deliberately excluded: they describe the source
+ * or were guessed from the same text, and scoring them made every item of some feeds "critical".
+ * `categories` (the curated feed category) only contributes the fixed category weight below.
  */
 export function calculateThreatSeverity(
   article: Partial<Article>,
-  detectedCVEs?: string[]
+  detectedCVEs?: string[],
+  cveIntel?: Record<string, CveIntel>
 ): ThreatSeverityResult {
   let score = 10; // Baseline
   const factors: string[] = [];
@@ -104,8 +113,7 @@ export function calculateThreatSeverity(
   const textToAnalyze = [
     article.title || '',
     article.description || '',
-    (article.tags || []).join(' '),
-    (article.categories || []).join(' ')
+    (article.tags || []).join(' ')
   ].join(' ').toLowerCase();
 
   const cves = detectedCVEs || extractCVEs(textToAnalyze);
@@ -118,11 +126,14 @@ export function calculateThreatSeverity(
   ];
 
   for (const kw of criticalKeywords) {
-    if (textToAnalyze.includes(kw)) {
-      score += 35;
+    if (containsTerm(textToAnalyze, kw)) {
       factors.push(`Active threat keyword: "${kw}"`);
-      break;
     }
+  }
+  // First indicator +35; corroborating ones (e.g. zero-day + actively exploited + RCE) add +10 each, up to +20
+  const criticalHits = factors.length;
+  if (criticalHits > 0) {
+    score += 35 + Math.min(20, (criticalHits - 1) * 10);
   }
 
   // High Tier Indicators (Exploit PoC, APT campaigns, supply chain, privilege escalation)
@@ -133,7 +144,7 @@ export function calculateThreatSeverity(
   ];
 
   for (const kw of highKeywords) {
-    if (textToAnalyze.includes(kw)) {
+    if (containsTerm(textToAnalyze, kw)) {
       score += 20;
       factors.push(`Exploit/APT indicator: "${kw}"`);
       break;
@@ -159,8 +170,30 @@ export function calculateThreatSeverity(
     score += 15;
   }
 
+  // Authoritative exploitation data beats keyword guessing: a CVE in CISA's Known Exploited
+  // Vulnerabilities catalog makes the article critical; a high EPSS score raises it.
+  let inKev = false;
+  if (cveIntel && cves.length > 0) {
+    const intel = cves.map(c => cveIntel[c.toUpperCase()]).filter((i): i is CveIntel => Boolean(i));
+    const kevHits = intel.filter(i => i.kev);
+    if (kevHits.length > 0) {
+      inKev = true;
+      score += 40;
+      factors.push(`CISA KEV: ${kevHits.length} CVE(s) known to be exploited${kevHits.some(i => i.kevRansomware) ? ', used in ransomware campaigns' : ''}`);
+    }
+    const maxEpss = Math.max(0, ...intel.map(i => i.epss ?? 0));
+    if (maxEpss >= 0.5) {
+      score += 20;
+      factors.push(`EPSS ${(maxEpss * 100).toFixed(0)}%: likely to be exploited`);
+    } else if (maxEpss >= 0.1) {
+      score += 10;
+      factors.push(`EPSS ${(maxEpss * 100).toFixed(0)}%`);
+    }
+  }
+
   // Normalize score between 0 and 100
   score = Math.min(100, Math.max(5, score));
+  if (inKev) score = Math.max(score, 75);
 
   let severity: ThreatSeverity = 'info';
   if (score >= 75) {

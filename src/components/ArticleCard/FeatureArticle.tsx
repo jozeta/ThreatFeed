@@ -3,7 +3,7 @@ import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
-import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill } from '../Common/ThreatBadges';
+import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill, StackBadge } from '../Common/ThreatBadges';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { useSettings } from '../../context/SettingsContext';
 
@@ -64,6 +64,7 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <SeverityBadge severity={article.severity} />
+            <StackBadge article={article} />
             {watchlistMatch.matched && (
               <WatchlistBadge terms={watchlistMatch.matchedTerms} />
             )}

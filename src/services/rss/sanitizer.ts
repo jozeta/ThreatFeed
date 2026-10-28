@@ -1,4 +1,5 @@
 import DOMPurify from 'dompurify';
+import { Article } from '../../types';
 
 // Hook to ensure all links open in a new tab with noopener noreferrer
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
@@ -56,4 +57,49 @@ export function isValidFeedUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Returns the URL if it is http(s), otherwise ''. Guards hrefs and window.open against
+ * javascript:/data: URLs coming from imported backups or other non-parser sources.
+ */
+export function safeHttpUrl(url: unknown): string {
+  if (typeof url !== 'string' || !url) return '';
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === 'http:' || protocol === 'https:' ? url : '';
+  } catch {
+    return '';
+  }
+}
+
+const stringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+
+/**
+ * Validates and re-sanitizes an article that did not come straight from the feed parser
+ * (backup import, seed data). Returns null if required fields are missing.
+ */
+export function sanitizeStoredArticle(raw: any): Article | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.id !== 'string' || typeof raw.title !== 'string' || typeof raw.sourceId !== 'string') return null;
+
+  return {
+    ...raw,
+    title: stripHtmlToText(raw.title),
+    url: safeHttpUrl(raw.url),
+    image: safeHttpUrl(raw.image) || undefined,
+    sourceName: typeof raw.sourceName === 'string' ? raw.sourceName : raw.sourceId,
+    description: typeof raw.description === 'string' ? raw.description : undefined,
+    content: sanitizeHtml(typeof raw.content === 'string' ? raw.content : ''),
+    author: typeof raw.author === 'string' ? raw.author : undefined,
+    publishedAt: typeof raw.publishedAt === 'string' ? raw.publishedAt : new Date().toISOString(),
+    tags: stringArray(raw.tags),
+    categories: stringArray(raw.categories),
+    cves: stringArray(raw.cves),
+    customTags: stringArray(raw.customTags),
+    read: Boolean(raw.read),
+    viewed: Boolean(raw.viewed),
+    bookmarked: Boolean(raw.bookmarked),
+  };
 }

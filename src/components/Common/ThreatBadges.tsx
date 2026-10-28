@@ -1,6 +1,10 @@
-import React from 'react';
-import { ThreatSeverity } from '../../types';
-import { ShieldAlert, AlertTriangle, AlertCircle, Info, Target, ExternalLink } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { useSettings } from '../../context/SettingsContext';
+import { stackMatches } from '../../services/intelligence/stack';
+import { useFeeds } from '../../context/FeedContext';
+import { cachedCvss, CvssInfo, fetchCvss } from '../../services/intelligence/cvss';
+import { Article, ThreatSeverity } from '../../types';
+import { ShieldAlert, AlertTriangle, AlertCircle, Info, Target, ExternalLink, Server } from 'lucide-react';
 
 interface SeverityBadgeProps {
   severity?: ThreatSeverity;
@@ -89,12 +93,34 @@ export const WatchlistBadge: React.FC<WatchlistBadgeProps> = ({ terms, className
   );
 };
 
+/** "Relevant to you": the article mentions a product from the user's "My Stack" list. */
+export const StackBadge: React.FC<{ article: Article; className?: string }> = ({ article, className = '' }) => {
+  const { settings } = useSettings();
+  const terms = useMemo(() => stackMatches(article, settings.stackKeywords), [article, settings.stackKeywords]);
+  if (terms.length === 0) return null;
+  return (
+    <span
+      title={`Mentions products in your stack: ${terms.join(', ')}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wide bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-500/40 ${className}`}
+    >
+      <Server className="w-3 h-3" />
+      <span>YOUR STACK: {terms[0]}</span>
+      {terms.length > 1 && <span className="opacity-80">+{terms.length - 1}</span>}
+    </span>
+  );
+};
+
 interface CveChipProps {
   cve: string;
   onClick?: (e: React.MouseEvent) => void;
 }
 
 export const CveChip: React.FC<CveChipProps> = ({ cve, onClick }) => {
+  const { cveIntel } = useFeeds();
+  const intel = cveIntel[cve.toUpperCase()];
+  const [cvss, setCvss] = useState<CvssInfo | null | undefined>(() => cachedCvss(cve));
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onClick) {
@@ -104,13 +130,38 @@ export const CveChip: React.FC<CveChipProps> = ({ cve, onClick }) => {
     }
   };
 
+  // CVSS comes from NVD on demand: only after a short hover, so scrolling past chips costs nothing
+  const handleMouseEnter = () => {
+    if (cvss !== undefined) return;
+    hoverTimer.current = setTimeout(() => fetchCvss(cve).then(setCvss), 300);
+  };
+  const handleMouseLeave = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  };
+
+  const details = [
+    cve,
+    intel?.kev ? `CISA KEV: known exploited${intel.kevDateAdded ? ` (added ${intel.kevDateAdded})` : ''}${intel.kevRansomware ? ', used by ransomware' : ''}` : null,
+    intel?.kevName ?? null,
+    intel?.epss !== undefined ? `EPSS: ${(intel.epss * 100).toFixed(1)}% chance of exploitation in 30 days (percentile ${Math.round((intel.percentile ?? 0) * 100)})` : null,
+    cvss ? `CVSS ${cvss.version}: ${cvss.score} ${cvss.severity}` : cvss === null ? 'CVSS: not scored yet' : 'CVSS: hover to load',
+    'Click to open on NIST NVD',
+  ].filter(Boolean).join('\n');
+
+  const epssPct = intel?.epss !== undefined && intel.epss >= 0.01 ? Math.round(intel.epss * 100) : null;
+
   return (
     <button
       onClick={handleClick}
-      title={`Inspect ${cve} on NIST NVD`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      title={details}
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/25 transition-colors"
     >
+      {intel?.kev && <span className="px-1 rounded bg-rose-600 text-white text-[9px] font-black">KEV</span>}
       <span>{cve}</span>
+      {epssPct !== null && <span className="opacity-80">· EPSS {epssPct}%</span>}
+      {cvss && <span className="opacity-80">· {cvss.score}</span>}
       <ExternalLink className="w-2.5 h-2.5 opacity-60" />
     </button>
   );

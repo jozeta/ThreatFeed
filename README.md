@@ -19,13 +19,15 @@ Inspired by the editorial elegance, typography, and usability of **Newsify for i
   - **Newspaper Mode**: Broadsheet editorial hierarchy.
   - **List + Thumbnails**: Modern media-rich newsfeed.
   - **Compact List**: Fast traditional scanner for rapid triage.
+- **Latest Tab**: A strict newest-first stream, independent of the sort filter.
+- Long lists render incrementally with a **Show more** button, so large archives stay responsive.
 - **Freshness Indicators**: Relative timestamps (`12m ago`, `2h ago`, `Yesterday`, `24 Sep`).
 - **Editorial Fallbacks**: Never leaves ugly broken image icons; generates threat-themed gradients and branding placeholders.
 
 ### 2. Pure Client-Side Architecture (Zero Backend)
-- **100% Client-Side**: No Node.js server, no Express, no API routes, no serverless functions, no backend proxy.
+- **100% Client-Side**: No Node.js server, no Express, no API routes, no serverless functions. The only server-side work is a scheduled GitHub Actions job that builds a static feed snapshot (see [Feed Snapshot](#-feed-snapshot--cve-intelligence)).
 - **Deploy Anywhere**: Deployable directly as a static bundle to **GitHub Pages**, **Cloudflare Pages**, **Netlify**, **Vercel Static**, or any static web server (NGINX/Apache/S3).
-- **Offline Persistence**: Powered by browser **IndexedDB** (`idb`), storing thousands of articles, read/viewed/bookmarked states, custom tags, and feeds.
+- **Offline Persistence**: Powered by browser **IndexedDB** (`idb`), storing articles, read/viewed/bookmarked states, custom tags, and feeds. Articles older than the configured maximum age, and articles from removed feeds, are cleaned up automatically; bookmarks are always kept.
 - **PWA & Offline First**: Installable Progressive Web App with service worker caching the application shell for offline reading.
 
 ### 3. Established Security Feeds Configuration
@@ -41,7 +43,7 @@ Pre-configured with curated, verified security feeds organized by category:
 - Add custom RSS 2.0 or Atom XML feeds directly in the UI.
 - Enable, disable, edit, and delete feeds.
 - **OPML 2.0 Import & Export** for seamless migration between RSS readers.
-- **Full JSON Backup & Restore** of all subscriptions, read state, bookmarks, and settings.
+- **Full JSON Backup & Restore** of all subscriptions, read state, bookmarks (including the full bookmarked articles, so they survive even after leaving their feed), and settings. Imported backups are validated and re-sanitized.
 - Reset to default curated security feeds anytime with 1 click.
 
 ### 5. Client-Side CORS Handling & Feed Health Telemetry
@@ -51,12 +53,19 @@ Pre-configured with curated, verified security feeds organized by category:
   - `Invalid XML ●`
   - `Timeout ●`
   - `HTTP Error ●`
-- Configurable fetch modes in Settings:
-  - **CORS Proxy (`corsproxy.io`)** (Default for seamless client-side reading)
-  - **AllOrigins (`allorigins.win`)**
-  - **Direct Browser Fetch (Strict Origin)**
-  - **Custom User Proxy**
-- Individual retry buttons for every feed.
+  - `Network Error ●`
+  - `Proxy Can't Reach Site ●` (the proxy answered but couldn't connect to the feed's site, usually because the site blocks proxy servers)
+- Configurable fetch modes in Settings. Each mode tries a chain of gateways, with a timeout per attempt, so a single dead proxy does not stall a refresh:
+  - **CORSFix (`proxy.corsfix.com`)** (default): CORSFix → direct fetch → RSS2JSON
+  - **RSS2JSON (`api.rss2json.com`)**: RSS2JSON → CORSFix → direct fetch
+  - **AllOrigins (`api.allorigins.win`)**: AllOrigins → CORSFix → direct fetch → RSS2JSON (AllOrigins is currently unreliable, so saved AllOrigins settings are moved to CORSFix on load)
+  - **Direct Browser Fetch (Strict Origin)**: only works for feeds that send `Access-Control-Allow-Origin` headers
+  - **Custom User Proxy**: your own reverse proxy or Cloudflare Worker (use `%s` in the URL as a placeholder for the encoded feed URL, otherwise the feed URL is appended). A ready-made Worker is included; see [Self-Hosted Proxy](#-self-hosted-proxy-cloudflare-worker).
+- Feeds are fetched by 6 concurrent workers, with progress shown during refresh.
+- Optional auto-refresh (15 min to 3 h). A per-feed cooldown (default 1 h) skips feeds that were fetched successfully within that window; manual refresh always fetches everything.
+- Requests to public proxies are paced and shared across all fetch workers: an HTTP 429 pauses that proxy for every worker (honouring `Retry-After`, otherwise exponential backoff with jitter) and the feed is retried up to 3 times.
+- Articles appear while a refresh is still running (merged about once a second) instead of after the slowest feed.
+- Individual retry buttons for every feed, plus a Feed Health page with per-gateway diagnostics and latency probes.
 
 ### 6. Distraction-Free Article Reader
 - Dedicated reading view with full typography controls.
@@ -66,14 +75,18 @@ Pre-configured with curated, verified security feeds organized by category:
 - Integrated Web Share API and 1-click clipboard copy.
 
 ### 7. Instant Search, Combinable Filters & Sorting
-- Client-side full-text search across titles, summaries, sources, tags, and authors.
+- Client-side full-text search (MiniSearch) across titles, summaries, sources, tags, CVEs and authors: ranked, prefix-matching and typo-tolerant (`ransomwar atack` still finds ransomware attacks). Sort by **Relevance** while searching, and star a query to keep it as a **saved search**.
+- **Mute rules**: muted keywords hide articles everywhere (bookmarks excepted), and whole categories can be left off the newspaper front page (Settings → Mute Rules).
+- Unread counts per category in the category menu, and per feed on the Sources page.
 - Combinable filters:
   - Category (Security News, Threat Intel, Vulnerabilities, Malware, Red Team, Blue Team, Research)
   - Source feed
   - Threat topic tags (`#Zero-Day`, `#Ransomware`, `#CVE`, `#Exploit`, `#APT`, etc.)
   - Reading state (`All`, `Unread`, `Read`)
+  - Minimum severity (`Critical`, `High`, `Medium`, `Low`)
+  - Watchlist matches only
   - Date ranges (`Today`, `Past 7 Days`, `Past 30 Days`)
-  - Sorting (`Newest`, `Oldest`, `Recently Read`, `Recently Viewed`)
+  - Sorting (`Newest`, `Oldest`, `Recently Read`, `Recently Viewed`, `Severity`)
 
 ### 8. Customization & Genuine Dark Mode
 - **Dark Mode Palette**: Genuine cybersecurity night palette (`#0b0d10`, `#11151a`, `#f5f7fa`, `#9ba3af`, `#252b33`).
@@ -95,6 +108,28 @@ Pre-configured with curated, verified security feeds organized by category:
 - Built-in print stylesheet (`@media print`).
 - Clicking **"Print Newspaper Edition"** removes all application chrome, buttons, and navigation, formatting the day's security reports into a real black-and-white physical newspaper layout with date and masthead.
 
+### 11. Threat Intelligence Enrichment
+Every article is enriched in the browser while its feed is parsed, and the results are stored with it:
+- **CVE extraction** from the title, summary, and content.
+- **Severity scoring** (0–100, mapped to `critical` / `high` / `medium` / `low` / `info`) based on active-exploitation keywords (zero-day, actively exploited, RCE, KEV, with extra weight when several appear together), exploit/APT indicators, CVE count, source authority, and category. Keywords are matched as whole words and only against the article's own title, summary, and publisher categories; a feed's own tags are shown as tags but never raise severity. Stored articles are re-scored on load, so rule changes apply straight away.
+- **IOC extraction** in the reader: CVEs, MITRE ATT&CK technique IDs, MD5/SHA-1/SHA-256 hashes, and public IPv4 addresses (loopback and RFC 1918 private ranges are ignored).
+- **Watchlist**: keywords you track are highlighted and can be filtered on. The default watchlist covers active exploitation and zero-days, critical CVE phrases (unauthenticated RCE, CVSS 9.8+), major ransomware groups, attack campaigns and actors, and frequently exploited products; cloud, identity and APT stacks can be added in Settings. Matching is whole-word and case-insensitive (`APT` does not match `adapt`) and only looks at the article's own title, summary, CVEs and your custom tags, so feed-wide tags can't trigger alerts.
+- **Deduplication**: drops repeats by ID, normalized URL, and near-identical titles (>82% word overlap) published within 48 hours of each other, which catches syndicated copies across feeds.
+- **Story clustering**: groups coverage of the same incident from different sources, either by a shared CVE or by strong title overlap within 4 days, so one story shows up once with its related coverage.
+- **Exploitation data**: CVEs listed in CISA's Known Exploited Vulnerabilities catalog make an article critical; FIRST EPSS scores (the probability of exploitation within 30 days) add weight. CVE chips show a **KEV** marker and the EPSS percentage, and hovering one loads its CVSS score from NVD (cached).
+- **Indicator export**: download a reader article's indicators as **CSV** or as a **STIX 2.1** bundle (indicators, vulnerabilities, ATT&CK techniques and a report object) for a SIEM or threat intel platform.
+
+### 12. Intelligence Views
+- **Daily Briefing** tab: the last 24 hours (or 3 / 7 days) in one page: critical and high severity stories, watchlist hits, stories about your stack, CVEs newly added to CISA KEV, ransomware leak-site activity by group, and trending entities. Copy or download it as Markdown.
+- **Ransomware Tracker** tab: leak-site victims from Ransomware.live with group, sector and country (best-effort, read from each post), filterable by group, country and text, plus the most active groups.
+- **Trending**: CVEs, ransomware groups, threat actors and frequently exploited products mentioned most this week compared with last week, with per-day sparklines. Shown on top of the newspaper and in the briefing; click one to search for it.
+- **My Stack**: list the products you run (Settings → My Stack). Matching articles get a "Your stack" badge, rank higher within newspaper sections, and get their own briefing section.
+- **Watchlist alerts**: optional desktop notifications summarising new watchlist matches after each refresh (Settings → Watchlist Alerts).
+
+### 13. Sync & Resilience
+- **Cross-device sync** through a private GitHub Gist (Settings → Cross-Device Sync). Per-article state is merged by whichever device changed it last; feeds, bookmarked articles and keyword lists are combined. The token is stored only in that browser's IndexedDB and is never included in backups or synced data.
+- **Failing-feed backoff**: a feed that fails 5 refreshes in a row is only retried hourly during automatic refreshes (manual refresh still tries it).
+
 ---
 
 ## 🛠️ Technology Stack
@@ -106,6 +141,8 @@ Pre-configured with curated, verified security feeds organized by category:
 - **Local Persistence**: IndexedDB via `idb`
 - **Security & Sanitization**: DOMPurify
 - **Icons**: Lucide React
+- **Search**: MiniSearch
+- **Tests**: Vitest + jsdom
 
 ---
 
@@ -123,7 +160,48 @@ npm run build
 
 # Preview static build
 npm run preview
+
+# Run the test suite
+npm test
+
+# Build public/data/snapshot.json locally (all default feeds + KEV/EPSS data)
+npm run snapshot
 ```
+
+Without a local snapshot, the dev server falls back to fetching feeds live through the configured CORS gateway.
+
+---
+
+## 📦 Feed Snapshot & CVE Intelligence
+
+`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned. The result, `data/snapshot.json` (about 2 MB compressed), ships with the site.
+
+In the browser (Settings → Data Source, on by default), the app loads the snapshot on startup and on each refresh, and only fetches live the feeds it doesn't cover, which are the ones you added yourself. With 120 default feeds this replaces a multi-minute proxied refresh with a few seconds, and avoids the public proxies' blocking and rate limits entirely. A failed snapshot step doesn't block a deploy; the app then falls back to live fetching.
+
+`.github/workflows/ci.yml` runs the tests and a build for pull requests and other branches.
+
+---
+
+## 🛡️ Self-Hosted Proxy (Cloudflare Worker)
+
+The free public proxies are shared and get blocked: many sites refuse connections from CORSFix's servers ("Proxy Can't Reach Site" in Feed Health), and heavy use is rate-limited. `proxy/worker.js` is a small Cloudflare Worker you can run on Cloudflare's free plan instead. In testing it fetched 114 of 120 feeds in about 20 seconds, versus 47 through CORSFix.
+
+```bash
+cd proxy
+npx wrangler login        # once, opens the browser
+npx wrangler deploy       # prints https://threatfeed-proxy.<your-subdomain>.workers.dev
+```
+
+Then in ThreatFeed: **Settings → CORS Gateway → Custom User Proxy**, and enter:
+
+```
+https://threatfeed-proxy.<your-subdomain>.workers.dev/?url=
+```
+
+The Worker is not an open proxy:
+- Only browser origins in `ALLOWED_ORIGINS` (`proxy/wrangler.toml`) may use it. By default that is the GitHub Pages site and localhost; add your own domain if you host ThreatFeed elsewhere.
+- It only fetches `http(s)` URLs on public hostnames, only returns feed-like content types, and caps responses at 20 MB.
+- Feeds are cached for 5 minutes at Cloudflare's edge, so repeated refreshes are cheap.
 
 ---
 

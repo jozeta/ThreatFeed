@@ -3,7 +3,7 @@ import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
-import { SeverityBadge, WatchlistBadge } from '../Common/ThreatBadges';
+import { SeverityBadge, WatchlistBadge, StackBadge } from '../Common/ThreatBadges';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { useSettings } from '../../context/SettingsContext';
 
@@ -50,6 +50,7 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
               <div className="flex flex-wrap items-center gap-1">
                 <SeverityBadge severity={article.severity} />
+                <StackBadge article={article} />
                 {watchlistMatch.matched && (
                   <WatchlistBadge terms={watchlistMatch.matchedTerms} />
                 )}
@@ -101,6 +102,7 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
             <div className="flex flex-wrap items-center gap-1.5 truncate">
               <SeverityBadge severity={article.severity} />
+              <StackBadge article={article} />
               {watchlistMatch.matched && (
                 <WatchlistBadge terms={watchlistMatch.matchedTerms} />
               )}

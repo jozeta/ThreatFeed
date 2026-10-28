@@ -12,6 +12,10 @@ import { ClusterModal } from './ClusterModal';
 import { CustomizeSectionsModal } from './CustomizeSectionsModal';
 import { useSettings } from '../../context/SettingsContext';
 import { clusterArticles } from '../../services/articles/clustering';
+import { stackMatches } from '../../services/intelligence/stack';
+import { TrendingStrip } from './TrendingStrip';
+import { usePagedCount } from '../../hooks/usePagedCount';
+import { LoadMoreButton } from '../Common/LoadMoreButton';
 import {
   Flame,
   ShieldAlert,
@@ -29,6 +33,7 @@ interface NewspaperViewProps {
   articles: Article[];
   isLoading: boolean;
   onOpenArticle: (article: Article) => void;
+  onSearch?: (query: string) => void;
 }
 
 // Section types that guarantee 100% horizontal & vertical space filling with zero gaps
@@ -49,7 +54,7 @@ function getArticleHash(id: string): number {
 }
 
 // Calculate importance score based on threat tags and high-impact indicators
-function calculateImportance(article: Article): number {
+function calculateImportance(article: Article, stackKeywords: string[] = []): number {
   let score = 0;
   const criticalTags = [
     'zero-day',
@@ -83,12 +88,67 @@ function calculateImportance(article: Article): number {
 
   if (article.image) score += 2;
   if (article.bookmarked) score += 1;
+  // Stories about products the user runs belong near the top of their section
+  if (stackMatches(article, stackKeywords).length > 0) score += 4;
   if (article.severity === 'critical') score += 4;
   else if (article.severity === 'high') score += 2;
 
   const pseudoRandom = getArticleHash(article.id) % 3;
   return score + pseudoRandom;
 }
+
+/**
+ * Sorts in place by editorial importance, newest first among stories of similar importance.
+ * Importance is bucketed in pairs (0-1, 2-3, ...) so the comparison stays consistent; the old
+ * "within 1 point counts as equal" rule wasn't transitive, which made the order erratic.
+ * Scores and timestamps are computed once per article rather than in every comparison.
+ */
+function sortByImportance(list: Article[], stackKeywords: string[] = []): void {
+  const keys = new Map(
+    list.map((a) => [a.id, { bucket: Math.floor(calculateImportance(a, stackKeywords) / 2), time: new Date(a.publishedAt).getTime() || 0 }])
+  );
+  list.sort((a, b) => {
+    const ka = keys.get(a.id)!;
+    const kb = keys.get(b.id)!;
+    return kb.bucket - ka.bucket || kb.time - ka.time;
+  });
+}
+
+function sortByTimeDesc(list: Article[]): Article[] {
+  return list
+    .map((a) => ({ a, t: new Date(a.publishedAt).getTime() || 0 }))
+    .sort((x, y) => y.t - x.t)
+    .map((x) => x.a);
+}
+
+const STREAM_PAGE_SIZE = 40;
+const SECTION_PAGE_SIZE = 8;
+
+/**
+ * Articles a section's editorial layout has no room for. Collapsed at first; each
+ * "Show more" reveals another page as a grid of briefs.
+ */
+const SectionOverflow: React.FC<{ articles: Article[]; onOpenArticle: (article: Article) => void }> = ({
+  articles,
+  onOpenArticle,
+}) => {
+  const { visibleCount, hasMore, remaining, showMore } = usePagedCount(articles.length, SECTION_PAGE_SIZE, 0);
+
+  return (
+    <>
+      {visibleCount > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch mt-8 pt-6 border-t border-theme-border/60">
+          {articles.slice(0, visibleCount).map((story) => (
+            <div key={story.id} className="h-full">
+              <QuarterBriefArticle article={story} onOpen={() => onOpenArticle(story)} withImage={false} />
+            </div>
+          ))}
+        </div>
+      )}
+      {hasMore && <LoadMoreButton remaining={remaining} onClick={showMore} />}
+    </>
+  );
+};
 
 const SEVERITY_RANK: Record<ThreatSeverity, number> = {
   critical: 4,
@@ -122,16 +182,32 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   articles,
   isLoading,
   onOpenArticle,
+  onSearch,
 }) => {
   const { settings, updateSetting } = useSettings();
   const [selectedCluster, setSelectedCluster] = useState<StoryCluster | null>(null);
   const [isCustomizingSections, setIsCustomizingSections] = useState(false);
 
-  // Compute story clusters across feeds
-  const clusters = useMemo(() => {
+  // Clustering only depends on which articles are shown and their severity/image (primary pick),
+  // not on read/bookmark state, so key the expensive pass on that and map results to live copies.
+  const clusterSignature = useMemo(
+    () => articles.map((a) => `${a.id}:${a.severityScore ?? 0}:${a.image ? 1 : 0}`).join('|'),
+    [articles]
+  );
+  const rawClusters = useMemo(() => {
     if (!settings.clusteringEnabled) return [];
     return clusterArticles(articles);
-  }, [articles, settings.clusteringEnabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- articles is captured via clusterSignature
+  }, [clusterSignature, settings.clusteringEnabled]);
+  const clusters = useMemo(() => {
+    const byId = new Map(articles.map((a) => [a.id, a]));
+    const live = (a: Article) => byId.get(a.id) ?? a;
+    return rawClusters.map((c) => ({
+      ...c,
+      primaryArticle: live(c.primaryArticle),
+      relatedArticles: c.relatedArticles.map(live),
+    }));
+  }, [rawClusters, articles]);
 
   // Fast cluster lookup by primary article ID
   const clusterMap = useMemo(() => {
@@ -171,14 +247,15 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
   // Chronological sort of all articles (newest first)
   const chronologicalStories = useMemo(() => {
-    return [...primaryDisplayArticles].sort((a, b) => {
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-    });
+    return sortByTimeDesc(primaryDisplayArticles);
   }, [primaryDisplayArticles]);
+
+  // The stream below the lead row is rendered in pages
+  const { visibleCount, hasMore, remaining, showMore } = usePagedCount(chronologicalStories.length - 5, STREAM_PAGE_SIZE);
 
   // Partition chronological remaining stories into gap-free blocks
   const chronologicalBlocks = useMemo(() => {
-    const remaining = chronologicalStories.slice(5);
+    const remaining = chronologicalStories.slice(5, 5 + visibleCount);
     const blocks: EditorialBlock[] = [];
     let idx = 0;
     let cycle = 0;
@@ -247,7 +324,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     }
 
     return blocks;
-  }, [chronologicalStories]);
+  }, [chronologicalStories, visibleCount]);
 
   // Group articles by user configured sections
   const sectionedGroups = useMemo(() => {
@@ -285,15 +362,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
       });
 
       // Sort matched articles by editorial importance
-      matched.sort((a, b) => {
-        const impDiff = calculateImportance(b) - calculateImportance(a);
-        if (Math.abs(impDiff) <= 1) {
-          return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-        }
-        return impDiff;
-      });
-
       if (matched.length > 0) {
+        sortByImportance(matched, settings.stackKeywords);
         matched.forEach((a) => usedIds.add(a.id));
         groups.push({ config: conf, articles: matched });
       }
@@ -302,13 +372,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     // Capture remaining unmatched articles
     const remainingUnmatched = primaryDisplayArticles.filter((a) => !usedIds.has(a.id));
     if (remainingUnmatched.length > 0) {
-      remainingUnmatched.sort((a, b) => {
-        const impDiff = calculateImportance(b) - calculateImportance(a);
-        if (Math.abs(impDiff) <= 1) {
-          return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-        }
-        return impDiff;
-      });
+      sortByImportance(remainingUnmatched, settings.stackKeywords);
       groups.push({
         config: {
           id: 'wire-general',
@@ -321,7 +385,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     }
 
     return groups;
-  }, [primaryDisplayArticles, settings.newspaperSections, settings.sectionsEnabled]);
+  }, [primaryDisplayArticles, settings.newspaperSections, settings.sectionsEnabled, settings.stackKeywords]);
 
   if (isLoading && articles.length === 0) {
     return <NewspaperSkeleton />;
@@ -335,6 +399,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
   return (
     <div className="newspaper-container main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {onSearch && <TrendingStrip articles={articles} stackKeywords={settings.stackKeywords} onSearch={onSearch} />}
+
       {/* ─────────────────────────────────────────────────────────────
           EDITORIAL MASTHEAD CONTROLS BAR
           Zero clutter, toggle between Section Grouping and Chronological Order
@@ -577,6 +643,12 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Articles beyond what the layout above shows: first section 5, 5+ layout 4, smaller layouts all */}
+                <SectionOverflow
+                  articles={items.slice(isFirstSection ? 5 : items.length >= 5 ? 4 : items.length)}
+                  onOpenArticle={onOpenArticle}
+                />
               </section>
             );
           })}
@@ -758,6 +830,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
               </div>
             ))}
           </div>
+          {hasMore && <LoadMoreButton remaining={remaining} onClick={showMore} />}
         </div>
       )}
 

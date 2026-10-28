@@ -1,6 +1,7 @@
 import React from 'react';
 import { useFilter } from '../../context/FilterContext';
 import { useFeeds } from '../../context/FeedContext';
+import { useSettings } from '../../context/SettingsContext';
 import { X, Filter, Calendar, ArrowUpDown, Target, ShieldAlert } from 'lucide-react';
 import { ThreatSeverity } from '../../types';
 
@@ -26,6 +27,7 @@ interface FilterBarProps {
 export const FilterBar: React.FC<FilterBarProps> = ({ isOpen, onClose }) => {
   const { filters, updateFilter, resetFilters, hasActiveFilters } = useFilter();
   const { feeds } = useFeeds();
+  const { settings, updateSettings } = useSettings();
 
   if (!isOpen && !hasActiveFilters) {
     return null;
@@ -36,6 +38,28 @@ export const FilterBar: React.FC<FilterBarProps> = ({ isOpen, onClose }) => {
       {/* Expanded Filter Panel */}
       {isOpen && (
         <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-4 border-b border-theme-border/60 bg-theme-card/60 animate-fadeIn relative">
+          {settings.savedSearches.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3 pr-8 text-xs font-mono">
+              <span className="uppercase tracking-wider text-theme-text-muted mr-1">Saved searches:</span>
+              {settings.savedSearches.map((q) => (
+                <span key={q} className="inline-flex items-center rounded border border-theme-border bg-theme-surface overflow-hidden">
+                  <button
+                    onClick={() => { updateFilter('searchQuery', q); updateFilter('sortBy', 'relevance'); }}
+                    className={`px-2 py-0.5 hover:text-theme-accent ${filters.searchQuery === q ? 'text-theme-accent font-bold' : 'text-theme-text'}`}
+                  >
+                    {q}
+                  </button>
+                  <button
+                    onClick={() => updateSettings({ savedSearches: settings.savedSearches.filter((s) => s !== q) })}
+                    title={`Remove saved search "${q}"`}
+                    className="px-1 py-0.5 text-theme-text-muted hover:text-rose-500 border-l border-theme-border"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-theme-text-muted hover:text-theme-text p-1"
@@ -153,6 +177,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ isOpen, onClose }) => {
                 className="w-full bg-theme-surface border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
               >
                 <option value="newest">Newest First (Publication Time)</option>
+                <option value="relevance" disabled={!filters.searchQuery.trim()}>Search Relevance (when searching)</option>
                 <option value="severity">Threat Severity (Highest First)</option>
                 <option value="oldest">Oldest First</option>
                 <option value="recently_read">Recently Read</option>

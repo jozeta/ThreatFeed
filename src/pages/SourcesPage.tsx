@@ -31,6 +31,7 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
     feedHealth,
     toggleFeedEnabled,
     addCustomFeed,
+    addCustomFeeds,
     updateFeed,
     removeFeed,
     resetFeedsToDefault,
@@ -142,17 +143,17 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
       try {
         const text = event.target?.result as string;
         const imported = parseOPML(text);
-        for (const item of imported) {
-          if (item.name && item.url) {
-            await addCustomFeed({
-              name: item.name,
-              url: item.url,
+        await addCustomFeeds(
+          imported
+            .filter(item => item.name && item.url && isValidFeedUrl(item.url))
+            .map(item => ({
+              name: item.name!,
+              url: item.url!,
               category: item.category || 'Imported',
               tags: item.tags || ['imported'],
               enabled: true,
-            });
-          }
-        }
+            }))
+        );
       } catch (err) {
         alert('Failed to parse OPML file.');
       }
@@ -285,6 +286,11 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
                             <span className="flex items-center gap-1 text-emerald-500 font-medium">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>Healthy</span>
+                            </span>
+                          ) : health?.status === 'proxy_unreachable' ? (
+                            <span className="flex items-center gap-1 text-amber-500 font-medium" title={health.errorMessage}>
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span>Proxy Can't Reach Site</span>
                             </span>
                           ) : health?.status === 'cors_error' ? (
                             <span className="flex items-center gap-1 text-amber-500 font-medium" title={health.errorMessage}>

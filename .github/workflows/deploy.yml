@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # Refresh the feed snapshot (and redeploy) every 30 minutes
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -24,6 +27,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm test
+      # Fetch every default feed server-side plus CISA KEV / EPSS data into public/data/snapshot.json.
+      # A failed snapshot shouldn't block a deploy: the app falls back to live fetching without it.
+      - run: npm run snapshot
+        continue-on-error: true
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'

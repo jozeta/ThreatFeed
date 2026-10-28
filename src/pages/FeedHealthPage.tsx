@@ -48,7 +48,7 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'healthy' | 'failed' | 'cors' | 'timeout'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'healthy' | 'failed' | 'cors' | 'timeout' | 'unreachable'>('all');
 
   // Accordion expanded feeds state
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set());
@@ -95,6 +95,7 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
   const healthyCount = Object.values(feedHealth).filter((h) => h.status === 'healthy').length;
   const corsCount = Object.values(feedHealth).filter((h) => h.status === 'cors_error').length;
   const timeoutCount = Object.values(feedHealth).filter((h) => h.status === 'timeout').length;
+  const unreachableCount = Object.values(feedHealth).filter((h) => h.status === 'proxy_unreachable').length;
   const failedCount = Object.values(feedHealth).filter(
     (h) => h.status !== 'healthy' && h.status !== 'cors_error'
   ).length;
@@ -118,6 +119,7 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
       if (statusFilter === 'healthy' && health?.status !== 'healthy') return false;
       if (statusFilter === 'cors' && health?.status !== 'cors_error') return false;
       if (statusFilter === 'timeout' && health?.status !== 'timeout') return false;
+      if (statusFilter === 'unreachable' && health?.status !== 'proxy_unreachable') return false;
       if (statusFilter === 'failed' && (!health || health.status === 'healthy')) return false;
 
       // Search query
@@ -235,6 +237,13 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>CORS Restriction</span>
+          </span>
+        );
+      case 'proxy_unreachable':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            <Globe className="w-3.5 h-3.5" />
+            <span>Proxy Can't Reach Site</span>
           </span>
         );
       case 'invalid_xml':
@@ -550,6 +559,7 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
               { id: 'failed', label: `Failed/Errors (${failedCount})` },
               { id: 'cors', label: `CORS (${corsCount})` },
               { id: 'timeout', label: `Timeout (${timeoutCount})` },
+              { id: 'unreachable', label: `Proxy Can't Reach (${unreachableCount})` },
             ].map((f) => (
               <button
                 key={f.id}

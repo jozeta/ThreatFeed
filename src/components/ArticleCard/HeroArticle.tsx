@@ -4,7 +4,7 @@ import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
 import { useSettings } from '../../context/SettingsContext';
-import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill } from '../Common/ThreatBadges';
+import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill, StackBadge } from '../Common/ThreatBadges';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { Shield } from 'lucide-react';
 
@@ -46,6 +46,7 @@ export const HeroArticle: React.FC<HeroArticleProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-theme-border/60">
         <div className="flex flex-wrap items-center gap-2">
           <SeverityBadge severity={article.severity} score={article.severityScore} />
+          <StackBadge article={article} />
           {watchlistMatch.matched && (
             <WatchlistBadge terms={watchlistMatch.matchedTerms} />
           )}

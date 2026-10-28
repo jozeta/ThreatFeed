@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Article } from '../../types';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
-import { SeverityBadge, WatchlistBadge, ClusterPill } from '../Common/ThreatBadges';
+import { SeverityBadge, WatchlistBadge, ClusterPill, StackBadge } from '../Common/ThreatBadges';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { useSettings } from '../../context/SettingsContext';
 
@@ -50,6 +50,7 @@ export const ListArticle: React.FC<ListArticleProps> = ({
         {/* Badges */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <SeverityBadge severity={article.severity} score={article.severityScore} />
+          <StackBadge article={article} />
           {watchlistMatch.matched && <WatchlistBadge terms={watchlistMatch.matchedTerms} />}
         </div>
 

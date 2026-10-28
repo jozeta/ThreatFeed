@@ -1,5 +1,5 @@
 // ThreatFeed Service Worker for Offline First / Caching
-const CACHE_NAME = 'threatfeed-v2';
+const CACHE_NAME = 'threatfeed-v3';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -39,6 +39,21 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // The feed snapshot is rebuilt every 30 minutes: always try the network first so the app never
+  // shows the previous build's articles, and fall back to the cached copy only when offline.
+  if (url.origin === location.origin && url.pathname.endsWith('/data/snapshot.json')) {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return networkResponse;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
 
   // If requesting internal assets or root
   if (url.origin === location.origin) {

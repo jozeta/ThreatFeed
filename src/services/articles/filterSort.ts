@@ -13,14 +13,35 @@ const SEVERITY_WEIGHT: Record<ThreatSeverity, number> = {
   info: 0,
 };
 
+export interface FilterExtras {
+  // Relevance scores from the full-text index for filters.searchQuery; without it, a substring match is used
+  searchScores?: Map<string, number> | null;
+  // Hidden everywhere except bookmarks (same whole-word matching as the watchlist)
+  mutedKeywords?: string[];
+  // Feed categories left out (used for the newspaper front page)
+  hiddenCategories?: string[];
+}
+
 export function filterAndSortArticles(
   articles: Article[],
   filters: FilterState,
   hideReadArticles = false,
   feeds: Feed[] = [],
-  watchlistKeywords: string[] = []
+  watchlistKeywords: string[] = [],
+  extras: FilterExtras = {}
 ): Article[] {
   let result = [...articles];
+
+  if (extras.mutedKeywords && extras.mutedKeywords.length > 0) {
+    const muted = extras.mutedKeywords;
+    result = result.filter(a => a.bookmarked || !checkWatchlistMatch(a, muted).matched);
+  }
+
+  if (extras.hiddenCategories && extras.hiddenCategories.length > 0) {
+    const hidden = new Set(extras.hiddenCategories);
+    const feedCategory = new Map(feeds.map(f => [f.id, f.category]));
+    result = result.filter(a => !hidden.has(feedCategory.get(a.sourceId) || ''));
+  }
 
   // Global hideReadArticles setting (or overridden by filter)
   if (hideReadArticles && filters.readStatus === 'all') {
@@ -28,7 +49,10 @@ export function filterAndSortArticles(
   }
 
   // 1. Search Query
-  if (filters.searchQuery.trim()) {
+  const scores = filters.searchQuery.trim() ? extras.searchScores : null;
+  if (scores) {
+    result = result.filter(article => scores.has(article.id));
+  } else if (filters.searchQuery.trim()) {
     const q = filters.searchQuery.toLowerCase().trim();
     result = result.filter(article => {
       return (
@@ -123,24 +147,35 @@ export function filterAndSortArticles(
     result = result.filter(a => new Date(a.publishedAt).getTime() >= threshold);
   }
 
-  // Sorting
-  result.sort((a, b) => {
+  // Sorting: parse each article's dates once instead of in every comparison
+  const toTime = (iso?: string) => (iso ? new Date(iso).getTime() || 0 : 0);
+  const keyOf = (a: Article): number => {
     switch (filters.sortBy) {
       case 'oldest':
-        return new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime();
+        return -toTime(a.publishedAt);
       case 'recently_read':
-        return (new Date(b.readAt || 0).getTime()) - (new Date(a.readAt || 0).getTime());
+        return toTime(a.readAt);
       case 'recently_viewed':
-        return (new Date(b.viewedAt || 0).getTime()) - (new Date(a.viewedAt || 0).getTime());
-      case 'severity': {
-        const scoreDiff = (b.severityScore ?? 0) - (a.severityScore ?? 0);
-        if (scoreDiff !== 0) return scoreDiff;
-        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-      }
-      case 'newest':
+        return toTime(a.viewedAt);
       default:
-        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+        return toTime(a.publishedAt);
     }
+  };
+  const keys = new Map(result.map(a => [a.id, keyOf(a)]));
+  const published = new Map(result.map(a => [a.id, toTime(a.publishedAt)]));
+
+  result.sort((a, b) => {
+    if (filters.sortBy === 'relevance' && scores) {
+      const diff = (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0);
+      if (diff !== 0) return diff;
+      return published.get(b.id)! - published.get(a.id)!;
+    }
+    if (filters.sortBy === 'severity') {
+      const scoreDiff = (b.severityScore ?? 0) - (a.severityScore ?? 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      return published.get(b.id)! - published.get(a.id)!;
+    }
+    return keys.get(b.id)! - keys.get(a.id)!;
   });
 
   return result;

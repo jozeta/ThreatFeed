@@ -25,9 +25,14 @@ function calculateJaccardSimilarity(setA: Set<string>, setB: Set<string>): numbe
   return unionCount === 0 ? 0 : intersectionCount / unionCount;
 }
 
+const CLUSTER_WINDOW_MS = 96 * 60 * 60 * 1000;
+
 /**
  * Clusters related articles across different news sources.
  * Groups stories that cover the same incident, CVE, or breach.
+ *
+ * Articles are walked in publish order and each one is only compared with the ones published
+ * within the following 96h, which keeps this close to linear instead of comparing every pair.
  */
 export function clusterArticles(articles: Article[]): StoryCluster[] {
   if (!articles || articles.length === 0) return [];
@@ -35,57 +40,61 @@ export function clusterArticles(articles: Article[]): StoryCluster[] {
   const clusters: StoryCluster[] = [];
   const assignedArticleIds = new Set<string>();
 
-  // Precompute tokens and CVE sets for speed
-  const metadata = articles.map(art => ({
-    article: art,
-    tokens: extractSignificantTokens(art.title),
-    cveSet: new Set(art.cves || []),
-    pubTime: new Date(art.publishedAt).getTime()
-  }));
+  // Precompute tokens and CVE sets for speed; undated articles never cluster
+  const metadata = articles
+    .map(art => ({
+      article: art,
+      tokens: extractSignificantTokens(art.title),
+      cveSet: new Set(art.cves || []),
+      pubTime: new Date(art.publishedAt).getTime()
+    }))
+    .sort((a, b) => (isNaN(a.pubTime) ? 1 : isNaN(b.pubTime) ? -1 : a.pubTime - b.pubTime));
 
   for (let i = 0; i < metadata.length; i++) {
     const itemA = metadata[i];
     if (assignedArticleIds.has(itemA.article.id)) continue;
+    assignedArticleIds.add(itemA.article.id);
 
-    const clusterMembers: Article[] = [];
-    const sharedCVEs = new Set<string>(itemA.article.cves || []);
+    const members = [itemA];
 
-    for (let j = i + 1; j < metadata.length; j++) {
-      const itemB = metadata[j];
-      if (assignedArticleIds.has(itemB.article.id)) continue;
+    if (!isNaN(itemA.pubTime)) {
+      for (let j = i + 1; j < metadata.length; j++) {
+        const itemB = metadata[j];
+        // Sorted by time: once past the window (or into undated items), nothing later can match
+        if (isNaN(itemB.pubTime) || itemB.pubTime - itemA.pubTime > CLUSTER_WINDOW_MS) break;
+        if (assignedArticleIds.has(itemB.article.id)) continue;
 
-      // Don't cluster articles from the exact same feed source unless identical CVE
-      const isDifferentSource = itemA.article.sourceId !== itemB.article.sourceId;
-
-      // Time difference check (within 4 days / 96 hours)
-      const timeDiffHours = Math.abs(itemA.pubTime - itemB.pubTime) / (1000 * 60 * 60);
-      if (timeDiffHours > 96) continue;
-
-      // Criteria 1: Shared specific CVE ID
-      let matchedByCVE = false;
-      if (itemA.cveSet.size > 0 && itemB.cveSet.size > 0) {
+        // Criteria 1: Shared specific CVE ID
+        let matchedByCVE = false;
         for (const cve of itemA.cveSet) {
           if (itemB.cveSet.has(cve)) {
             matchedByCVE = true;
-            sharedCVEs.add(cve);
+            break;
           }
         }
-      }
 
-      // Criteria 2: High title token overlap (Jaccard similarity >= 0.40)
-      const similarity = calculateJaccardSimilarity(itemA.tokens, itemB.tokens);
-      const matchedByTitle = isDifferentSource && similarity >= 0.40;
+        // Criteria 2: High title token overlap (Jaccard similarity >= 0.40), only across different sources
+        const matchedByTitle =
+          !matchedByCVE &&
+          itemA.article.sourceId !== itemB.article.sourceId &&
+          calculateJaccardSimilarity(itemA.tokens, itemB.tokens) >= 0.40;
 
-      if (matchedByCVE || matchedByTitle) {
-        clusterMembers.push(itemB.article);
-        assignedArticleIds.add(itemB.article.id);
+        if (matchedByCVE || matchedByTitle) {
+          members.push(itemB);
+          assignedArticleIds.add(itemB.article.id);
+        }
       }
     }
 
-    assignedArticleIds.add(itemA.article.id);
+    // CVEs mentioned by at least two members of the cluster
+    const cveCounts = new Map<string, number>();
+    for (const m of members) {
+      for (const cve of m.cveSet) cveCounts.set(cve, (cveCounts.get(cve) || 0) + 1);
+    }
+    const sharedCVEs = Array.from(cveCounts).filter(([, n]) => n >= 2).map(([cve]) => cve);
 
     // Pick best primary article (prefer one with image or higher severity)
-    const allMembers = [itemA.article, ...clusterMembers];
+    const allMembers = members.map(m => m.article);
     allMembers.sort((a, b) => {
       const scoreA = (a.severityScore || 0) + (a.image ? 10 : 0);
       const scoreB = (b.severityScore || 0) + (b.image ? 10 : 0);
@@ -99,7 +108,7 @@ export function clusterArticles(articles: Article[]): StoryCluster[] {
       id: primary.id,
       primaryArticle: primary,
       relatedArticles: related,
-      sharedCVEs: Array.from(sharedCVEs),
+      sharedCVEs,
       clusterSize: 1 + related.length
     });
   }

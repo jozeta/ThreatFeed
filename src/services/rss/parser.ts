@@ -1,4 +1,4 @@
-import { Article, Feed } from '../../types';
+import { Article, CveIntel, Feed } from '../../types';
 import { normalizeAndEnrichTags } from './tagNormalizer';
 import { sanitizeHtml, stripHtmlToText } from './sanitizer';
 import { extractCVEs, calculateThreatSeverity } from '../intelligence/iocExtractor';
@@ -20,6 +20,8 @@ export function normalizeUrl(rawUrl: string): string {
     ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'].forEach(param => {
       url.searchParams.delete(param);
     });
+    // Article links end up in hrefs and window.open, so only http(s) is allowed through
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
     // Remove trailing slash for normalization consistency
     return url.origin + url.pathname.replace(/\/$/, '') + (url.search || '') + (url.hash || '');
   } catch {
@@ -78,11 +80,133 @@ function extractImageUrl(element: Element, rawHtml: string): string | undefined 
   return undefined;
 }
 
+interface RawFeedItem {
+  title: string;
+  url: string;
+  guid: string;
+  author: string;
+  publishedAt: string;
+  itemCategories: string[];
+  summaryHtml: string;
+  contentHtml: string;
+  image?: string;
+}
+
+function feedLevelTags(feed: Feed): string[] {
+  return [feed.category, ...(feed.tags || [])].filter(Boolean);
+}
+
+/**
+ * Tags and severity for an article. Severity only sees the publisher's own item categories;
+ * feed-level tags are display-only (see calculateThreatSeverity).
+ */
+function enrich(
+  feed: Feed | undefined,
+  sourceId: string,
+  title: string,
+  summary: string,
+  itemCategories: string[],
+  cves: string[],
+  cveIntel?: Record<string, CveIntel>
+) {
+  const tags = normalizeAndEnrichTags(itemCategories, title, summary, feed ? feedLevelTags(feed) : []);
+  const { severity, score: severityScore } = calculateThreatSeverity({
+    title,
+    description: summary,
+    tags: itemCategories,
+    categories: feed?.category ? [feed.category] : [],
+    sourceId
+  }, cves, cveIntel);
+  return { tags, severity, severityScore };
+}
+
+/**
+ * Shared normalization for RSS, Atom, and rss2json items.
+ */
+function buildArticle(feed: Feed, raw: RawFeedItem): Article {
+  const allCategories = new Set<string>();
+  if (feed.category) allCategories.add(feed.category);
+  raw.itemCategories.forEach(c => allCategories.add(c));
+  (feed.tags || []).forEach(t => allCategories.add(t));
+
+  const cleanTitle = stripHtmlToText(raw.title);
+  // The summary is cut to 450 chars below; converting a whole 400 KB description (CISA advisories)
+  // to text first costs ~1s per item. 5 KB of HTML is plenty for 450 chars of text.
+  const cleanSummary = stripHtmlToText(raw.summaryHtml.slice(0, 5000));
+  const sanitizedContent = sanitizeHtml(raw.contentHtml);
+  const cves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
+  const { tags, severity, severityScore } = enrich(feed, feed.id, cleanTitle, cleanSummary, raw.itemCategories, cves);
+
+  return {
+    id: generateArticleId(feed.id, raw.guid, raw.url, raw.title),
+    guid: raw.guid,
+    title: cleanTitle,
+    url: normalizeUrl(raw.url),
+    sourceId: feed.id,
+    sourceName: feed.name,
+    description: cleanSummary.slice(0, 450),
+    content: sanitizedContent,
+    image: raw.image,
+    author: stripHtmlToText(raw.author),
+    publishedAt: raw.publishedAt,
+    fetchedAt: new Date().toISOString(),
+    tags,
+    categories: Array.from(allCategories),
+    cves,
+    severity,
+    severityScore,
+    read: false,
+    viewed: false,
+    bookmarked: false,
+  };
+}
+
+/**
+ * Recomputes tags and severity for an already-stored article (cached or seeded),
+ * so scoring changes apply without waiting for every item to be re-fetched.
+ */
+export function rescoreArticle(article: Article, feed: Feed | undefined, cveIntel?: Record<string, CveIntel>): Article {
+  const feedLevel = new Set((feed ? feedLevelTags(feed) : []).map(t => t.toLowerCase()));
+  const itemCategories = (article.categories || []).filter(c => !feedLevel.has(c.toLowerCase()));
+  const { tags, severity, severityScore } = enrich(
+    feed,
+    article.sourceId,
+    article.title,
+    article.description || '',
+    itemCategories,
+    article.cves || [],
+    cveIntel
+  );
+  return { ...article, tags, severity, severityScore };
+}
+
+/**
+ * Picks the `maxItems` newest entries by their date element, so huge feeds (e.g. the MSRC
+ * update guide, ~5k items) only pay the expensive per-item sanitize/enrich cost for items
+ * that survive the per-feed limit anyway. Undated entries sort last.
+ */
+function newestEntries(entries: Element[], maxItems: number | undefined, dateTags: string[]): Element[] {
+  if (!maxItems || entries.length <= maxItems) return entries;
+  const dated = entries.map((el, index) => {
+    let t = NaN;
+    for (const tag of dateTags) {
+      const text = el.getElementsByTagName(tag)[0]?.textContent;
+      if (text) {
+        t = new Date(text.trim()).getTime();
+        if (!isNaN(t)) break;
+      }
+    }
+    return { el, index, t: isNaN(t) ? -Infinity : t };
+  });
+  dated.sort((a, b) => b.t - a.t || a.index - b.index);
+  return dated.slice(0, maxItems).map(d => d.el);
+}
+
 /**
  * Parses XML text into normalized Article array.
  * Gracefully handles RSS 2.0 and Atom feeds.
  */
-export function parseFeedXml(xmlText: string, feed: Feed): Article[] {
+export function parseFeedXml(xmlText: string, feed: Feed, maxItems?: number): Article[] {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
 
@@ -92,13 +216,19 @@ export function parseFeedXml(xmlText: string, feed: Feed): Article[] {
     throw new Error(`XML Parse Error: ${parseError.textContent?.slice(0, 100) || 'Malformed XML structure'}`);
   }
 
+  // Well-formed XML that isn't a feed (e.g. a proxy's error document) must not count as an empty feed
+  const rootName = xmlDoc.documentElement?.localName?.toLowerCase() || '';
+  if (!['rss', 'feed', 'rdf'].includes(rootName)) {
+    throw new Error(`Unexpected XML root <${rootName || 'none'}>: not an RSS/Atom feed`);
+  }
+
   const articles: Article[] = [];
 
   // Check if Atom feed
-  const isAtom = xmlDoc.getElementsByTagName('feed').length > 0;
+  const isAtom = rootName === 'feed';
 
   if (isAtom) {
-    const entries = Array.from(xmlDoc.getElementsByTagName('entry'));
+    const entries = newestEntries(Array.from(xmlDoc.getElementsByTagName('entry')), maxItems, ['published', 'updated']);
     for (const entry of entries) {
       try {
         const article = parseAtomEntry(entry, feed);
@@ -109,7 +239,7 @@ export function parseFeedXml(xmlText: string, feed: Feed): Article[] {
     }
   } else {
     // RSS 2.0 / 0.9x / RDF
-    const items = Array.from(xmlDoc.getElementsByTagName('item'));
+    const items = newestEntries(Array.from(xmlDoc.getElementsByTagName('item')), maxItems, ['pubDate', 'dc:date']);
     for (const item of items) {
       try {
         const article = parseRssItem(item, feed);
@@ -164,60 +294,22 @@ function parseRssItem(item: Element, feed: Feed): Article | null {
     publishedAt = new Date().toISOString();
   }
 
-  // Categories
-  const categoryNodes = Array.from(item.getElementsByTagName('category'));
-  const rawCategories = categoryNodes.map(c => c.textContent?.trim() || '').filter(Boolean);
-  if (feed.tags) {
-    rawCategories.push(...feed.tags);
-  }
-
-  // Guarantee feed.category is always present in categories
-  const allCategories = new Set<string>();
-  if (feed.category) {
-    allCategories.add(feed.category);
-  }
-  rawCategories.forEach(c => allCategories.add(c));
+  const itemCategories = Array.from(item.getElementsByTagName('category'))
+    .map(c => c.textContent?.trim() || '')
+    .filter(Boolean);
 
   const rawHtmlForImage = contentEncoded || descriptionRaw;
-  const image = extractImageUrl(item, rawHtmlForImage);
-  const rawSummarySource = descriptionRaw || (contentEncoded ? contentEncoded.slice(0, 5000) : '');
-  const cleanSummary = stripHtmlToText(rawSummarySource);
-  const sanitizedContent = sanitizeHtml(contentEncoded || descriptionRaw);
-  const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
-
-  const id = generateArticleId(feed.id, guid, url, title);
-  const cleanTitle = stripHtmlToText(title);
-  const detectedCves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
-  const { severity, score: severityScore } = calculateThreatSeverity({
-    title: cleanTitle,
-    description: cleanSummary,
-    tags: normalizedTags,
-    categories: Array.from(allCategories),
-    sourceId: feed.id
-  }, detectedCves);
-
-  return {
-    id,
+  return buildArticle(feed, {
+    title,
+    url,
     guid,
-    title: cleanTitle,
-    url: normalizeUrl(url),
-    sourceId: feed.id,
-    sourceName: feed.name,
-    description: cleanSummary.slice(0, 450),
-    content: sanitizedContent,
-    image,
-    author: stripHtmlToText(author),
+    author,
     publishedAt,
-    fetchedAt: new Date().toISOString(),
-    tags: normalizedTags,
-    categories: Array.from(allCategories),
-    cves: detectedCves,
-    severity,
-    severityScore,
-    read: false,
-    viewed: false,
-    bookmarked: false,
-  };
+    itemCategories,
+    summaryHtml: descriptionRaw || (contentEncoded ? contentEncoded.slice(0, 5000) : ''),
+    contentHtml: contentEncoded || descriptionRaw,
+    image: extractImageUrl(item, rawHtmlForImage),
+  });
 }
 
 function parseAtomEntry(entry: Element, feed: Feed): Article | null {
@@ -258,60 +350,22 @@ function parseAtomEntry(entry: Element, feed: Feed): Article | null {
     publishedAt = new Date().toISOString();
   }
 
-  // Categories
-  const categoryNodes = Array.from(entry.getElementsByTagName('category'));
-  const rawCategories = categoryNodes.map(c => c.getAttribute('term') || c.getAttribute('label') || c.textContent?.trim() || '').filter(Boolean);
-  if (feed.tags) {
-    rawCategories.push(...feed.tags);
-  }
-
-  // Guarantee feed.category is always present in categories
-  const allCategories = new Set<string>();
-  if (feed.category) {
-    allCategories.add(feed.category);
-  }
-  rawCategories.forEach(c => allCategories.add(c));
+  const itemCategories = Array.from(entry.getElementsByTagName('category'))
+    .map(c => c.getAttribute('term') || c.getAttribute('label') || c.textContent?.trim() || '')
+    .filter(Boolean);
 
   const rawHtmlForImage = contentRaw || summaryRaw;
-  const image = extractImageUrl(entry, rawHtmlForImage);
-  const rawSummarySource = summaryRaw || (contentRaw ? contentRaw.slice(0, 5000) : '');
-  const cleanSummary = stripHtmlToText(rawSummarySource);
-  const sanitizedContent = sanitizeHtml(contentRaw || summaryRaw);
-  const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
-
-  const id = generateArticleId(feed.id, guid, url, title);
-  const cleanTitle = stripHtmlToText(title);
-  const detectedCves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
-  const { severity, score: severityScore } = calculateThreatSeverity({
-    title: cleanTitle,
-    description: cleanSummary,
-    tags: normalizedTags,
-    categories: Array.from(allCategories),
-    sourceId: feed.id
-  }, detectedCves);
-
-  return {
-    id,
+  return buildArticle(feed, {
+    title,
+    url,
     guid,
-    title: cleanTitle,
-    url: normalizeUrl(url),
-    sourceId: feed.id,
-    sourceName: feed.name,
-    description: cleanSummary.slice(0, 450),
-    content: sanitizedContent,
-    image,
-    author: stripHtmlToText(author),
+    author,
     publishedAt,
-    fetchedAt: new Date().toISOString(),
-    tags: normalizedTags,
-    categories: Array.from(allCategories),
-    cves: detectedCves,
-    severity,
-    severityScore,
-    read: false,
-    viewed: false,
-    bookmarked: false,
-  };
+    itemCategories,
+    summaryHtml: summaryRaw || (contentRaw ? contentRaw.slice(0, 5000) : ''),
+    contentHtml: contentRaw || summaryRaw,
+    image: extractImageUrl(entry, rawHtmlForImage),
+  });
 }
 
 /**
@@ -334,9 +388,6 @@ export function parseRss2Json(jsonData: any, feed: Feed): Article[] {
         if (!isNaN(d.getTime())) publishedAt = d.toISOString();
       } catch {}
 
-      const cleanSummary = stripHtmlToText(item.description || item.content || '');
-      const sanitizedContent = sanitizeHtml(item.content || item.description || '');
-
       let image = item.thumbnail || item.enclosure?.link;
       if (!image && (item.content || item.description)) {
         const imgMatch = (item.content || item.description).match(/<img[^>]+src=["'](https?:\/\/[^"'\s>]+)["']/i);
@@ -345,51 +396,21 @@ export function parseRss2Json(jsonData: any, feed: Feed): Article[] {
         }
       }
 
-      const allCategories = new Set<string>();
-      if (feed.category) allCategories.add(feed.category);
-      if (Array.isArray(item.categories)) {
-        item.categories.forEach((c: any) => {
-          if (c && typeof c === 'string') allCategories.add(c.trim());
-        });
-      }
-      if (feed.tags) {
-        feed.tags.forEach(t => allCategories.add(t));
-      }
+      const itemCategories: string[] = Array.isArray(item.categories)
+        ? item.categories.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim())
+        : [];
 
-      const normalizedTags = normalizeAndEnrichTags(Array.from(allCategories), title, cleanSummary);
-      const id = generateArticleId(feed.id, guid, url, title);
-      const cleanTitle = stripHtmlToText(title);
-      const detectedCves = extractCVEs(`${cleanTitle} ${cleanSummary} ${sanitizedContent}`);
-      const { severity, score: severityScore } = calculateThreatSeverity({
-        title: cleanTitle,
-        description: cleanSummary,
-        tags: normalizedTags,
-        categories: Array.from(allCategories),
-        sourceId: feed.id
-      }, detectedCves);
-
-      articles.push({
-        id,
+      articles.push(buildArticle(feed, {
+        title,
+        url,
         guid,
-        title: cleanTitle,
-        url: normalizeUrl(url),
-        sourceId: feed.id,
-        sourceName: feed.name,
-        description: cleanSummary.slice(0, 450),
-        content: sanitizedContent,
-        image,
-        author: stripHtmlToText(author),
+        author,
         publishedAt,
-        fetchedAt: new Date().toISOString(),
-        tags: normalizedTags,
-        categories: Array.from(allCategories),
-        cves: detectedCves,
-        severity,
-        severityScore,
-        read: false,
-        viewed: false,
-        bookmarked: false,
-      });
+        itemCategories,
+        summaryHtml: item.description || item.content || '',
+        contentHtml: item.content || item.description || '',
+        image,
+      }));
     } catch {
       // Continue parsing next item if one is malformed
     }

@@ -4,9 +4,11 @@ import { useFeeds } from '../../context/FeedContext';
 import { useSettings } from '../../context/SettingsContext';
 import { formatFullDateTime } from '../../utils/date';
 import { ArticleImage } from '../Common/ArticleImage';
-import { SeverityBadge, WatchlistBadge, CveChip } from '../Common/ThreatBadges';
+import { SeverityBadge, WatchlistBadge, CveChip, StackBadge } from '../Common/ThreatBadges';
+import { downloadText, iocsToCsv, iocsToStix } from '../../services/intelligence/iocExport';
 import { extractIOCs } from '../../services/intelligence/iocExtractor';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
+import { sanitizeHtml } from '../../services/rss/sanitizer';
 import {
   X,
   ExternalLink,
@@ -42,7 +44,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   hasNext = false,
   hasPrev = false,
 }) => {
-  const { toggleBookmark, toggleRead, markViewed, addCustomTagToArticle, setBookmarkFolder, setBookmarkNotes } = useFeeds();
+  const { feeds, toggleBookmark, toggleRead, markViewed, addCustomTagToArticle, setBookmarkFolder, setBookmarkNotes } = useFeeds();
   const { settings, updateSettings } = useSettings();
   const [newTagInput, setNewTagInput] = useState('');
   const [showAddTag, setShowAddTag] = useState(false);
@@ -57,6 +59,16 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     return extractIOCs(`${article.title} ${article.description || ''} ${article.content || ''}`);
   }, [article]);
 
+  // Content is sanitized at ingest; sanitizing again at render is cheap insurance for raw HTML
+  const safeContent = useMemo(() => sanitizeHtml(article.content || ''), [article.content]);
+
+  // Feber feeds (and any feed tagged "swedish") get a one-click English translation
+  const isSwedish = useMemo(
+    () => feeds.find((f) => f.id === article.sourceId)?.tags?.includes('swedish') ?? false,
+    [feeds, article.sourceId]
+  );
+  const iocFileStem = `iocs-${article.sourceId}-${article.publishedAt.slice(0, 10)}`;
+
   const watchlistMatch = useMemo(() => {
     return checkWatchlistMatch(article, settings.watchlistKeywords);
   }, [article, settings.watchlistKeywords]);
@@ -70,6 +82,10 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      // Leave browser/OS shortcuts (e.g. Cmd/Ctrl+B, Cmd/Ctrl+O) alone
+      if (e.metaKey || e.ctrlKey || e.altKey) {
         return;
       }
       if (e.key === 'Escape') {
@@ -319,6 +335,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             {watchlistMatch.matched && (
               <WatchlistBadge terms={watchlistMatch.matchedTerms} />
             )}
+            <StackBadge article={article} />
             <span className="text-theme-accent font-bold uppercase tracking-wider">
               {article.sourceName}
             </span>
@@ -378,6 +395,17 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               <span>Read Original Article</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
+            {isSwedish && article.url && (
+              <a
+                href={`https://translate.google.com/translate?sl=sv&tl=en&u=${encodeURIComponent(article.url)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto px-4 py-2.5 rounded font-mono text-xs font-bold uppercase tracking-wider bg-theme-surface border border-theme-border text-theme-text hover:border-theme-accent transition-colors flex items-center justify-center gap-2"
+              >
+                <span>Translate to English</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
 
           {/* Extracted IOCs & CVEs Drawer */}
@@ -390,13 +418,29 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     Extracted Threat Indicators & Disclosed CVEs ({extractedIOCs.length})
                   </span>
                 </div>
-                <button
-                  onClick={handleCopyAllIOCs}
-                  className="px-2.5 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border text-theme-text text-[11px] flex items-center gap-1.5 transition-colors font-mono"
-                >
-                  {copiedIOCs ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedIOCs ? 'Copied All IOCs' : 'Copy All IOCs'}</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleCopyAllIOCs}
+                    className="px-2.5 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border text-theme-text text-[11px] flex items-center gap-1.5 transition-colors font-mono"
+                  >
+                    {copiedIOCs ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedIOCs ? 'Copied All IOCs' : 'Copy All IOCs'}</span>
+                  </button>
+                  <button
+                    onClick={() => downloadText(`${iocFileStem}.csv`, iocsToCsv(extractedIOCs, article), 'text/csv')}
+                    title="Download indicators as CSV"
+                    className="px-2.5 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border text-theme-text text-[11px] transition-colors font-mono"
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => downloadText(`${iocFileStem}.stix.json`, iocsToStix(extractedIOCs, article), 'application/json')}
+                    title="Download a STIX 2.1 bundle for import into a SIEM / threat intel platform"
+                    className="px-2.5 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border text-theme-text text-[11px] transition-colors font-mono"
+                  >
+                    STIX
+                  </button>
+                </div>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-1.5 items-center">
@@ -442,7 +486,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           <div className="prose prose-slate dark:prose-invert max-w-none font-serif text-base sm:text-lg text-theme-text/90 leading-relaxed space-y-4 mb-8">
             {article.content ? (
               <div
-                dangerouslySetInnerHTML={{ __html: article.content }}
+                dangerouslySetInnerHTML={{ __html: safeContent }}
                 className="space-y-4 overflow-x-auto break-words reader-html-content"
               />
             ) : (

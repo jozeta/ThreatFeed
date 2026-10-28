@@ -1,6 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { useSettings, DEFAULT_NEWSPAPER_SECTIONS } from '../context/SettingsContext';
 import { useFeeds } from '../context/FeedContext';
+import { WATCHLIST_PRESETS } from '../services/intelligence/watchlist';
+import { IntelligenceSettings } from './settings/IntelligenceSettings';
+import { SyncSettings } from './settings/SyncSettings';
 import { exportAllThreatFeedData, importThreatFeedData } from '../services/storage/indexeddb';
 import {
   Settings as SettingsIcon,
@@ -581,9 +584,12 @@ export const SettingsPage: React.FC = () => {
                 type="text"
                 value={settings.customProxyUrl || ''}
                 onChange={(e) => updateSettings({ customProxyUrl: e.target.value })}
-                placeholder="https://my-proxy.internal/?url="
+                placeholder="https://threatfeed-proxy.<your-subdomain>.workers.dev/?url="
                 className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
               />
+              <p className="text-xs font-serif text-theme-text-muted mt-2">
+                Deploy the bundled Cloudflare Worker with <code className="font-mono">cd proxy && npx wrangler deploy</code>, then paste its URL followed by <code className="font-mono">/?url=</code>. See "Self-Hosted Proxy" in the README.
+              </p>
             </div>
           )}
         </div>
@@ -609,18 +615,19 @@ export const SettingsPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">
-              Skip Feeds with Recent Content (Auto-Refresh Cooldown)
+              Per-Feed Auto-Refresh Cooldown
             </label>
             <p className="text-xs font-serif text-theme-text-muted mb-2">
-              If a feed has been fetched and its newest item is younger than this window, don't fetch from that feed during auto-refresh until its newest item is older than the threshold.
+              Auto-refresh skips a feed that was fetched successfully within this window, to go easy on the CORS gateways. Manual refresh always fetches every feed.
             </p>
             <select
               value={settings.autoRefreshFeedCooldownHours ?? 4}
               onChange={(e) => updateSettings({ autoRefreshFeedCooldownHours: Number(e.target.value) })}
               className="w-full sm:w-64 bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
             >
+              <option value={1}>1h (Default)</option>
               <option value={2}>2h</option>
-              <option value={4}>4h (Default)</option>
+              <option value={4}>4h</option>
               <option value={6}>6h</option>
               <option value={12}>12h</option>
               <option value={24}>24h</option>
@@ -773,30 +780,27 @@ export const SettingsPage: React.FC = () => {
             Add Recommended Intelligence Stacks:
           </span>
           <div className="flex flex-wrap gap-2 text-xs font-mono">
-            <button
-              type="button"
-              onClick={() => handleAddPresetKeywords(['AWS', 'Azure', 'Google Cloud', 'Kubernetes'])}
-              className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors"
-            >
-              + Cloud Infrastructure (AWS, Azure, GCP, K8s)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleAddPresetKeywords(['Okta', 'Active Directory', 'Entra ID', 'Kerberos'])}
-              className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors"
-            >
-              + Identity & Access (Okta, Entra ID, AD)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleAddPresetKeywords(['LockBit', 'Lazarus', 'APT28', 'Midnight Blizzard', 'Volt Typhoon'])}
-              className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors"
-            >
-              + Nation-State & APT Actors
-            </button>
+            {WATCHLIST_PRESETS.map((preset) => {
+              const active = new Set(settings.watchlistKeywords.map((k) => k.toLowerCase()));
+              const missing = preset.keywords.filter((k) => !active.has(k.toLowerCase()));
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  disabled={missing.length === 0}
+                  onClick={() => handleAddPresetKeywords(missing)}
+                  title={preset.keywords.join(', ')}
+                  className="px-2.5 py-1 rounded bg-theme-card hover:bg-theme-surface border border-theme-border text-theme-text transition-colors disabled:opacity-50 disabled:cursor-default"
+                >
+                  {missing.length === 0 ? '✓' : '+'} {preset.label} ({preset.keywords.length})
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>
+
+      <IntelligenceSettings />
 
       {/* SECTION 6: EDITORIAL SECTIONS & MULTI-SOURCE CLUSTERING */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
@@ -1006,6 +1010,8 @@ export const SettingsPage: React.FC = () => {
           </button>
         </form>
       </section>
+
+      <SyncSettings />
 
       {/* SECTION 8: DATA, BACKUP & PRINT */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
