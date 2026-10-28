@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserSettings, NewspaperSectionConfig } from '../types';
 import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexeddb';
-import { DEFAULT_WATCHLIST_KEYWORDS } from '../services/intelligence/watchlist';
+import { DEFAULT_WATCHLIST_KEYWORDS, WATCHLIST_DEFAULTS_VERSION, upgradeWatchlistKeywords } from '../services/intelligence/watchlist';
 
 export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
   'General',
@@ -80,8 +80,15 @@ export const DEFAULT_SETTINGS: UserSettings = {
   reducedMotion: false,
   maxArticlesPerFeed: 25,
   maxArticleAgeDays: 30,
-  autoRefreshFeedCooldownHours: 4,
+  autoRefreshFeedCooldownHours: 1,
   watchlistKeywords: DEFAULT_WATCHLIST_KEYWORDS,
+  watchlistDefaultsVersion: WATCHLIST_DEFAULTS_VERSION,
+  dataSource: 'snapshot',
+  watchlistNotifications: false,
+  stackKeywords: [],
+  mutedKeywords: [],
+  frontPageHiddenCategories: [],
+  savedSearches: [],
   newspaperSections: DEFAULT_NEWSPAPER_SECTIONS,
   bookmarkFolders: DEFAULT_BOOKMARK_FOLDERS,
   clusteringEnabled: true,
@@ -119,8 +126,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           proxyMode: validProxy,
           maxArticlesPerFeed: typeof saved.maxArticlesPerFeed === 'number' ? saved.maxArticlesPerFeed : 25,
           maxArticleAgeDays: typeof saved.maxArticleAgeDays === 'number' ? saved.maxArticleAgeDays : 30,
-          autoRefreshFeedCooldownHours: typeof saved.autoRefreshFeedCooldownHours === 'number' ? saved.autoRefreshFeedCooldownHours : 4,
-          watchlistKeywords: Array.isArray(saved.watchlistKeywords) ? saved.watchlistKeywords : DEFAULT_WATCHLIST_KEYWORDS,
+          autoRefreshFeedCooldownHours: typeof saved.autoRefreshFeedCooldownHours === 'number' ? saved.autoRefreshFeedCooldownHours : DEFAULT_SETTINGS.autoRefreshFeedCooldownHours,
+          watchlistKeywords: Array.isArray(saved.watchlistKeywords)
+            ? upgradeWatchlistKeywords(saved.watchlistKeywords, saved.watchlistDefaultsVersion ?? 1)
+            : DEFAULT_WATCHLIST_KEYWORDS,
+          watchlistDefaultsVersion: WATCHLIST_DEFAULTS_VERSION,
           newspaperSections: Array.isArray(saved.newspaperSections) && saved.newspaperSections.length > 0 ? saved.newspaperSections : DEFAULT_NEWSPAPER_SECTIONS,
           bookmarkFolders: Array.isArray(saved.bookmarkFolders) && saved.bookmarkFolders.length > 0 ? saved.bookmarkFolders : DEFAULT_BOOKMARK_FOLDERS,
           clusteringEnabled: typeof saved.clusteringEnabled === 'boolean' ? saved.clusteringEnabled : true,
@@ -129,6 +139,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSettings(migrated);
         saveSettingsToDB(migrated);
       }
+    }).catch((err) => {
+      console.warn('Could not load saved settings, using defaults:', err);
+    }).finally(() => {
       setLoaded(true);
     });
   }, []);
@@ -224,7 +237,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, updateSetting, resetSettings }}>
-      {children}
+      {/* Children (notably FeedProvider's startup refresh) must see saved settings, not defaults */}
+      {loaded ? children : null}
     </SettingsContext.Provider>
   );
 };

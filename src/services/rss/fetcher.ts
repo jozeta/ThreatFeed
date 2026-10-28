@@ -1,5 +1,12 @@
 import { Article, Feed, FeedHealth, ProxyMode } from '../../types';
 import { parseFeedXml, parseRss2Json } from './parser';
+import { acquireGatewaySlot, parseRetryAfter, reportRateLimited, reportSlow, reportSuccess } from './gatewayPacer';
+
+// CORSFix reports an unreachable site after ~10s; wait long enough to get that answer instead of a bare timeout
+const PROXY_TIMEOUT_MS = 12000;
+
+// How many times a rate-limited (429) gateway is retried, after backing off, before moving to the next tier
+const MAX_RATE_LIMIT_RETRIES = 3;
 
 export interface GatewayProbeResult {
   alive: boolean;
@@ -62,6 +69,16 @@ interface AttemptResult {
   rawSnippet?: string;
   isTimeout?: boolean;
   isCors?: boolean;
+  retryAfterMs?: number;
+  proxyUnreachable?: boolean;
+}
+
+/**
+ * A proxy that answered but couldn't connect to the feed's site (CORSFix: 502 "target_unreachable";
+ * the bundled Cloudflare Worker uses the same marker). Usually the site blocks the proxy's servers.
+ */
+function isProxyUnreachable(status: number, body: string): boolean {
+  return (status === 502 || status === 504) && body.includes('target_unreachable');
 }
 
 /**
@@ -71,7 +88,8 @@ async function fetchAttempt(
   feed: Feed,
   url: string,
   gatewayType: 'corsfix' | 'rss2json' | 'allorigins-raw' | 'allorigins-json' | 'direct' | 'custom',
-  timeoutMs: number
+  timeoutMs: number,
+  maxItems?: number
 ): Promise<AttemptResult> {
   const t0 = Date.now();
   const controller = new AbortController();
@@ -87,19 +105,23 @@ async function fetchAttempt(
       }
     });
 
-    clearTimeout(timer);
+    // The timer keeps running until the body is read too (cleared in finally): a server that
+    // sends headers and then stalls would otherwise hang this attempt forever.
     const latencyMs = Date.now() - t0;
     const httpStatus = response.status;
 
     if (!response.ok) {
       const errSnippet = await response.text().catch(() => '');
+      const proxyUnreachable = gatewayType !== 'direct' && isProxyUnreachable(httpStatus, errSnippet);
       return {
         success: false,
         articles: [],
         latencyMs,
         httpStatus,
-        errorMessage: `HTTP ${httpStatus} (${response.statusText || 'Error'})`,
-        rawSnippet: errSnippet.slice(0, 500)
+        proxyUnreachable,
+        errorMessage: proxyUnreachable ? "Proxy can't reach site" : `HTTP ${httpStatus} (${response.statusText || 'Error'})`,
+        rawSnippet: errSnippet.slice(0, 500),
+        retryAfterMs: parseRetryAfter(response.headers.get('Retry-After'))
       };
     }
 
@@ -140,7 +162,7 @@ async function fetchAttempt(
           rawSnippet
         };
       }
-      const articles = parseFeedXml(contents, feed);
+      const articles = parseFeedXml(contents, feed, maxItems);
       return {
         success: true,
         articles,
@@ -165,7 +187,7 @@ async function fetchAttempt(
       };
     }
 
-    const articles = parseFeedXml(xmlText, feed);
+    const articles = parseFeedXml(xmlText, feed, maxItems);
     return {
       success: true,
       articles,
@@ -175,7 +197,6 @@ async function fetchAttempt(
     };
 
   } catch (err: any) {
-    clearTimeout(timer);
     const latencyMs = Date.now() - t0;
     const isTimeout = err.name === 'AbortError';
     const isCors = err instanceof TypeError && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'));
@@ -195,6 +216,8 @@ async function fetchAttempt(
       isTimeout,
       isCors
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -263,7 +286,7 @@ export async function fetchFeed(
       url: `https://proxy.corsfix.com/?url=${encodeURIComponent(canonicalFeed.url)}`,
       type: 'corsfix',
       label: 'CORSFix Gateway',
-      timeoutMs: 8000
+      timeoutMs: PROXY_TIMEOUT_MS
     });
     // Direct browser fetch (for CORS-enabled sites like Dark Reading, WIRED, The Record, etc.)
     tiers.push({
@@ -290,7 +313,7 @@ export async function fetchFeed(
       url: `https://proxy.corsfix.com/?url=${encodeURIComponent(canonicalFeed.url)}`,
       type: 'corsfix',
       label: 'CORSFix Fallback',
-      timeoutMs: 8000
+      timeoutMs: PROXY_TIMEOUT_MS
     });
     tiers.push({
       url: canonicalFeed.url,
@@ -310,7 +333,7 @@ export async function fetchFeed(
       url: `https://proxy.corsfix.com/?url=${encodeURIComponent(canonicalFeed.url)}`,
       type: 'corsfix',
       label: 'CORSFix Fallback',
-      timeoutMs: 8000
+      timeoutMs: PROXY_TIMEOUT_MS
     });
     tiers.push({
       url: canonicalFeed.url,
@@ -329,7 +352,7 @@ export async function fetchFeed(
       url: buildFetchUrl(canonicalFeed.url, 'custom', customProxyUrl),
       type: 'custom',
       label: 'Custom Proxy',
-      timeoutMs: 8000
+      timeoutMs: PROXY_TIMEOUT_MS
     });
   } else {
     // Strict Direct
@@ -343,14 +366,44 @@ export async function fetchFeed(
 
   let lastResult: AttemptResult | null = null;
   let successfulGatewayLabel = '';
+  let unreachableVia: string | null = null;
 
   for (const tier of tiers) {
-    const res = await fetchAttempt(feed, tier.url, tier.type, tier.timeoutMs);
-    lastResult = res;
+    // Proxies are shared and rate-limited, so they're paced; direct fetches each hit a different site
+    const gateway = tier.type === 'direct' ? null : tier.type;
+    let rateLimitRetries = 0;
+    let res: AttemptResult;
 
-    if (res.success && res.articles.length > 0) {
+    for (;;) {
+      if (gateway) await acquireGatewaySlot(gateway);
+      res = await fetchAttempt(
+        feed, tier.url, tier.type, tier.timeoutMs,
+        maxArticlesPerFeed > 0 ? maxArticlesPerFeed : undefined
+      );
+      if (!gateway) break;
+
+      if (res.httpStatus === 429) {
+        reportRateLimited(gateway, res.retryAfterMs);
+        if (rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+          rateLimitRetries++;
+          continue;
+        }
+      } else if (res.isTimeout) {
+        reportSlow(gateway);
+      } else if (res.success) {
+        reportSuccess(gateway);
+      }
+      break;
+    }
+    lastResult = res;
+    if (res.proxyUnreachable && !unreachableVia) unreachableVia = tier.label;
+    const retryNote = rateLimitRetries > 0 ? `, ${rateLimitRetries} rate-limit ${rateLimitRetries === 1 ? 'retry' : 'retries'}` : '';
+
+    // A parsed feed with zero items is a healthy (if quiet) feed, not a reason to try other gateways.
+    // Non-feed documents (proxy error pages) already fail in the parser.
+    if (res.success) {
       const filteredArticles = filterAndLimitArticles(res.articles, maxArticlesPerFeed, maxArticleAgeDays);
-      attemptedGateways.push(`${tier.label} (OK ${res.latencyMs}ms, ${filteredArticles.length} items)`);
+      attemptedGateways.push(`${tier.label} (OK ${res.latencyMs}ms, ${filteredArticles.length} items${retryNote})`);
       successfulGatewayLabel = tier.type;
 
       return {
@@ -370,13 +423,15 @@ export async function fetchFeed(
       };
     }
 
-    const failureNote = res.isTimeout
+    const failureNote = res.proxyUnreachable
+      ? "Proxy can't reach site"
+      : res.isTimeout
       ? `Timed out (${tier.timeoutMs}ms)`
       : res.httpStatus
         ? `HTTP ${res.httpStatus}`
         : res.errorMessage || 'Failed';
 
-    attemptedGateways.push(`${tier.label} [${failureNote}]`);
+    attemptedGateways.push(`${tier.label} [${failureNote}${retryNote}]`);
   }
 
   // All tiers failed; construct detailed diagnostic health
@@ -384,12 +439,16 @@ export async function fetchFeed(
   const isCors = proxyMode === 'direct' && lastResult?.isCors;
 
   let status: FeedHealth['status'] = 'network_error';
-  if (isTimeout) status = 'timeout';
+  // The proxy's own diagnosis is more specific than whatever the fallback tiers reported
+  if (unreachableVia) status = 'proxy_unreachable';
+  else if (isTimeout) status = 'timeout';
   else if (isCors) status = 'cors_error';
   else if (lastResult?.httpStatus) status = 'http_error';
   else if (lastResult?.errorMessage?.includes('XML')) status = 'invalid_xml';
 
-  const errorSummary = isCors
+  const errorSummary = unreachableVia
+    ? `${unreachableVia} can't reach this site; the site probably blocks proxy servers. Use your own proxy instead: deploy the Cloudflare Worker in proxy/ and set it as the Custom Proxy in Settings.`
+    : isCors
     ? 'CORS restriction: Server does not allow direct browser access. Switch to CORSFix Gateway in Settings or Health tab.'
     : lastResult?.errorMessage || 'All fetch tiers exhausted without valid feed response.';
 
@@ -419,7 +478,8 @@ export async function fetchAllFeeds(
   feeds: Feed[],
   proxyMode: ProxyMode,
   customProxyUrl?: string,
-  onProgress?: (completed: number, total: number, latestHealth: FeedHealth) => void,
+  // Called as each feed finishes, with that feed's articles, so callers can show results progressively
+  onProgress?: (completed: number, total: number, latestHealth: FeedHealth, feedArticles: Article[]) => void,
   maxArticlesPerFeed: number = 25,
   maxArticleAgeDays: number = 30
 ): Promise<{ articles: Article[]; healthMap: Record<string, FeedHealth> }> {
@@ -444,7 +504,7 @@ export async function fetchAllFeeds(
       completed++;
 
       if (onProgress) {
-        onProgress(completed, total, result.health);
+        onProgress(completed, total, result.health, result.articles);
       }
 
       // Polite micro-delay
@@ -486,7 +546,7 @@ export async function testFeedGateway(
       }
     });
 
-    clearTimeout(timer);
+    // Timer stays armed through the body read; cleared in finally
     const latencyMs = Date.now() - t0;
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => {
@@ -550,7 +610,6 @@ export async function testFeedGateway(
       headers
     };
   } catch (err: any) {
-    clearTimeout(timer);
     const latencyMs = Date.now() - t0;
     return {
       ok: false,
@@ -561,6 +620,8 @@ export async function testFeedGateway(
       rawSnippet: '',
       errorMessage: err.name === 'AbortError' ? `Timed out after ${timeoutMs}ms` : err.message || 'Network fetch failed'
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

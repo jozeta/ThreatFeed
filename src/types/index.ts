@@ -11,6 +11,7 @@ export interface Feed {
 export type FeedHealthStatus = 
   | 'healthy' 
   | 'cors_error' 
+  | 'proxy_unreachable'
   | 'invalid_xml' 
   | 'network_error' 
   | 'timeout' 
@@ -28,6 +29,7 @@ export interface FeedHealth {
   gatewayUsed?: string;
   rawSnippet?: string;
   attemptedGateways?: string[];
+  consecutiveFailures?: number; // failed refreshes in a row; drives the backoff for dead feeds
 }
 
 export interface Article {
@@ -60,6 +62,16 @@ export interface Article {
 }
 
 export type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+/** Exploitation intelligence for one CVE (from the snapshot: CISA KEV + FIRST EPSS) */
+export interface CveIntel {
+  kev: boolean;
+  kevDateAdded?: string;
+  kevRansomware?: boolean;
+  kevName?: string;
+  epss?: number; // probability of exploitation in the next 30 days, 0-1
+  percentile?: number;
+}
 
 export type IOCType = 'cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
@@ -118,6 +130,13 @@ export interface UserSettings {
   maxArticleAgeDays: number; // default: 30 (0 = unlimited)
   autoRefreshFeedCooldownHours: number; // default: 4 (hours: 0, 2, 4, 6, 12, 24)
   watchlistKeywords: string[];
+  watchlistDefaultsVersion?: number; // which default keyword set the user has received
+  dataSource: 'snapshot' | 'live'; // snapshot: load the server-built snapshot, live-fetch only feeds it doesn't cover
+  watchlistNotifications: boolean; // desktop notification when new articles match the watchlist
+  stackKeywords: string[]; // products/vendors the user runs; matching articles get a "Relevant to you" boost
+  mutedKeywords: string[]; // articles mentioning these are hidden everywhere (except bookmarks)
+  frontPageHiddenCategories: string[]; // categories left off the newspaper front page
+  savedSearches: string[];
   newspaperSections: NewspaperSectionConfig[];
   bookmarkFolders: string[];
   clusteringEnabled: boolean;
@@ -135,7 +154,7 @@ export interface FilterState {
   watchlistOnly?: boolean;
   severityFilter?: ThreatSeverity | 'all';
   dateRange: 'all' | 'today' | 'week' | 'month';
-  sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity';
+  sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity' | 'relevance';
 }
 
-export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'bookmarks' | 'sources' | 'health' | 'settings';
+export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'ransomware' | 'bookmarks' | 'sources' | 'health' | 'settings';

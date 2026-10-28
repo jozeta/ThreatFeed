@@ -1,6 +1,6 @@
 {
-  "version": "1.1",
-  "updatedAt": "2026-09-24T16:00:00Z",
+  "version": "1.3",
+  "updatedAt": "2026-10-28T12:00:00Z",
   "feeds": [
     {
       "id": "the-hacker-news",
@@ -741,6 +741,762 @@
         "vpn",
         "censorship",
         "legal"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cyber-kendra",
+      "name": "Cyber Kendra",
+      "url": "https://www.cyberkendra.com/feeds/posts/default",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "vulnerability",
+        "data-breach"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "security-boulevard",
+      "name": "Security Boulevard",
+      "url": "https://securityboulevard.com/feed/",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "enterprise",
+        "devsecops"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-security-blog",
+      "name": "Google Safety & Security",
+      "url": "https://blog.google/security/rss/",
+      "category": "Security News",
+      "tags": [
+        "google",
+        "privacy",
+        "product-security"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "jeffrey-appel",
+      "name": "Jeffrey Appel",
+      "url": "https://jeffreyappel.nl/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft",
+        "defender",
+        "detection-engineering"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-defender-xdr-blog",
+      "name": "Microsoft Defender XDR Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoftthreatprotectionblog",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft",
+        "defender",
+        "xdr"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-sentinel-blog",
+      "name": "Microsoft Sentinel Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoftsentinelblog",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft",
+        "siem",
+        "sentinel"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-entra-blog",
+      "name": "Microsoft Entra Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoft-entra-blog",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft",
+        "identity",
+        "entra"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-core-infra-security-blog",
+      "name": "Microsoft Core Infrastructure & Security Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=coreinfrastructureandsecurityblog",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft",
+        "infrastructure",
+        "hardening"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-365-blog",
+      "name": "Microsoft 365 Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoft_365blog",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "microsoft",
+        "microsoft-365"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-365-insider-blog",
+      "name": "Microsoft 365 Insider Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoft365insiderblog",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "microsoft",
+        "microsoft-365",
+        "preview"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "windows-itpro-blog",
+      "name": "Windows IT Pro Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=windows-itpro-blog",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "microsoft",
+        "windows",
+        "it-admin"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ms-intune-blog",
+      "name": "Microsoft Intune Blog",
+      "url": "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoftintuneblog",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "microsoft",
+        "intune",
+        "endpoint-management"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "appleinsider",
+      "name": "AppleInsider",
+      "url": "https://appleinsider.com/rss/news/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "mac",
+        "ios"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "osxdaily",
+      "name": "OS X Daily",
+      "url": "https://osxdaily.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "macos",
+        "how-to"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "android-central",
+      "name": "Android Central",
+      "url": "https://www.androidcentral.com/feed",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "android",
+        "google",
+        "mobile"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "techradar",
+      "name": "TechRadar",
+      "url": "https://www.techradar.com/rss",
+      "category": "Consumer Tech",
+      "tags": [
+        "gadgets",
+        "reviews"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "9to5toys",
+      "name": "9to5Toys",
+      "url": "https://9to5toys.com/feed/",
+      "category": "Consumer Tech",
+      "tags": [
+        "deals",
+        "gadgets"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "electrek",
+      "name": "Electrek",
+      "url": "https://electrek.co/feed/",
+      "category": "Consumer Tech",
+      "tags": [
+        "electric-vehicles",
+        "energy"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dronedj",
+      "name": "DroneDJ",
+      "url": "https://dronedj.com/feed/",
+      "category": "Consumer Tech",
+      "tags": [
+        "drones"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "feber-teknik",
+      "name": "Feber Teknik",
+      "url": "https://feber.se/teknik/rss/",
+      "category": "Swedish (Feber)",
+      "tags": [
+        "swedish",
+        "tech"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "feber-motor",
+      "name": "Feber Motor",
+      "url": "https://feber.se/motor/rss/",
+      "category": "Swedish (Feber)",
+      "tags": [
+        "swedish",
+        "cars"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "feber-samhalle",
+      "name": "Feber Samhälle",
+      "url": "https://feber.se/samhalle/rss/",
+      "category": "Swedish (Feber)",
+      "tags": [
+        "swedish",
+        "society"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "feber-spel",
+      "name": "Feber Spel",
+      "url": "https://feber.se/spel/rss/",
+      "category": "Swedish (Feber)",
+      "tags": [
+        "swedish",
+        "gaming"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "feber-popkultur",
+      "name": "Feber Popkultur",
+      "url": "https://feber.se/popkultur/rss/",
+      "category": "Swedish (Feber)",
+      "tags": [
+        "swedish",
+        "pop-culture"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "feber-fritid",
+      "name": "Feber Fritid",
+      "url": "https://feber.se/fritid/rss/",
+      "category": "Swedish (Feber)",
+      "tags": [
+        "swedish",
+        "leisure"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "infosecurity-magazine",
+      "name": "Infosecurity Magazine",
+      "url": "https://www.infosecurity-magazine.com/rss/news/",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "enterprise"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "security-affairs",
+      "name": "Security Affairs",
+      "url": "https://securityaffairs.com/feed",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "hacking",
+        "malware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "graham-cluley",
+      "name": "Graham Cluley",
+      "url": "https://grahamcluley.com/feed/",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "commentary"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "troy-hunt",
+      "name": "Troy Hunt",
+      "url": "https://www.troyhunt.com/rss/",
+      "category": "Security News",
+      "tags": [
+        "data-breach",
+        "have-i-been-pwned"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "techcrunch-security",
+      "name": "TechCrunch Security",
+      "url": "https://techcrunch.com/category/security/feed/",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "startups"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "databreaches-net",
+      "name": "DataBreaches.net",
+      "url": "https://databreaches.net/feed/",
+      "category": "Security News",
+      "tags": [
+        "data-breach",
+        "ransomware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "risky-bulletin",
+      "name": "Risky Bulletin",
+      "url": "https://risky.biz/feeds/risky-business-news/",
+      "category": "Security News",
+      "tags": [
+        "news",
+        "newsletter"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "unit42",
+      "name": "Palo Alto Unit 42",
+      "url": "https://unit42.paloaltonetworks.com/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "apt"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "check-point-research",
+      "name": "Check Point Research",
+      "url": "https://research.checkpoint.com/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "malware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-threat-intelligence",
+      "name": "Google Threat Intelligence (Mandiant)",
+      "url": "https://feeds.feedburner.com/threatintelligence/pvexyqv7v0v",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "apt",
+        "incident-response"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "recorded-future",
+      "name": "Recorded Future",
+      "url": "https://www.recordedfuture.com/feed",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "apt"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "zscaler-threatlabz",
+      "name": "Zscaler ThreatLabz",
+      "url": "https://www.zscaler.com/blogs/feeds/security-research",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "malware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "fortiguard-labs",
+      "name": "FortiGuard Labs",
+      "url": "https://feeds.fortinet.com/fortinet/blog/threat-research",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "malware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ransomware-live",
+      "name": "Ransomware.live (victim tracker)",
+      "url": "https://www.ransomware.live/rss.xml",
+      "category": "Malware",
+      "tags": [
+        "ransomware",
+        "leak-sites"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "objective-see",
+      "name": "Objective-See (Mac malware)",
+      "url": "https://objective-see.org/rss.xml",
+      "category": "Malware",
+      "tags": [
+        "macos",
+        "malware-analysis"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cvefeed-latest",
+      "name": "CVEFeed.io Latest CVEs",
+      "url": "https://cvefeed.io/rssfeed/latest.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cve"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "zdi-advisories",
+      "name": "Zero Day Initiative Advisories",
+      "url": "https://www.zerodayinitiative.com/rss/published/",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cve",
+        "advisories"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "msrc-update-guide",
+      "name": "Microsoft Security Update Guide",
+      "url": "https://api.msrc.microsoft.com/update-guide/rss",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cve",
+        "microsoft",
+        "patch"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "tenable-blog",
+      "name": "Tenable Blog",
+      "url": "https://www.tenable.com/blog/feed",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cve",
+        "exposure-management"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "qualys-blog",
+      "name": "Qualys Security Blog",
+      "url": "https://blog.qualys.com/feed",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cve",
+        "vulnerability-management"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "elastic-security-labs",
+      "name": "Elastic Security Labs",
+      "url": "https://www.elastic.co/security-labs/rss/feed.xml",
+      "category": "Blue Team",
+      "tags": [
+        "detection-engineering",
+        "malware-analysis"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "red-canary",
+      "name": "Red Canary Blog",
+      "url": "https://redcanary.com/blog/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "detection-engineering",
+        "incident-response"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "volexity",
+      "name": "Volexity",
+      "url": "https://www.volexity.com/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "incident-response",
+        "dfir"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "this-week-in-4n6",
+      "name": "This Week in 4n6",
+      "url": "https://thisweekin4n6.com/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "forensics"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cso-online",
+      "name": "CSO Online",
+      "url": "https://www.csoonline.com/feed/",
+      "category": "CISO & Leadership",
+      "tags": [
+        "ciso",
+        "strategy"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cybersecurity-dive",
+      "name": "Cybersecurity Dive",
+      "url": "https://www.cybersecuritydive.com/feeds/news/",
+      "category": "CISO & Leadership",
+      "tags": [
+        "ciso",
+        "industry"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "security-magazine",
+      "name": "Security Magazine",
+      "url": "https://www.securitymagazine.com/rss/topic/2236-cybersecurity",
+      "category": "CISO & Leadership",
+      "tags": [
+        "ciso",
+        "industry"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "venture-in-security",
+      "name": "Venture in Security",
+      "url": "https://ventureinsecurity.net/feed",
+      "category": "CISO & Leadership",
+      "tags": [
+        "strategy",
+        "industry"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "daniel-miessler",
+      "name": "Daniel Miessler",
+      "url": "https://danielmiessler.com/feed",
+      "category": "CISO & Leadership",
+      "tags": [
+        "strategy",
+        "ai"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ars-technica",
+      "name": "Ars Technica",
+      "url": "https://feeds.arstechnica.com/arstechnica/index",
+      "category": "General Tech",
+      "tags": [
+        "tech",
+        "science"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "hackaday",
+      "name": "Hackaday",
+      "url": "https://hackaday.com/blog/feed/",
+      "category": "General Tech",
+      "tags": [
+        "hardware-hacking",
+        "maker"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "toms-hardware",
+      "name": "Tom's Hardware",
+      "url": "https://www.tomshardware.com/feeds/all",
+      "category": "General Tech",
+      "tags": [
+        "hardware",
+        "pc"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cnet",
+      "name": "CNET",
+      "url": "https://www.cnet.com/rss/news/",
+      "category": "Consumer Tech",
+      "tags": [
+        "gadgets",
+        "reviews"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "toms-guide",
+      "name": "Tom's Guide",
+      "url": "https://www.tomsguide.com/feeds/all",
+      "category": "Consumer Tech",
+      "tags": [
+        "gadgets",
+        "reviews"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "digital-trends",
+      "name": "Digital Trends",
+      "url": "https://www.digitaltrends.com/feed/",
+      "category": "Consumer Tech",
+      "tags": [
+        "gadgets",
+        "reviews"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "android-authority",
+      "name": "Android Authority",
+      "url": "https://www.androidauthority.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "android",
+        "mobile"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "droid-life",
+      "name": "Droid Life",
+      "url": "https://www.droid-life.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "android",
+        "pixel"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "gsmarena",
+      "name": "GSMArena",
+      "url": "https://www.gsmarena.com/rss-news-reviews.php3",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "android",
+        "iphone",
+        "mobile"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cult-of-mac",
+      "name": "Cult of Mac",
+      "url": "https://www.cultofmac.com/feed",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "iphone",
+        "mac"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "idownloadblog",
+      "name": "iDownloadBlog",
+      "url": "https://www.idownloadblog.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "iphone",
+        "ios"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "six-colors",
+      "name": "Six Colors",
+      "url": "https://sixcolors.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "mac"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "macworld",
+      "name": "Macworld",
+      "url": "https://www.macworld.com/feed",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "mac",
+        "iphone"
       ],
       "enabled": true
     }

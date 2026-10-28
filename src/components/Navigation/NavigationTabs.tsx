@@ -9,6 +9,8 @@ import {
   Inbox,
   Bookmark,
   Target,
+  ClipboardList,
+  Skull,
 } from 'lucide-react';
 
 const ORDERED_PRIMARY_CATEGORIES = [
@@ -20,11 +22,14 @@ const ORDERED_PRIMARY_CATEGORIES = [
   'Research',
   'Red Team',
   'Blue Team',
+  'Microsoft Security',
+  'CISO & Leadership',
   'General Tech',
   'Consumer Tech',
   'Tech Guides & How-To',
   'Platform Ecosystems',
   'Privacy & Policy',
+  'Swedish (Feber)',
 ];
 
 interface NavigationTabsProps {
@@ -46,6 +51,17 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
     return ['All', ...combined];
   }, [feeds]);
 
+  // Unread articles per feed category, shown in the category dropdown
+  const unreadByCategory = useMemo(() => {
+    const categoryOf = new Map(feeds.map((f) => [f.id, f.category]));
+    const counts: Record<string, number> = {};
+    for (const a of articles) {
+      const category = categoryOf.get(a.sourceId);
+      if (!a.read && category) counts[category] = (counts[category] || 0) + 1;
+    }
+    return counts;
+  }, [feeds, articles]);
+
   const tabs: { id: ActiveNavTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string }[] = [
     { id: 'newspaper', label: 'Newspaper', icon: <Newspaper className="w-4 h-4" /> },
     { id: 'latest', label: 'Latest', icon: <Clock className="w-4 h-4" /> },
@@ -56,6 +72,8 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       badge: unreadCount > 0 ? unreadCount : undefined,
       badgeColor: 'bg-theme-accent text-white',
     },
+    { id: 'briefing', label: 'Briefing', icon: <ClipboardList className="w-4 h-4" /> },
+    { id: 'ransomware', label: 'Ransomware', icon: <Skull className="w-4 h-4" /> },
     {
       id: 'bookmarks',
       label: 'Saved',
@@ -133,7 +151,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
                   .filter((c) => c !== 'All')
                   .map((category) => (
                     <option key={category} value={category}>
-                      {category}
+                      {category}{unreadByCategory[category] ? ` (${unreadByCategory[category]})` : ''}
                     </option>
                   ))}
               </select>
@@ -179,7 +197,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
             .filter((c) => c !== 'All')
             .map((category) => (
               <option key={category} value={category}>
-                {category}
+                {category}{unreadByCategory[category] ? ` (${unreadByCategory[category]})` : ''}
               </option>
             ))}
         </select>

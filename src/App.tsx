@@ -1,22 +1,27 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import { useFeeds } from './context/FeedContext';
 import { useSettings } from './context/SettingsContext';
 import { useFilter } from './context/FilterContext';
 import { filterAndSortArticles } from './services/articles/filterSort';
+import { buildSearchIndex, searchScores } from './services/articles/search';
 import { Header } from './components/Header/Header';
 import { FilterBar } from './components/FilterBar/FilterBar';
 import { NewspaperView } from './components/Newspaper/NewspaperView';
 import { ListView } from './components/Layouts/ListView';
 import { ListThumbnailView } from './components/Layouts/ListThumbnailView';
 import { ReaderModal } from './components/Reader/ReaderModal';
-import { SourcesPage } from './pages/SourcesPage';
-import { FeedHealthPage } from './pages/FeedHealthPage';
-import { BookmarksPage } from './pages/BookmarksPage';
-import { SettingsPage } from './pages/SettingsPage';
 import { KeyboardShortcutsModal } from './components/Common/KeyboardShortcutsModal';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
+
+// Secondary pages load on first visit, keeping the initial bundle to what the front page needs
+const SourcesPage = lazy(() => import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage })));
+const FeedHealthPage = lazy(() => import('./pages/FeedHealthPage').then((m) => ({ default: m.FeedHealthPage })));
+const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then((m) => ({ default: m.BookmarksPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const BriefingPage = lazy(() => import('./pages/BriefingPage').then((m) => ({ default: m.BriefingPage })));
+const RansomwarePage = lazy(() => import('./pages/RansomwarePage').then((m) => ({ default: m.RansomwarePage })));
 
 export const App: React.FC = () => {
   const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
@@ -34,11 +39,26 @@ export const App: React.FC = () => {
     isModalOpen: Boolean(activeArticle || isShortcutsOpen),
   });
 
+  // The full-text index only exists while searching, and is keyed on which articles exist (not their
+  // read/bookmark state) so toggling an article doesn't rebuild it
+  const isSearching = filters.searchQuery.trim().length > 0;
+  const articleIdsKey = useMemo(() => articles.map((a) => a.id).join('|'), [articles]);
+  const searchIndex = useMemo(
+    () => (isSearching ? buildSearchIndex(articles) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- articles is captured via articleIdsKey
+    [articleIdsKey, isSearching]
+  );
+  const scores = useMemo(
+    () => (searchIndex ? searchScores(searchIndex, filters.searchQuery) : null),
+    [searchIndex, filters.searchQuery]
+  );
+
   // Calculate filtered articles based on tab and active filters
   const displayArticles = useMemo(() => {
-    // If user is on 'unread' tab, enforce unread filter
-    const effectiveFilters = activeTab === 'unread'
-      ? { ...filters, readStatus: 'unread' as const }
+    // 'unread' enforces the unread filter; 'latest' is always a newest-first stream
+    const effectiveFilters =
+      activeTab === 'unread' ? { ...filters, readStatus: 'unread' as const }
+      : activeTab === 'latest' && !(isSearching && filters.sortBy === 'relevance') ? { ...filters, sortBy: 'newest' as const }
       : filters;
 
     return filterAndSortArticles(
@@ -46,29 +66,53 @@ export const App: React.FC = () => {
       effectiveFilters,
       settings.hideReadArticles,
       feeds,
-      settings.watchlistKeywords
+      settings.watchlistKeywords,
+      {
+        searchScores: scores,
+        mutedKeywords: settings.mutedKeywords,
+        // Hidden categories only leave the front page; Latest/Unread and the category filter still show them
+        hiddenCategories: activeTab === 'newspaper' && !filters.selectedCategory ? settings.frontPageHiddenCategories : [],
+      }
     );
-  }, [articles, filters, activeTab, settings.hideReadArticles, feeds, settings.watchlistKeywords]);
+  }, [articles, filters, activeTab, settings.hideReadArticles, feeds, settings.watchlistKeywords, scores, settings.mutedKeywords, settings.frontPageHiddenCategories]);
 
-  // Find index of active article for next / previous navigation in reader
+  // Trending entities, the briefing and similar views jump to a search
+  const handleSearch = (query: string) => {
+    updateFilter('searchQuery', query);
+    updateFilter('sortBy', 'relevance');
+    setActiveTab('latest');
+  };
+
+  // The reader navigates the list as it was when it opened. Opening an article marks it read,
+  // which removes it from displayArticles on the Unread tab or with "hide read" on.
+  const [readerOrder, setReaderOrder] = useState<string[]>([]);
+
   const activeArticleIndex = useMemo(() => {
     if (!activeArticle) return -1;
-    return displayArticles.findIndex((a) => a.id === activeArticle.id);
-  }, [activeArticle, displayArticles]);
+    return readerOrder.indexOf(activeArticle.id);
+  }, [activeArticle, readerOrder]);
+
+  const openFromReaderOrder = (index: number) => {
+    const id = readerOrder[index];
+    // Prefer the live copy so read/bookmark state is current
+    const article = articles.find((a) => a.id === id);
+    if (article) setActiveArticle(article);
+  };
 
   const handleNextArticle = () => {
-    if (activeArticleIndex >= 0 && activeArticleIndex < displayArticles.length - 1) {
-      setActiveArticle(displayArticles[activeArticleIndex + 1]);
+    if (activeArticleIndex >= 0 && activeArticleIndex < readerOrder.length - 1) {
+      openFromReaderOrder(activeArticleIndex + 1);
     }
   };
 
   const handlePrevArticle = () => {
     if (activeArticleIndex > 0) {
-      setActiveArticle(displayArticles[activeArticleIndex - 1]);
+      openFromReaderOrder(activeArticleIndex - 1);
     }
   };
 
   const handleOpenArticle = (article: Article) => {
+    setReaderOrder(displayArticles.map((a) => a.id));
     setActiveArticle(article);
   };
 
@@ -114,97 +158,38 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-grow pb-16 sm:pb-8">
-        {activeTab === 'newspaper' && (
-          <>
-            {settings.layout === 'newspaper' && (
-              <NewspaperView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-            {settings.layout === 'list-thumbnails' && (
-              <ListThumbnailView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-            {settings.layout === 'list' && (
-              <ListView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-          </>
-        )}
+        {(activeTab === 'newspaper' || activeTab === 'latest' || activeTab === 'unread') && (() => {
+          // Latest skips the editorial newspaper layout in favour of a chronological list
+          const layout = activeTab === 'latest' && settings.layout === 'newspaper' ? 'list-thumbnails' : settings.layout;
+          const viewProps = { articles: displayArticles, isLoading: isRefreshing, onOpenArticle: handleOpenArticle };
+          return layout === 'newspaper' ? <NewspaperView {...viewProps} onSearch={handleSearch} />
+            : layout === 'list-thumbnails' ? <ListThumbnailView {...viewProps} />
+            : <ListView {...viewProps} />;
+        })()}
 
-        {activeTab === 'latest' && (
-          <>
-            {settings.layout === 'newspaper' && (
-              <NewspaperView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-            {settings.layout === 'list-thumbnails' && (
-              <ListThumbnailView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-            {settings.layout === 'list' && (
-              <ListView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-          </>
-        )}
+        <Suspense fallback={<div className="main-content-container mx-auto px-4 py-12 text-xs font-mono text-theme-text-muted">Loading…</div>}>
+          {activeTab === 'briefing' && (
+            <BriefingPage onOpenArticle={handleOpenArticle} onSearch={handleSearch} />
+          )}
 
-        {activeTab === 'unread' && (
-          <>
-            {settings.layout === 'newspaper' ? (
-              <NewspaperView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            ) : settings.layout === 'list-thumbnails' ? (
-              <ListThumbnailView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            ) : (
-              <ListView
-                articles={displayArticles}
-                isLoading={isRefreshing}
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
-          </>
-        )}
+          {activeTab === 'ransomware' && <RansomwarePage />}
 
-        {activeTab === 'bookmarks' && (
-          <BookmarksPage onOpenArticle={handleOpenArticle} />
-        )}
+          {activeTab === 'bookmarks' && (
+            <BookmarksPage onOpenArticle={handleOpenArticle} />
+          )}
 
-        {activeTab === 'sources' && (
-          <SourcesPage onSelectFeed={handleSelectFeedFromSources} />
-        )}
+          {activeTab === 'sources' && (
+            <SourcesPage onSelectFeed={handleSelectFeedFromSources} />
+          )}
 
-        {activeTab === 'health' && (
-          <FeedHealthPage onOpenSettings={() => setActiveTab('settings')} />
-        )}
+          {activeTab === 'health' && (
+            <FeedHealthPage onOpenSettings={() => setActiveTab('settings')} />
+          )}
 
-        {activeTab === 'settings' && (
-          <SettingsPage />
-        )}
+          {activeTab === 'settings' && (
+            <SettingsPage />
+          )}
+        </Suspense>
       </main>
 
       {/* Reader Modal (Distraction-free article reader) */}
@@ -214,7 +199,7 @@ export const App: React.FC = () => {
           onClose={() => setActiveArticle(null)}
           onNext={handleNextArticle}
           onPrev={handlePrevArticle}
-          hasNext={activeArticleIndex < displayArticles.length - 1}
+          hasNext={activeArticleIndex >= 0 && activeArticleIndex < readerOrder.length - 1}
           hasPrev={activeArticleIndex > 0}
         />
       )}

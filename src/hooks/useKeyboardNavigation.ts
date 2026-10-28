@@ -27,6 +27,11 @@ export function useKeyboardNavigation({
         return;
       }
 
+      // Leave browser/OS shortcuts (Cmd/Ctrl+R reload, Cmd/Ctrl+F find, ...) alone
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+
       // If modal is open, modal handles its own Escape / navigation
       if (isModalOpen && e.key !== 'Escape') {
         return;

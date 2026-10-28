@@ -1,5 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
+import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
 
 interface ThreatFeedDB extends DBSchema {
   articles: {
@@ -33,6 +34,7 @@ interface ThreatFeedDB extends DBSchema {
       bookmarkedAt?: string;
       bookmarkFolder?: string;
       bookmarkNotes?: string;
+      updatedAt?: string; // last change of any field; lets sync pick the newer state (incl. un-bookmarking)
     };
   };
   settings: {
@@ -100,21 +102,31 @@ export async function saveArticlesToDB(newArticles: Article[]): Promise<void> {
   const stateStore = tx.objectStore('articleState');
 
   for (const article of newArticles) {
-    // Check if user already marked this article read/viewed/bookmarked
+    // Check if user already marked this article read/viewed/bookmarked.
+    // Copy rather than mutate: callers' objects may already be in React state.
     const existingState = await stateStore.get(article.id);
-    if (existingState) {
-      article.read = existingState.read;
-      article.viewed = existingState.viewed;
-      article.bookmarked = existingState.bookmarked;
-      article.customTags = existingState.customTags || article.customTags;
-      article.readAt = existingState.readAt;
-      article.viewedAt = existingState.viewedAt;
-      article.bookmarkedAt = existingState.bookmarkedAt;
-    }
-    await articleStore.put(article);
+    await articleStore.put(existingState ? {
+      ...article,
+      read: existingState.read,
+      viewed: existingState.viewed,
+      bookmarked: existingState.bookmarked,
+      customTags: existingState.customTags || article.customTags,
+      readAt: existingState.readAt,
+      viewedAt: existingState.viewedAt,
+      bookmarkedAt: existingState.bookmarkedAt,
+      bookmarkFolder: existingState.bookmarkFolder,
+      bookmarkNotes: existingState.bookmarkNotes,
+    } : article);
   }
 
   await tx.done;
+}
+
+export async function deleteArticlesFromDB(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDB();
+  const tx = db.transaction('articles', 'readwrite');
+  await Promise.all([...ids.map(id => tx.store.delete(id)), tx.done]);
 }
 
 export async function updateArticleStateInDB(
@@ -162,6 +174,7 @@ export async function updateArticleStateInDB(
     state.bookmarkNotes = updates.bookmarkNotes;
   }
 
+  state.updatedAt = now;
   await stateStore.put(state);
 
   if (article) {
@@ -186,9 +199,10 @@ export async function markAllArticlesAsReadInDB(articleIds?: string[]): Promise<
 
   const now = new Date().toISOString();
   const allArticles = await articleStore.getAll();
+  const targetIds = articleIds ? new Set(articleIds) : null;
 
   for (const article of allArticles) {
-    if (!articleIds || articleIds.includes(article.id)) {
+    if (!targetIds || targetIds.has(article.id)) {
       if (!article.read) {
         article.read = true;
         article.readAt = now;
@@ -202,6 +216,7 @@ export async function markAllArticlesAsReadInDB(articleIds?: string[]): Promise<
         };
         state.read = true;
         state.readAt = now;
+        state.updatedAt = now;
         await stateStore.put(state);
       }
     }
@@ -258,6 +273,22 @@ export async function saveFeedHealthToDB(health: FeedHealth): Promise<void> {
 // User Settings
 const SETTINGS_KEY = 'user_settings';
 
+// Small named blobs kept alongside the settings record (e.g. 'cveIntel' from the snapshot)
+export async function getStoredValue<T>(key: string): Promise<T | null> {
+  try {
+    const db = await getDB();
+    const entry = await db.get('settings', key);
+    return entry ? (entry.value as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveStoredValue(key: string, value: unknown): Promise<void> {
+  const db = await getDB();
+  await db.put('settings', { key, value });
+}
+
 export async function getSettingsFromDB(): Promise<UserSettings | null> {
   try {
     const db = await getDB();
@@ -284,12 +315,16 @@ export async function exportAllThreatFeedData() {
   const feeds = await db.getAll('feeds');
   const articleStates = await db.getAll('articleState');
   const settingsEntry = await db.get('settings', SETTINGS_KEY);
+  // Bookmarked articles are included in full: once they drop out of their feed,
+  // the state record alone can't bring them back on another device.
+  const bookmarkedArticles = (await db.getAll('articles')).filter(a => a.bookmarked);
 
   return {
-    version: '1.0',
+    version: '1.1',
     exportDate: new Date().toISOString(),
     feeds,
     articleStates,
+    bookmarkedArticles,
     settings: settingsEntry?.value || null,
   };
 }
@@ -299,20 +334,49 @@ export async function importThreatFeedData(data: any): Promise<boolean> {
     throw new Error('Invalid ThreatFeed backup format: missing feeds list.');
   }
 
+  // Backups are untrusted input: validate feeds and re-sanitize any article content
+  const feeds = data.feeds.filter((f: any) =>
+    f && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.url === 'string' && isValidFeedUrl(f.url)
+  );
+  const states = Array.isArray(data.articleStates)
+    ? data.articleStates.filter((st: any) => st && typeof st.id === 'string')
+    : [];
+  const articles = Array.isArray(data.bookmarkedArticles)
+    ? data.bookmarkedArticles.map(sanitizeStoredArticle).filter((a: Article | null): a is Article => a !== null)
+    : [];
+
   const db = await getDB();
-  const tx = db.transaction(['feeds', 'articleState', 'settings'], 'readwrite');
+  const tx = db.transaction(['feeds', 'articleState', 'articles', 'settings'], 'readwrite');
 
   // Import feeds
   const feedStore = tx.objectStore('feeds');
-  for (const feed of data.feeds) {
-    await feedStore.put(feed);
+  for (const feed of feeds) {
+    await feedStore.put({ ...feed, tags: Array.isArray(feed.tags) ? feed.tags : [], enabled: feed.enabled !== false });
   }
 
-  // Import article state (read/bookmarks)
-  if (data.articleStates && Array.isArray(data.articleStates)) {
-    const stateStore = tx.objectStore('articleState');
-    for (const state of data.articleStates) {
-      await stateStore.put(state);
+  const articleStore = tx.objectStore('articles');
+  for (const article of articles) {
+    await articleStore.put(article);
+  }
+
+  // Import article state (read/bookmarks), and apply it to cached copies so it shows without a refetch
+  const stateStore = tx.objectStore('articleState');
+  for (const state of states) {
+    await stateStore.put(state);
+    const cached = await articleStore.get(state.id);
+    if (cached) {
+      await articleStore.put({
+        ...cached,
+        read: Boolean(state.read),
+        viewed: Boolean(state.viewed),
+        bookmarked: Boolean(state.bookmarked),
+        readAt: state.readAt,
+        viewedAt: state.viewedAt,
+        bookmarkedAt: state.bookmarkedAt,
+        customTags: state.customTags ?? cached.customTags,
+        bookmarkFolder: state.bookmarkFolder,
+        bookmarkNotes: state.bookmarkNotes,
+      });
     }
   }
 

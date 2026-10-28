@@ -3,6 +3,8 @@
  * from article titles, categories, and content.
  */
 
+import { containsTerm } from '../../utils/textMatch';
+
 const KNOWN_TAGS_MAP: Record<string, string> = {
   'ransomware': 'Ransomware',
   'malware': 'Malware',
@@ -68,30 +70,39 @@ const KNOWN_TAGS_MAP: Record<string, string> = {
   'leak': 'Data Breach'
 };
 
+function normalizeTag(raw: string): string | null {
+  const clean = raw.trim();
+  if (!clean) return null;
+
+  const lower = clean.toLowerCase();
+  if (KNOWN_TAGS_MAP[lower]) return KNOWN_TAGS_MAP[lower];
+  if (clean.length > 2 && clean.length < 35) {
+    // Capitalize first letter of each word
+    return clean
+      .split(/[\s-_]+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+  return null;
+}
+
+/**
+ * Builds an article's display tags, most specific first: the publisher's own item categories,
+ * CVE IDs, then keyword topics found in the text. Feed-level tags (`feedTags`, describing the
+ * source rather than the article) go last so they never crowd article-specific tags out of the cap.
+ */
 export function normalizeAndEnrichTags(
   rawTags: string[],
   title: string,
-  description: string
+  description: string,
+  feedTags: string[] = []
 ): string[] {
   const result = new Set<string>();
 
-  // Process raw tags from feed categories
+  // Process raw tags from the item's own categories
   for (const raw of rawTags) {
-    if (!raw) continue;
-    const clean = raw.trim();
-    if (!clean) continue;
-
-    const lower = clean.toLowerCase();
-    if (KNOWN_TAGS_MAP[lower]) {
-      result.add(KNOWN_TAGS_MAP[lower]);
-    } else if (clean.length > 2 && clean.length < 35) {
-      // Capitalize first letter of each word
-      const formatted = clean
-        .split(/[\s-_]+/)
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(' ');
-      result.add(formatted);
-    }
+    const tag = raw && normalizeTag(raw);
+    if (tag) result.add(tag);
   }
 
   const combinedText = `${title} ${description}`.toLowerCase();
@@ -106,11 +117,16 @@ export function normalizeAndEnrichTags(
     result.add('Vulnerability');
   }
 
-  // Scan text for important keywords
+  // Scan text for important keywords (whole words only: "rce" must not match "source")
   for (const [key, standardTag] of Object.entries(KNOWN_TAGS_MAP)) {
-    if (key.length >= 3 && combinedText.includes(key)) {
+    if (key.length >= 3 && containsTerm(combinedText, key)) {
       result.add(standardTag);
     }
+  }
+
+  for (const raw of feedTags) {
+    const tag = raw && normalizeTag(raw);
+    if (tag) result.add(tag);
   }
 
   return Array.from(result).slice(0, 8);

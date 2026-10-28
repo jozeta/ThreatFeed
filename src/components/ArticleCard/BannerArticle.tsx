@@ -4,7 +4,7 @@ import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
 import { useSettings } from '../../context/SettingsContext';
-import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill } from '../Common/ThreatBadges';
+import { SeverityBadge, WatchlistBadge, CveChip, ClusterPill, StackBadge } from '../Common/ThreatBadges';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { AlertCircle, Zap } from 'lucide-react';
 
@@ -49,6 +49,7 @@ export const BannerArticle: React.FC<BannerArticleProps> = ({
       <div className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-theme-border/60">
         <div className="flex flex-wrap items-center gap-2">
           <SeverityBadge severity={article.severity} score={article.severityScore} />
+          <StackBadge article={article} />
           {watchlistMatch.matched && (
             <WatchlistBadge terms={watchlistMatch.matchedTerms} />
           )}

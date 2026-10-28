@@ -19,7 +19,8 @@ import {
   Keyboard,
   Settings as SettingsIcon,
   Radio,
-  Activity
+  Activity,
+  Star
 } from 'lucide-react';
 import { LayoutMode, ActiveNavTab } from '../../types';
 import { NavigationTabs } from '../Navigation/NavigationTabs';
@@ -234,16 +235,33 @@ export const Header: React.FC<HeaderProps> = ({
               value={filters.searchQuery}
               onChange={(e) => updateFilter('searchQuery', e.target.value)}
               placeholder="Search security news... (f)"
-              className="w-full pl-9 pr-8 py-1.5 text-xs font-mono bg-theme-card border border-theme-border rounded-md text-theme-text placeholder:text-theme-text-muted focus:outline-none focus:border-theme-accent transition-colors"
+              className="w-full pl-9 pr-14 py-1.5 text-xs font-mono bg-theme-card border border-theme-border rounded-md text-theme-text placeholder:text-theme-text-muted focus:outline-none focus:border-theme-accent transition-colors"
             />
-            {filters.searchQuery && (
-              <button
-                onClick={() => updateFilter('searchQuery', '')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-text-muted hover:text-theme-text"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+            {filters.searchQuery && (() => {
+              const query = filters.searchQuery.trim();
+              const isSaved = settings.savedSearches.includes(query);
+              return (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  <button
+                    onClick={() => updateSettings({
+                      savedSearches: isSaved ? settings.savedSearches.filter((q) => q !== query) : [...settings.savedSearches, query],
+                    })}
+                    title={isSaved ? 'Remove from saved searches' : 'Save this search (shown in the Filter panel)'}
+                    aria-label={isSaved ? 'Remove saved search' : 'Save search'}
+                    className={isSaved ? 'text-theme-accent' : 'text-theme-text-muted hover:text-theme-text'}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
+                  </button>
+                  <button
+                    onClick={() => updateFilter('searchQuery', '')}
+                    aria-label="Clear search"
+                    className="text-theme-text-muted hover:text-theme-text"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Filter Toggle Button */}
