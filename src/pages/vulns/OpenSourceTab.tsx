@@ -15,10 +15,11 @@ const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 export const OpenSourceTab: React.FC<{ advisories: OssAdvisory[]; onOpenCve: (cve: string) => void }> = ({ advisories, onOpenCve }) => {
   const [ecosystem, setEcosystem] = useState('');
   const [severity, setSeverity] = useState('');
+  const [pkg, setPkg] = useState('');
 
   const filtered = useMemo(
-    () => advisories.filter((a) => (!ecosystem || a.ecosystem === ecosystem) && (!severity || a.severity === severity)),
-    [advisories, ecosystem, severity]
+    () => advisories.filter((a) => (!ecosystem || a.ecosystem === ecosystem) && (!severity || a.severity === severity) && (!pkg || `${a.ecosystem}/${a.package}` === pkg)),
+    [advisories, ecosystem, severity, pkg]
   );
   const days = useMemo(() => {
     const today = Math.floor(Date.now() / DAY_MS);
@@ -43,6 +44,7 @@ export const OpenSourceTab: React.FC<{ advisories: OssAdvisory[]; onOpenCve: (cv
         <button onClick={() => setSeverity('')} className={chipClass(!severity)}>All severities</button>
         {SEVERITIES.map((s) => <button key={s} onClick={() => setSeverity(severity === s ? '' : s)} className={chipClass(severity === s)}>{s}</button>)}
         {ecosystem && <button onClick={() => setEcosystem('')} className={chipClass(true)}>{ecosystem} ×</button>}
+        {pkg && <button onClick={() => setPkg('')} className={chipClass(true)}>{pkg} ×</button>}
       </div>
 
       <StatCards stats={[
@@ -73,7 +75,7 @@ export const OpenSourceTab: React.FC<{ advisories: OssAdvisory[]; onOpenCve: (cv
           </div>
           <div>
             <SectionTitle>Packages</SectionTitle>
-            <BarList color="bg-amber-500/70" rows={packages.slice(0, 8).map(([p, n]) => ({ key: p, label: p, value: n }))} />
+            <BarList color="bg-amber-500/70" rows={packages.slice(0, 8).map(([p, n]) => ({ key: p, label: p, value: n, active: pkg === p, onClick: () => setPkg(pkg === p ? '' : p) }))} />
           </div>
         </aside>
 

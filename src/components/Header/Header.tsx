@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className="border-b border-theme-border bg-theme-surface/90 backdrop-blur-md sticky top-0 z-30 transition-[transform,background-color,border-color] duration-300 ease-out"
+      className="border-b border-theme-border bg-theme-surface/90 backdrop-blur-md sticky top-0 z-30 transition-[transform,background-color,border-color] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
       style={{ transform: collapsed && mastheadHeight ? `translateY(-${mastheadHeight}px)` : undefined }}
     >
       <div ref={mastheadRef}>

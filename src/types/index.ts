@@ -126,6 +126,7 @@ export interface KevEntry {
   description?: string;
   epss?: number;
   percentile?: number;
+  cvss?: number; // CVSS base score from NVD (v3.x preferred)
 }
 
 export type CvssSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -252,6 +253,7 @@ export interface UserSettings {
   mutedKeywords: string[]; // articles mentioning these are hidden everywhere (except bookmarks)
   frontPageHiddenCategories: string[]; // categories left off the newspaper front page
   savedSearches: string[];
+  hiddenVulnVendors: string[]; // KEV vendors left off the Vulnerabilities page
   newspaperSections: NewspaperSectionConfig[];
   bookmarkFolders: string[];
   clusteringEnabled: boolean;

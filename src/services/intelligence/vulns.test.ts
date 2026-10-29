@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignerName, kevPerMonth, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
+import { assignerName, cvssBand, kevPerMonth, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
 import { KevEntry } from '../../types';
 
 describe('normalizeKev', () => {
@@ -86,5 +86,18 @@ describe('kevPerMonth', () => {
       { month: '2026-09', total: 1, ransomware: 0 },
       { month: '2026-10', total: 2, ransomware: 1 },
     ]);
+  });
+});
+
+describe('cvssBand', () => {
+  it('maps scores to the CVSS severity bands, edges included', () => {
+    expect(cvssBand(10)).toBe('critical');
+    expect(cvssBand(9)).toBe('critical');
+    expect(cvssBand(8.9)).toBe('high');
+    expect(cvssBand(7)).toBe('high');
+    expect(cvssBand(4)).toBe('medium');
+    expect(cvssBand(0.1)).toBe('low');
+    expect(cvssBand(0)).toBe('unscored');
+    expect(cvssBand(undefined)).toBe('unscored');
   });
 });

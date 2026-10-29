@@ -161,6 +161,32 @@ async function loadNvd(): Promise<{ records: CveRecord[]; from: Date; to: Date }
   }
 }
 
+/** CVSS scores for the whole KEV catalog: NVD's hasKev filter returns every KEV CVE in one or two pages */
+async function loadKevCvss(): Promise<Map<string, number>> {
+  const scores = new Map<string, number>();
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+  if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
+  try {
+    for (let start = 0, total = Infinity; start < total; start += 2000) {
+      if (start > 0) await new Promise(r => setTimeout(r, process.env.NVD_API_KEY ? 1000 : 6500));
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(`https://services.nvd.nist.gov/rest/json/cves/2.0?hasKev&resultsPerPage=2000&startIndex=${start}`, { headers, signal: controller.signal })
+        .finally(() => clearTimeout(timer));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const page = await res.json();
+      total = Math.min(Number(page.totalResults) || 0, 10000);
+      for (const v of page.vulnerabilities || []) {
+        const record = normalizeNvdCve(v?.cve);
+        if (record?.score !== undefined) scores.set(record.id, record.score);
+      }
+    }
+  } catch (err) {
+    console.warn(`  NVD KEV scores unavailable: ${err instanceof Error ? err.message : err}`);
+  }
+  return scores;
+}
+
 async function loadAdvisories(): Promise<OssAdvisory[]> {
   const since = new Date(Date.now() - ADVISORY_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const headers: Record<string, string> = { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' };
@@ -197,7 +223,13 @@ async function loadEpssTop(): Promise<VulnData['epssTop']> {
   }
 }
 
-const [kevEntries, nvd, advisories, epssTop] = await Promise.all([loadKev(), loadNvd(), loadAdvisories(), loadEpssTop()]);
+// Both NVD loaders share NVD's rate limit, so they run one after the other
+const nvdData = (async () => {
+  const nvd = await loadNvd();
+  await new Promise(r => setTimeout(r, process.env.NVD_API_KEY ? 1000 : 6500));
+  return { nvd, kevCvss: await loadKevCvss() };
+})();
+const [kevEntries, { nvd, kevCvss }, advisories, epssTop] = await Promise.all([loadKev(), nvdData, loadAdvisories(), loadEpssTop()]);
 const notable = (nvd?.records ?? []).filter(r => (r.score ?? 0) >= 9).sort((a, b) => b.published.localeCompare(a.published));
 
 // EPSS for every CVE the app shows: in articles, the KEV catalog, critical NVD records and advisories
@@ -219,7 +251,7 @@ for (const cve of new Set(articles.flatMap(a => a.cves || []))) {
 }
 const vulns: VulnData = {
   updatedAt: new Date().toISOString(),
-  kev: kevEntries.map(k => ({ ...k, ...epss.get(k.cve) })).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
+  kev: kevEntries.map(k => ({ ...k, ...epss.get(k.cve), cvss: kevCvss.get(k.cve) })).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
   nvd: nvd ? summarizeNvd(nvd.records, nvd.from, nvd.to) : null,
   notable: notable.map(r => ({ ...r, epss: epss.get(r.id)?.epss })),
   advisories,
@@ -288,6 +320,6 @@ writeFileSync(OUT, json);
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${(json.length / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries, ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs`);
+console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${kevCvss.size} with CVSS), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs`);
 console.log(`Incidents: ${incidents.victims.length} leak-site victims (30d), ${Object.keys(incidents.groups).length} group profiles, ${incidents.breaches.length} HIBP breaches (90d)`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);
