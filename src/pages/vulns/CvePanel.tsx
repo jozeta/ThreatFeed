@@ -1,25 +1,38 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Article, VulnData } from '../../types';
 import { nvdUrl, severityFromScore } from '../../services/intelligence/vulns';
+import { fetchCveDescription } from '../../services/intelligence/cvss';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
 import { EpssValue, SeverityPill } from './shared';
-import { X, ExternalLink, Skull } from 'lucide-react';
+import { X, ExternalLink, Skull, Star } from 'lucide-react';
 
 interface CvePanelProps {
   cve: string;
   vulns: VulnData | null;
   news: Article[]; // articles mentioning this CVE, newest first
+  watched: boolean;
+  onToggleWatch: () => void;
   onOpenArticle: (article: Article) => void;
   onClose: () => void;
 }
 
 /** Everything the app knows about one CVE: KEV entry, CVSS, EPSS, advisories and news coverage. */
-export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, onOpenArticle, onClose }) => {
+export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, onToggleWatch, onOpenArticle, onClose }) => {
   const kev = vulns?.kev.find((k) => k.cve === cve);
   const nvd = vulns?.notable.find((r) => r.id === cve);
   const advisories = vulns?.advisories.filter((a) => a.cve === cve) ?? [];
   const epss = kev?.epss ?? nvd?.epss ?? vulns?.epssTop.find((e) => e.cve === cve)?.epss;
+
+  // KEV entries carry no description (it would double the data file); NVD supplies one on demand
+  const [description, setDescription] = useState<string | null | undefined>(nvd?.description);
+  useEffect(() => {
+    if (nvd?.description) return;
+    let cancelled = false;
+    setDescription(undefined);
+    fetchCveDescription(cve).then((text) => { if (!cancelled) setDescription(text); });
+    return () => { cancelled = true; };
+  }, [cve, nvd?.description]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -52,10 +65,22 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, onOpenArti
               {kev?.ransomware && <span className="px-1.5 py-0.5 rounded bg-theme-text text-theme-bg inline-flex items-center gap-1"><Skull className="w-3 h-3" /> Used by ransomware</span>}
             </div>
           </div>
-          <button onClick={onClose} className="p-1 text-theme-text-muted hover:text-theme-text" aria-label="Close"><X className="w-5 h-5" /></button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={onToggleWatch}
+              aria-pressed={watched}
+              title={watched ? 'Stop watching this CVE' : 'Watch: get alerts when it lands in KEV, its EPSS jumps or new articles mention it'}
+              className={`flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono font-bold transition-colors ${watched ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300' : 'border-theme-border text-theme-text-muted hover:text-theme-text'}`}
+            >
+              <Star className={`w-3.5 h-3.5 ${watched ? 'fill-current' : ''}`} /> {watched ? 'Watching' : 'Watch'}
+            </button>
+            <button onClick={onClose} className="p-1 text-theme-text-muted hover:text-theme-text" aria-label="Close"><X className="w-5 h-5" /></button>
+          </div>
         </div>
 
-        {(kev?.description || nvd?.description) && <p className="text-sm font-serif text-theme-text leading-relaxed">{kev?.description || nvd?.description}</p>}
+        {description === undefined
+          ? <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading description from NVD…</p>
+          : description && <p className="text-sm font-serif text-theme-text leading-relaxed">{description}</p>}
         {kev && <p className="text-xs font-mono text-theme-text-muted">{kev.vendor} · {kev.product}</p>}
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-mono">

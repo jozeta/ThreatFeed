@@ -44,7 +44,8 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
     isRefreshing,
     refreshProgress,
     toggleFeedEnabled,
-    snapshotGeneratedAt
+    snapshotGeneratedAt,
+    dataSources
   } = useFeeds();
 
   const { settings, updateSettings } = useSettings();
@@ -411,6 +412,31 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
           </p>
         )}
       </div>
+
+      {/* External data sources used by the snapshot (KEV, NVD, EPSS, GitHub, Ransomware.live, HIBP) */}
+      {dataSources.length > 0 && settings.dataSource !== 'live' && (
+        <div className="p-4 rounded-lg bg-theme-surface border border-theme-border space-y-2">
+          <p className="text-xs font-mono font-bold text-theme-text uppercase tracking-wider">
+            Data sources in the last snapshot
+            <span className="ml-2 font-normal normal-case tracking-normal text-theme-text-muted">
+              {dataSources.filter((d) => d.status === 'ok').length}/{dataSources.length} fetched
+            </span>
+          </p>
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 text-xs font-mono">
+            {dataSources.map((d) => (
+              <li key={d.id} className="flex items-baseline gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-1px] ${d.status === 'ok' ? 'bg-emerald-500' : d.status === 'cached' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                <span className="text-theme-text">{d.label}</span>
+                <span className={d.status === 'ok' ? 'text-theme-text-muted' : d.status === 'cached' ? 'text-amber-500' : 'text-rose-500'}>
+                  {d.status === 'ok' ? (d.count !== undefined ? d.count.toLocaleString() : 'ok') : d.status === 'cached' ? 'reused previous data' : 'failed'}
+                </span>
+                {d.detail && <span className="text-theme-text-muted truncate" title={d.detail}>· {d.detail}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] font-serif text-theme-text-muted">A failed source means that part of the data is missing or older until a later run succeeds; the rest of the snapshot is unaffected.</p>
+        </div>
+      )}
 
       {/* Telemetry Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

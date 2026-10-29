@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ActiveNavTab } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
 import { useFilter } from '../../context/FilterContext';
@@ -217,8 +218,10 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
         </button>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-theme-surface/95 backdrop-blur-md border-t border-theme-border flex items-center justify-around py-1.5 px-2 safe-area-pb">
+      {/* Mobile Bottom Navigation Bar. Rendered into <body>: inside the header, whose backdrop blur and
+          collapse transform make `position: fixed` relative to the header, it would sit under it instead
+          of at the bottom of the screen. */}
+      {createPortal(<nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-theme-surface/95 backdrop-blur-md border-t border-theme-border flex items-center justify-around py-1.5 px-2 safe-area-pb">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -245,7 +248,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
             </button>
           );
         })}
-      </nav>
+      </nav>, document.body)}
     </>
   );
 };

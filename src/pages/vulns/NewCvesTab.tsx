@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { useHashParam } from '../../hooks/useHashRoute';
 import { Article, CveRecord, NvdStats } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
@@ -17,9 +18,9 @@ interface NewCvesTabProps {
 }
 
 export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, news, onOpenCve }) => {
-  const [query, setQuery] = useState('');
-  const [cwe, setCwe] = useState('');
-  const [assigner, setAssigner] = useState('');
+  const [query, setQuery] = useHashParam('q');
+  const [cwe, setCwe] = useHashParam('cwe');
+  const [assigner, setAssigner] = useHashParam('cna');
   const totals = useMemo(() => stats.daily.reduce(
     (t, d) => ({ critical: t.critical + d.critical, high: t.high + d.high, unscored: t.unscored + d.unscored }),
     { critical: 0, high: 0, unscored: 0 }
@@ -89,7 +90,23 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="CVE, product, CWE…" className="bg-transparent font-mono text-theme-text focus:outline-none w-36" />
             </label>
           </div>
-          <table className="w-full text-xs font-mono">
+          <ul className="md:hidden divide-y divide-theme-border/60 text-xs">
+            {rows.slice(0, visibleCount).map((r) => (
+              <li key={r.id} className="py-2.5 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 font-mono">
+                  <CveButton cve={r.id} onOpen={onOpenCve} />
+                  <SeverityPill severity={r.severity} score={r.score} />
+                  {r.epss !== undefined && <span className="text-theme-text-muted">EPSS <EpssValue epss={r.epss} /></span>}
+                  {kevIds.has(r.id) && <span className="px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">KEV</span>}
+                </div>
+                <p className="font-serif text-theme-text">{r.description}</p>
+                <p className="font-mono text-[11px] text-theme-text-muted">
+                  {formatRelativeTime(r.published)}{r.assigner && ` · ${r.assigner}`}{r.cwe && ` · ${r.cwe}`}{news.get(r.id)?.length ? ` · ${news.get(r.id)!.length} articles` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden md:table w-full text-xs font-mono">
             <thead>
               <tr className="text-left text-theme-text-muted uppercase tracking-wider border-b border-theme-border">
                 <th className="py-2 pr-3 font-semibold">Published</th>

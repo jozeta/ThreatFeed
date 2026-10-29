@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Article, CveIntel, Feed, FeedHealth, IncidentData, VulnData } from '../types';
+import { Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -16,7 +16,7 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadSnapshot } from '../services/snapshot';
+import { loadSnapshot, loadVulnData } from '../services/snapshot';
 import { notifyWatchlistMatches } from '../services/notifications';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
@@ -53,7 +53,9 @@ interface FeedContextType {
   cveIntel: Record<string, CveIntel>;
   snapshotGeneratedAt: string | null; // when the server snapshot in use was built by the GitHub Action
   incidents: IncidentData | null; // ransomware leak-site victims + HIBP breaches from the snapshot
-  vulns: VulnData | null; // KEV catalog, recent NVD CVEs, GitHub advisories and top EPSS from the snapshot
+  vulns: VulnData | null; // KEV catalog, recent NVD CVEs, GitHub advisories and top EPSS (see ensureVulns)
+  ensureVulns: () => Promise<void>; // loads data/vulns.json if this snapshot's copy isn't loaded yet; use the useVulns hook
+  dataSources: DataSourceStatus[]; // how each external source fared in the snapshot run
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -95,6 +97,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
   const [incidents, setIncidents] = useState<IncidentData | null>(null);
   const [vulns, setVulns] = useState<VulnData | null>(null);
+  const [dataSources, setDataSources] = useState<DataSourceStatus[]>([]);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -225,6 +228,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSnapshotGeneratedAt(await getStoredValue<string>('snapshotGeneratedAt'));
       setIncidents(await getStoredValue<IncidentData>('incidents'));
       setVulns(await getStoredValue<VulnData>('vulns'));
+      setDataSources((await getStoredValue<DataSourceStatus[]>('dataSources')) || []);
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -353,10 +357,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setIncidents(snapshot.incidents);
               await saveStoredValue('incidents', snapshot.incidents);
             }
-            if (snapshot.vulns) {
-              setVulns(snapshot.vulns);
-              await saveStoredValue('vulns', snapshot.vulns);
-            }
+            setDataSources(snapshot.sources);
+            await saveStoredValue('dataSources', snapshot.sources);
             feedsToFetch = feedsToFetch.filter(f => !covered.has(f.id));
           }
         }
@@ -616,6 +618,28 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     patchArticle(articleId, { customTags: updatedTags });
   }, [patchArticle]);
 
+  // Vulnerability data is a separate file, fetched the first time a view needs it and again whenever a newer
+  // snapshot has been loaded since; the stored copy shows straight away (and offline) in the meantime
+  const vulnsRef = useRef<VulnData | null>(null);
+  vulnsRef.current = vulns;
+  const snapshotAtRef = useRef<string | null>(null);
+  snapshotAtRef.current = snapshotGeneratedAt;
+  const vulnsRequest = useRef<Promise<void> | null>(null);
+  const ensureVulns = useCallback(() => {
+    const current = vulnsRef.current;
+    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve();
+    if (!vulnsRequest.current) {
+      vulnsRequest.current = loadVulnData()
+        .then(async (data) => {
+          if (!data) return;
+          setVulns(data);
+          await saveStoredValue('vulns', data);
+        })
+        .finally(() => { vulnsRequest.current = null; });
+    }
+    return vulnsRequest.current;
+  }, []);
+
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
   const value = useMemo<FeedContextType>(() => ({
     feeds,
@@ -623,6 +647,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     snapshotGeneratedAt,
     incidents,
     vulns,
+    ensureVulns,
+    dataSources,
     articles,
     feedHealth,
     isRefreshing,
@@ -647,7 +673,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

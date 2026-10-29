@@ -180,8 +180,18 @@ export interface EpssScore {
   percentile: number;
 }
 
+/** How one external data source fared in the last snapshot run (shown in Feed Health) */
+export interface DataSourceStatus {
+  id: string;
+  label: string;
+  status: 'ok' | 'cached' | 'failed'; // cached: the fetch failed or was skipped, previous data was reused
+  detail?: string;
+  count?: number;
+}
+
 export interface VulnData {
   updatedAt: string;
+  generatedAt?: string; // the snapshot run that produced it (data/vulns.json is published alongside the snapshot)
   kev: KevEntry[]; // the whole catalog
   nvd: NvdStats | null;
   notable: CveRecord[]; // critical (CVSS >= 9) CVEs from the NVD window
@@ -254,6 +264,7 @@ export interface UserSettings {
   frontPageHiddenCategories: string[]; // categories left off the newspaper front page
   savedSearches: string[];
   hiddenVulnVendors: string[]; // KEV vendors left off the Vulnerabilities page
+  watchedCves: string[]; // CVEs the user follows: alerts on KEV listing, EPSS jumps and new coverage
   newspaperSections: NewspaperSectionConfig[];
   bookmarkFolders: string[];
   clusteringEnabled: boolean;

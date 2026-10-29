@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { useHashParam } from '../../hooks/useHashRoute';
 import { OssAdvisory } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
@@ -13,9 +14,9 @@ const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
 /** Reviewed GitHub Security Advisories: vulnerable open-source packages, by ecosystem */
 export const OpenSourceTab: React.FC<{ advisories: OssAdvisory[]; onOpenCve: (cve: string) => void }> = ({ advisories, onOpenCve }) => {
-  const [ecosystem, setEcosystem] = useState('');
-  const [severity, setSeverity] = useState('');
-  const [pkg, setPkg] = useState('');
+  const [ecosystem, setEcosystem] = useHashParam('ecosystem');
+  const [severity, setSeverity] = useHashParam('severity');
+  const [pkg, setPkg] = useHashParam('package');
 
   const filtered = useMemo(
     () => advisories.filter((a) => (!ecosystem || a.ecosystem === ecosystem) && (!severity || a.severity === severity) && (!pkg || `${a.ecosystem}/${a.package}` === pkg)),
@@ -80,7 +81,23 @@ export const OpenSourceTab: React.FC<{ advisories: OssAdvisory[]; onOpenCve: (cv
         </aside>
 
         <div className="lg:col-span-3 overflow-x-auto">
-          <table className="w-full text-xs font-mono">
+          <ul className="md:hidden divide-y divide-theme-border/60 text-xs">
+            {filtered.slice(0, visibleCount).map((a) => (
+              <li key={a.id} className="py-2.5 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 font-mono">
+                  <SeverityPill severity={a.severity === 'unknown' ? undefined : a.severity} />
+                  {a.package && <span className="text-theme-text-muted">{a.ecosystem}/<span className="text-theme-text">{a.package}</span></span>}
+                </div>
+                <a href={a.url} target="_blank" rel="noopener noreferrer" className="block font-serif text-theme-text hover:text-theme-accent">
+                  {a.summary} <ExternalLink className="w-3 h-3 inline opacity-60" />
+                </a>
+                <p className="font-mono text-[11px] text-theme-text-muted flex flex-wrap items-center gap-1.5">
+                  {formatRelativeTime(a.publishedAt)}{a.cve && <>· <CveButton cve={a.cve} onOpen={onOpenCve} /></>}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden md:table w-full text-xs font-mono">
             <thead>
               <tr className="text-left text-theme-text-muted uppercase tracking-wider border-b border-theme-border">
                 <th className="py-2 pr-3 font-semibold">Published</th>

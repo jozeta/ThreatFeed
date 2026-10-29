@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
+import { useVulns } from '../hooks/useVulns';
+import { useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { formatRelativeTime } from '../utils/date';
 import { KevTab } from './vulns/KevTab';
 import { NewCvesTab } from './vulns/NewCvesTab';
@@ -9,16 +11,29 @@ import { ExploitTab } from './vulns/ExploitTab';
 import { OpenSourceTab } from './vulns/OpenSourceTab';
 import { VulnNewsTab } from './vulns/VulnNewsTab';
 import { CvePanel } from './vulns/CvePanel';
+import { WatchingTab } from './vulns/WatchingTab';
 import { articlesByCve } from './vulns/shared';
-import { ShieldAlert, Flame, FilePlus2, Gauge, Package, Newspaper } from 'lucide-react';
+import { ShieldAlert, Flame, FilePlus2, Gauge, Package, Newspaper, Star } from 'lucide-react';
 
-type Tab = 'kev' | 'new' | 'epss' | 'oss' | 'news';
+const TABS = ['kev', 'new', 'epss', 'oss', 'news', 'watching'] as const;
+type Tab = (typeof TABS)[number];
 
 export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
-  const { articles, feeds, vulns } = useFeeds();
-  const { settings } = useSettings();
-  const [tab, setTab] = useState<Tab>('kev');
-  const [openCve, setOpenCve] = useState<string | null>(null);
+  const { articles, feeds, cveIntel } = useFeeds();
+  const vulns = useVulns();
+  const { settings, updateSettings } = useSettings();
+
+  // Tab and open CVE live in the URL (#/vulns/<tab>?cve=…) so a view can be bookmarked or shared
+  const [route, navigate] = useHashRoute();
+  const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'kev';
+  const setTab = (t: Tab) => navigate('vulnerabilities', t);
+  const [cveParam, setCveParam] = useHashParam('cve');
+  const openCve = cveParam || null;
+  const setOpenCve = (cve: string | null) => setCveParam(cve ?? '', Boolean(cve));
+
+  const watched = settings.watchedCves;
+  const watch = (cve: string) => updateSettings({ watchedCves: [...watched.filter((c) => c !== cve), cve] });
+  const unwatch = (cve: string) => updateSettings({ watchedCves: watched.filter((c) => c !== cve) });
 
   const news = useMemo(() => articlesByCve(articles), [articles]);
   const kevIds = useMemo(() => new Set(vulns?.kev.map((k) => k.cve) ?? []), [vulns]);
@@ -34,6 +49,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
     { id: 'epss', label: 'Exploit prediction', icon: <Gauge className="w-4 h-4" /> },
     { id: 'oss', label: 'Open source', icon: <Package className="w-4 h-4" />, count: vulns?.advisories.length },
     { id: 'news', label: 'Vulnerability news', icon: <Newspaper className="w-4 h-4" /> },
+    { id: 'watching', label: 'Watching', icon: <Star className="w-4 h-4" />, count: watched.length },
   ];
 
   const noData = (what: string) => (
@@ -76,12 +92,17 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
       {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
       {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={setOpenCve} /> : noData('GitHub advisory data'))}
       {tab === 'news' && <VulnNewsTab articles={articles} feeds={feeds} kevIds={kevIds} onOpenArticle={onOpenArticle} />}
+      {tab === 'watching' && (
+        <WatchingTab watched={watched} vulns={vulns} cveIntel={cveIntel} articles={articles} onWatch={watch} onUnwatch={unwatch} onOpenCve={setOpenCve} />
+      )}
 
       {openCve && (
         <CvePanel
           cve={openCve}
           vulns={vulns}
           news={news.get(openCve) ?? []}
+          watched={watched.includes(openCve)}
+          onToggleWatch={() => (watched.includes(openCve) ? unwatch(openCve) : watch(openCve))}
           onOpenArticle={(a) => { setOpenCve(null); onOpenArticle(a); }}
           onClose={() => setOpenCve(null)}
         />

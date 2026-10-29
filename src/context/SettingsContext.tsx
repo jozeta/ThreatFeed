@@ -90,6 +90,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   frontPageHiddenCategories: [],
   savedSearches: [],
   hiddenVulnVendors: [],
+  watchedCves: [],
   newspaperSections: DEFAULT_NEWSPAPER_SECTIONS,
   bookmarkFolders: DEFAULT_BOOKMARK_FOLDERS,
   clusteringEnabled: true,
@@ -137,6 +138,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           clusteringEnabled: typeof saved.clusteringEnabled === 'boolean' ? saved.clusteringEnabled : true,
           sectionsEnabled: typeof saved.sectionsEnabled === 'boolean' ? saved.sectionsEnabled : true,
           hiddenVulnVendors: Array.isArray(saved.hiddenVulnVendors) ? saved.hiddenVulnVendors.filter((v: unknown) => typeof v === 'string') : [],
+          watchedCves: Array.isArray(saved.watchedCves) ? saved.watchedCves.filter((v: unknown) => typeof v === 'string') : [],
         };
         setSettings(migrated);
         saveSettingsToDB(migrated);

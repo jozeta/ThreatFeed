@@ -61,3 +61,25 @@ export function fetchCvss(cve: string): Promise<CvssInfo | null> {
   inFlight.set(cve, request);
   return request;
 }
+
+// Descriptions are only needed when a CVE panel opens, so they're cached for the session only
+const descriptions = new Map<string, Promise<string | null>>();
+
+/** The English description of a CVE from NVD; null when NVD has none or can't be reached */
+export function fetchCveDescription(cve: string): Promise<string | null> {
+  const cached = descriptions.get(cve);
+  if (cached) return cached;
+  const request = fetch(`https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${encodeURIComponent(cve)}`)
+    .then(res => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    .then(data => {
+      const list = data?.vulnerabilities?.[0]?.cve?.descriptions;
+      const text = Array.isArray(list) ? list.find((d: any) => d?.lang === 'en')?.value : undefined;
+      return typeof text === 'string' && text.trim() ? text.trim() : null;
+    })
+    .catch(() => {
+      descriptions.delete(cve); // rate-limited or offline: try again next time the panel opens
+      return null;
+    });
+  descriptions.set(cve, request);
+  return request;
+}

@@ -91,7 +91,57 @@ export function summarizeNvd(records: CveRecord[], from: Date, to: Date): NvdSta
   return { from: from.toISOString(), to: to.toISOString(), total: records.length, daily, cwes: top(cwes), assigners: top(assigners) };
 }
 
-const OSS_SEVERITIES = ['critical', 'high', 'medium', 'low'];
+/**
+ * The snapshot keeps every CVE from the NVD window in data/nvd-cache.json (not loaded by the app), so the
+ * next run only asks NVD for what changed since. Records are stored as compact tuples; descriptions only
+ * for critical CVEs, the only ones shown individually (a CVE rescored to critical is re-fetched anyway,
+ * because rescoring changes its last-modified date).
+ */
+export interface NvdCache {
+  fetchedAt: string; // end of the window the last successful NVD query covered
+  records: CveRecord[];
+  kevScores: Record<string, number>;
+}
+
+type CacheTuple = [string, string, number | null, string | null, string | null, string | null];
+
+export function encodeNvdCache(cache: NvdCache): unknown {
+  return {
+    version: 1,
+    fetchedAt: cache.fetchedAt,
+    records: cache.records.map((r): CacheTuple => [r.id, r.published, r.score ?? null, r.cwe ?? null, r.assigner ?? null, (r.score ?? 0) >= 9 ? r.description ?? null : null]),
+    kevScores: cache.kevScores,
+  };
+}
+
+/** Parses a cache fetched over the network; anything malformed means "no cache" (a full fetch) */
+export function decodeNvdCache(raw: any): NvdCache | null {
+  if (!raw || raw.version !== 1 || isNaN(Date.parse(raw.fetchedAt)) || !Array.isArray(raw.records)) return null;
+  const records: CveRecord[] = [];
+  for (const t of raw.records) {
+    if (!Array.isArray(t) || typeof t[0] !== 'string' || isNaN(Date.parse(t[1]))) continue;
+    const score = typeof t[2] === 'number' ? t[2] : undefined;
+    records.push({
+      id: t[0], published: t[1], score, severity: score === undefined ? undefined : severityFromScore(score),
+      cwe: t[3] ?? undefined, assigner: t[4] ?? undefined, description: t[5] ?? undefined,
+    });
+  }
+  const kevScores: Record<string, number> = {};
+  for (const [cve, score] of Object.entries(raw.kevScores && typeof raw.kevScores === 'object' ? raw.kevScores : {})) {
+    if (typeof score === 'number') kevScores[cve] = score;
+  }
+  return { fetchedAt: raw.fetchedAt, records, kevScores };
+}
+
+/** Applies changed CVEs to the cached window: updates replace, new ones are added, ones older than `from` drop out */
+export function applyNvdUpdates(records: CveRecord[], updates: CveRecord[], from: Date): CveRecord[] {
+  const byId = new Map(records.map(r => [r.id, r]));
+  for (const u of updates) byId.set(u.id, u);
+  const cutoff = from.toISOString();
+  return [...byId.values()].filter(r => r.published >= cutoff);
+}
+
+const OSS_SEVERITIES =['critical', 'high', 'medium', 'low'];
 
 /** One reviewed advisory from the GitHub Advisory Database REST API */
 export function normalizeAdvisory(raw: any): OssAdvisory | null {
