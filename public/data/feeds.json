@@ -1,6 +1,6 @@
 {
-  "version": "1.4",
-  "updatedAt": "2026-10-28T13:00:00Z",
+  "version": "1.5",
+  "updatedAt": "2026-10-29T19:00:00Z",
   "_retiredFeedIdsNote": "Default feeds removed for good (broken at the source). The app removes these from existing installs; custom feeds are never touched.",
   "retiredFeedIds": [
     "rapid7-blog",
@@ -1231,6 +1231,198 @@
       "tags": [
         "cve",
         "vulnerability-management"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cisa-alerts",
+      "name": "CISA Alerts (KEV additions)",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/alerts.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "kev",
+        "cisa",
+        "exploited",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cert-cc-vulnotes",
+      "name": "CERT/CC Vulnerability Notes",
+      "url": "https://www.kb.cert.org/vulfeed",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cert",
+        "vulnerability",
+        "advisory"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cert-se",
+      "name": "CERT-SE",
+      "url": "https://www.cert.se/feed.rss",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cert",
+        "sweden",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ncsc-nl-advisories",
+      "name": "NCSC-NL Advisories",
+      "url": "https://advisories.ncsc.nl/rss/advisories",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cert",
+        "netherlands",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cert-eu-advisories",
+      "name": "CERT-EU Security Advisories",
+      "url": "https://cert.europa.eu/publications/security-advisories-rss",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cert",
+        "eu",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cccs-advisories",
+      "name": "Canadian Centre for Cyber Security",
+      "url": "https://www.cyber.gc.ca/api/cccs/rss/v1/get?feed=alerts_advisories&lang=en",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cert",
+        "canada",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "jpcert-en",
+      "name": "JPCERT/CC",
+      "url": "https://www.jpcert.or.jp/english/rss/jpcert-en.rdf",
+      "category": "Vulnerabilities",
+      "tags": [
+        "cert",
+        "japan",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cisco-psirt",
+      "name": "Cisco Security Advisories",
+      "url": "https://sec.cloudapps.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "psirt",
+        "cisco",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "fortinet-psirt",
+      "name": "Fortinet PSIRT Advisories",
+      "url": "https://filestore.fortinet.com/fortiguard/rss/ir.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "psirt",
+        "fortinet",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "paloalto-advisories",
+      "name": "Palo Alto Networks Security Advisories",
+      "url": "https://security.paloaltonetworks.com/rss.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "psirt",
+        "palo alto",
+        "advisory",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ubuntu-usn",
+      "name": "Ubuntu Security Notices",
+      "url": "https://ubuntu.com/security/notices/rss.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "linux",
+        "ubuntu",
+        "patch",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "debian-dsa",
+      "name": "Debian Security Advisories",
+      "url": "https://www.debian.org/security/dsa",
+      "category": "Vulnerabilities",
+      "tags": [
+        "linux",
+        "debian",
+        "patch",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "chrome-releases",
+      "name": "Chrome Releases",
+      "url": "https://chromereleases.googleblog.com/feeds/posts/default",
+      "category": "Vulnerabilities",
+      "tags": [
+        "chrome",
+        "browser",
+        "patch",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "wordfence",
+      "name": "Wordfence",
+      "url": "https://www.wordfence.com/feed/",
+      "category": "Vulnerabilities",
+      "tags": [
+        "wordpress",
+        "plugin",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "horizon3-research",
+      "name": "Horizon3.ai Attack Research",
+      "url": "https://www.horizon3.ai/feed/",
+      "category": "Vulnerabilities",
+      "tags": [
+        "exploit",
+        "research",
+        "vulnerability"
       ],
       "enabled": true
     },

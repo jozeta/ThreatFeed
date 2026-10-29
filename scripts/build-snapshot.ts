@@ -1,6 +1,7 @@
 /**
  * Builds public/data/snapshot.json: every enabled default feed fetched server-side (no CORS, no
- * proxy), parsed with the app's own parser, plus CVE intelligence (CISA KEV + FIRST EPSS).
+ * proxy), parsed with the app's own parser, plus CVE intelligence (CISA KEV, FIRST EPSS, NVD, GitHub
+ * advisories) and incident data (Ransomware.live, Have I Been Pwned).
  *
  * Runs in the deploy workflow on a schedule, so the published site always carries a recent
  * snapshot and the browser only needs live fetching for feeds the user added themselves.
@@ -19,12 +20,17 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, D
 const { parseFeedXml } = await import('../src/services/rss/parser');
 const { filterAndLimitArticles } = await import('../src/services/rss/fetcher');
 const { normalizeVictim, normalizeGroup, normalizeBreach, mergeVictims } = await import('../src/services/intelligence/incidents');
+const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory } = await import('../src/services/intelligence/vulns');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
 type CveIntel = import('../src/types').CveIntel;
 type IncidentData = import('../src/types').IncidentData;
 type LeakSiteVictim = import('../src/types').LeakSiteVictim;
+type KevEntry = import('../src/types').KevEntry;
+type CveRecord = import('../src/types').CveRecord;
+type OssAdvisory = import('../src/types').OssAdvisory;
+type VulnData = import('../src/types').VulnData;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
@@ -73,23 +79,15 @@ async function snapshotFeed(feed: Feed): Promise<{ articles: Article[]; health: 
   }
 }
 
-async function loadKev(): Promise<Map<string, CveIntel>> {
-  const kev = new Map<string, CveIntel>();
+async function loadKev(): Promise<KevEntry[]> {
   try {
     const { status, text } = await fetchText('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', 'application/json');
     if (status !== 200) throw new Error(`HTTP ${status}`);
-    for (const v of JSON.parse(text).vulnerabilities || []) {
-      kev.set(String(v.cveID).toUpperCase(), {
-        kev: true,
-        kevDateAdded: v.dateAdded,
-        kevRansomware: v.knownRansomwareCampaignUse === 'Known',
-        kevName: v.vulnerabilityName,
-      });
-    }
+    return (JSON.parse(text).vulnerabilities || []).map(normalizeKev).filter((k: KevEntry | null): k is KevEntry => k !== null);
   } catch (err) {
     console.warn('KEV catalog unavailable:', err);
+    return [];
   }
-  return kev;
 }
 
 async function loadEpss(cves: string[]): Promise<Map<string, { epss: number; percentile: number }>> {
@@ -125,13 +123,108 @@ await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
 const articles = results.flatMap(r => r.articles);
 const feedHealth = Object.fromEntries(results.map(r => [r.health.feedId, r.health]));
 
-const cves = Array.from(new Set(articles.flatMap(a => a.cves || [])));
-const [kev, epss] = await Promise.all([loadKev(), loadEpss(cves)]);
+/**
+ * Vulnerability data for the Vulnerabilities page: the whole CISA KEV catalog, every CVE NVD published
+ * in the last NVD_DAYS days (aggregated; only critical ones kept individually), reviewed GitHub
+ * advisories, and the CVEs with the highest EPSS scores. Every source is optional.
+ */
+const NVD_DAYS = 14;
+const ADVISORY_DAYS = 14;
+
+async function loadNvd(): Promise<{ records: CveRecord[]; from: Date; to: Date } | null> {
+  const to = new Date();
+  const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() - (NVD_DAYS - 1)));
+  const fmt = (d: Date) => d.toISOString().replace('Z', '');
+  const records: CveRecord[] = [];
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+  if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
+  try {
+    for (let start = 0, total = Infinity; start < total; start += 2000) {
+      // Without an API key NVD allows 5 requests per 30 seconds
+      if (start > 0) await new Promise(r => setTimeout(r, process.env.NVD_API_KEY ? 1000 : 6500));
+      const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=${fmt(from)}&pubEndDate=${fmt(to)}&resultsPerPage=2000&startIndex=${start}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(url, { headers, signal: controller.signal }).finally(() => clearTimeout(timer));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const page = await res.json();
+      total = Math.min(Number(page.totalResults) || 0, 20000);
+      for (const v of page.vulnerabilities || []) {
+        const record = normalizeNvdCve(v?.cve);
+        if (record) records.push(record);
+      }
+    }
+    return { records, from, to };
+  } catch (err) {
+    console.warn(`  NVD unavailable: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+
+async function loadAdvisories(): Promise<OssAdvisory[]> {
+  const since = new Date(Date.now() - ADVISORY_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' };
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const advisories: OssAdvisory[] = [];
+  let url: string | null = `https://api.github.com/advisories?type=reviewed&per_page=100&sort=published&direction=desc&published=${encodeURIComponent(`>=${since}`)}`;
+  try {
+    for (let page = 0; url && page < 10; page++) {
+      const res: Response = await fetch(url, { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      for (const raw of await res.json()) {
+        const advisory = normalizeAdvisory(raw);
+        if (advisory) advisories.push(advisory);
+      }
+      url = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null;
+    }
+  } catch (err) {
+    console.warn(`  GitHub advisories unavailable: ${err instanceof Error ? err.message : err}`);
+  }
+  return advisories;
+}
+
+async function loadEpssTop(): Promise<VulnData['epssTop']> {
+  try {
+    const { status, text } = await fetchText('https://api.first.org/data/v1/epss?epss-gt=0.9&limit=2000', 'application/json');
+    if (status !== 200) throw new Error(`HTTP ${status}`);
+    return (JSON.parse(text).data || [])
+      .map((row: any) => ({ cve: String(row.cve).toUpperCase(), epss: Number(row.epss), percentile: Number(row.percentile) }))
+      .sort((a: { epss: number }, b: { epss: number }) => b.epss - a.epss)
+      .slice(0, 200);
+  } catch (err) {
+    console.warn(`  EPSS top list unavailable: ${err instanceof Error ? err.message : err}`);
+    return [];
+  }
+}
+
+const [kevEntries, nvd, advisories, epssTop] = await Promise.all([loadKev(), loadNvd(), loadAdvisories(), loadEpssTop()]);
+const notable = (nvd?.records ?? []).filter(r => (r.score ?? 0) >= 9).sort((a, b) => b.published.localeCompare(a.published));
+
+// EPSS for every CVE the app shows: in articles, the KEV catalog, critical NVD records and advisories
+const cves = Array.from(new Set([
+  ...articles.flatMap(a => a.cves || []),
+  ...kevEntries.map(k => k.cve),
+  ...notable.map(r => r.id),
+]));
+const epss = await loadEpss(cves);
+const kev = new Map(kevEntries.map(k => [k.cve, k]));
 const cveIntel: Record<string, CveIntel> = {};
-for (const cve of cves) {
-  const entry: CveIntel = { ...(kev.get(cve) || { kev: false }), ...(epss.get(cve) || {}) };
+for (const cve of new Set(articles.flatMap(a => a.cves || []))) {
+  const k = kev.get(cve);
+  const entry: CveIntel = {
+    ...(k ? { kev: true, kevDateAdded: k.dateAdded, kevRansomware: k.ransomware, kevName: k.name } : { kev: false }),
+    ...(epss.get(cve) || {}),
+  };
   if (entry.kev || entry.epss !== undefined) cveIntel[cve] = entry;
 }
+const vulns: VulnData = {
+  updatedAt: new Date().toISOString(),
+  kev: kevEntries.map(k => ({ ...k, ...epss.get(k.cve) })).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
+  nvd: nvd ? summarizeNvd(nvd.records, nvd.from, nvd.to) : null,
+  notable: notable.map(r => ({ ...r, epss: epss.get(r.id)?.epss })),
+  advisories,
+  epssTop,
+};
 
 /**
  * Ransomware leak-site victims (Ransomware.live) and verified breaches (Have I Been Pwned).
@@ -190,10 +283,11 @@ async function loadIncidents(): Promise<IncidentData> {
 const incidents = await loadIncidents();
 
 mkdirSync(dirname(OUT), { recursive: true });
-const json = JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), feedHealth, cveIntel, incidents, articles });
+const json = JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), feedHealth, cveIntel, incidents, vulns, articles });
 writeFileSync(OUT, json);
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
-console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${[...kev.keys()].filter(k => cveIntel[k]).length} in KEV), ${(json.length / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${(json.length / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries, ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs`);
 console.log(`Incidents: ${incidents.victims.length} leak-site victims (30d), ${Object.keys(incidents.groups).length} group profiles, ${incidents.breaches.length} HIBP breaches (90d)`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);
