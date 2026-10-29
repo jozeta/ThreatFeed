@@ -71,6 +71,8 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
     };
   }, [victims, intel]);
 
+  // Where the collected history begins (the chart starts there, whatever the filters)
+  const historyStart = useMemo(() => victims.reduce<string | undefined>((min, v) => (!min || v.discoveredAt < min ? v.discoveredAt : min), undefined), [victims]);
   const inRange = useMemo(() => filtered.filter((v) => Date.now() - new Date(v.discoveredAt).getTime() < days * DAY_MS), [filtered, days]);
   const previous = filtered.filter((v) => {
     const age = Date.now() - new Date(v.discoveredAt).getTime();
@@ -134,8 +136,8 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
       </div>
 
       <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
-        <SectionTitle>Leak-site posts per day (last 90 days)</SectionTitle>
-        <ActivityChart victims={filtered} days={90} highlightDays={days} />
+        <SectionTitle>Leak-site posts over time</SectionTitle>
+        <ActivityChart victims={filtered} historyStart={historyStart} maxDays={90} highlightDays={days} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
