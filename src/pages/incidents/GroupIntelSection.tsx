@@ -2,7 +2,7 @@ import React from 'react';
 import { GroupIntel } from '../../types';
 import { buildHash } from '../../hooks/useHashRoute';
 import { formatCount, SectionTitle } from './shared';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileText, Radio } from 'lucide-react';
 
 const CVE_SOURCES: Record<string, string> = {
   'ransomware.live': 'documented TTP',
@@ -10,9 +10,29 @@ const CVE_SOURCES: Record<string, string> = {
   news: 'news coverage',
 };
 
+const host = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
+
+/** Leak sites online / total, by type; addresses are never stored, so there is nothing to link to */
+export const LeakSiteStatus: React.FC<{ sites?: GroupIntel['leakSites'] }> = ({ sites }) => {
+  if (!sites) return null;
+  const tone = sites.online === 0 ? 'text-theme-text-muted' : sites.online < sites.total ? 'text-amber-500' : 'text-emerald-500';
+  return (
+    <span className={`inline-flex items-center gap-1 font-mono ${tone}`} title={Object.entries(sites.types).map(([t, n]) => `${n} ${t}`).join(', ')}>
+      <Radio className="w-3 h-3" /> {sites.online}/{sites.total} leak sites online
+    </span>
+  );
+};
+
 /**
- * The enrichment for one group: techniques and tools (Ransomware.live), MITRE ATT&CK, CVEs it is known to
- * exploit, and ransom payments traced on-chain (Ransomwhere). Each part only shows when there is data.
+ * The enrichment for one group: CISA advisories, CVEs it is known to exploit, techniques and tools
+ * (Ransomware.live), MITRE ATT&CK, research write-ups (Malpedia) and ransom payments traced on-chain
+ * (Ransomwhere). Each part only shows when there is data.
  */
 export const GroupIntelSection: React.FC<{ intel?: GroupIntel }> = ({ intel }) => {
   if (!intel) return null;
@@ -21,6 +41,22 @@ export const GroupIntelSection: React.FC<{ intel?: GroupIntel }> = ({ intel }) =
 
   return (
     <>
+      {intel.advisories && intel.advisories.length > 0 && (
+        <div>
+          <SectionTitle>CISA advisories</SectionTitle>
+          <ul className="space-y-1 text-xs">
+            {intel.advisories.map((a) => (
+              <li key={a.url}>
+                <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-serif font-bold text-theme-text hover:text-theme-accent inline-flex items-center gap-1">
+                  {a.title} <ExternalLink className="w-3 h-3 opacity-60" />
+                </a>
+                <span className="ml-2 font-mono text-theme-text-muted">{a.date}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {intel.cves && intel.cves.length > 0 && (
         <div>
           <SectionTitle>CVEs this group exploits ({intel.cves.length})</SectionTitle>
@@ -93,6 +129,27 @@ export const GroupIntelSection: React.FC<{ intel?: GroupIntel }> = ({ intel }) =
                 ))}
               </ul>
             </details>
+          )}
+        </div>
+      )}
+
+      {(intel.references?.length || intel.malpediaUrl) && (
+        <div>
+          <SectionTitle>Research & reporting</SectionTitle>
+          {intel.attribution && <p className="text-xs font-mono text-theme-text-muted mb-2">Tracked by vendors as {intel.attribution.join(', ')}</p>}
+          <ul className="space-y-1 text-xs font-mono">
+            {intel.references?.map((url) => (
+              <li key={url} className="truncate">
+                <a href={url} target="_blank" rel="noopener noreferrer" className="text-theme-accent hover:underline inline-flex items-center gap-1" title={url}>
+                  <FileText className="w-3 h-3 shrink-0" /> {host(url)}<span className="text-theme-text-muted truncate">{new URL(url).pathname.replace(/\/$/, '').slice(0, 60)}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          {intel.malpediaUrl && (
+            <a href={intel.malpediaUrl} target="_blank" rel="noopener noreferrer" className="mt-2 text-xs font-mono text-theme-accent hover:underline inline-flex items-center gap-1">
+              All references on Malpedia <ExternalLink className="w-3 h-3" />
+            </a>
           )}
         </div>
       )}

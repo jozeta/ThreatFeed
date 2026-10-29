@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aggregatePayments, attackProfiles, cvesFromArticles, cvesInTtps, exploitInfo, isPubliclyReported, normalizeGroupDetail,
-  normalizeGroupName, normalizePublicAttack, parseMetasploit, parseNuclei, parsePocIndex, paymentFamilyFor, publicReportIndex,
+  malpediaProfiles, normalizeGroupName, normalizePublicAttack, stopRansomwareAdvisories, parseMetasploit, parseNuclei, parsePocIndex, paymentFamilyFor, publicReportIndex,
 } from './enrichment';
 import { Article } from '../../types';
 
@@ -41,12 +41,13 @@ describe('Ransomware.live group detail', () => {
   it('keeps TTPs, tools and first-seen but never leak-site locations', () => {
     const d = normalizeGroupDetail({
       name: 'akira', added_date: '2023-04-26', altname: 'Storm-1567, Howling Scorpius', description: '<p>Akira <b>emerged</b></p>',
-      locations: [{ fqdn: 'x.onion' }],
+      locations: [{ fqdn: 'x.onion', available: true, enabled: true, type: 'DLS' }, { fqdn: 'y.onion', available: false, enabled: true, type: 'Chat' }, { fqdn: 'z.onion', enabled: false }],
       ttps: [{ tactic_id: 'TA0001', tactic_name: 'Initial Access', techniques: [{ technique_id: 'T1190', technique_name: 'Exploit Public-Facing Application', technique_details: 'Exploits CVE-2023-20269 in Cisco ASA.' }] }],
       tools: [{ CredentialTheft: ['Mimikatz', 'LaZagne'] }],
     });
     expect(d).toMatchObject({ firstSeen: '2023-04-26', altNames: ['Storm-1567', 'Howling Scorpius'], description: 'Akira emerged', tools: { CredentialTheft: ['Mimikatz', 'LaZagne'] } });
     expect(JSON.stringify(d)).not.toContain('onion');
+    expect(d?.leakSites).toEqual({ total: 2, online: 1, types: { DLS: 1, Chat: 1 } });
     expect(cvesInTtps(d?.ttps)).toEqual(['CVE-2023-20269']);
   });
 });
@@ -112,5 +113,29 @@ describe('Ransomwhere payments', () => {
     expect(families).toEqual([{ family: 'REvil / Sodinokibi', totalUsd: 1500, transactions: 2, byYear: { 2021: 1000, 2022: 500 } }]);
     expect(paymentFamilyFor('revil', families)?.family).toBe('REvil / Sodinokibi');
     expect(paymentFamilyFor('akira', families)).toBeUndefined();
+  });
+});
+
+describe('Malpedia', () => {
+  it('matches ransomware families only, keeping the variant with the most references', () => {
+    const profiles = malpediaProfiles({
+      'win.akira': { common_name: 'Akira', alt_names: ['REDBIKE'], attribution: ['Storm-1567'], urls: ['https://a.example/akira-ransomware', 'https://b.example/x'] },
+      'elf.akira': { common_name: 'Akira', urls: ['https://a.example/akira-ransomware'] },
+      'win.helix': { common_name: 'Helix', description: 'A banking trojan', urls: ['https://c.example/helix'] },
+    }, ['akira', 'helix']);
+    expect(profiles.get('akira')).toEqual({
+      attribution: ['Storm-1567'], altNames: ['REDBIKE'],
+      references: ['https://a.example/akira-ransomware', 'https://b.example/x'],
+      malpediaUrl: 'https://malpedia.caad.fkie.fraunhofer.de/details/win.akira',
+    });
+    expect(profiles.has('helix')).toBe(false);
+  });
+
+  it('finds CISA #StopRansomware advisories per group', () => {
+    const advisories = stopRansomwareAdvisories([
+      { id: '1', title: '#StopRansomware: Akira Ransomware', url: 'https://www.cisa.gov/a', publishedAt: '2026-10-01T00:00:00Z' } as Article,
+      { id: '2', title: 'Akira hits again', url: 'https://news.example/b', publishedAt: '2026-10-02T00:00:00Z' } as Article,
+    ], ['akira']);
+    expect(advisories.get('akira')).toEqual([{ title: '#StopRansomware: Akira Ransomware', url: 'https://www.cisa.gov/a', date: '2026-10-01' }]);
   });
 });
