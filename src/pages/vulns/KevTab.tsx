@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { useHashParam } from '../../hooks/useHashRoute';
 import { Article, KevEntry } from '../../types';
 import { CVSS_BANDS, CvssBandId, cvssBand, kevPerMonth, patchPriority, severityFromScore } from '../../services/intelligence/vulns';
 import { usePagedCount } from '../../hooks/usePagedCount';
@@ -26,14 +27,22 @@ interface KevTabProps {
 }
 
 export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, onOpenCve }) => {
-  const [days, setDays] = useState(90);
-  const [vendor, setVendor] = useState('');
-  const [product, setProduct] = useState('');
-  const [cwe, setCwe] = useState('');
-  const [band, setBand] = useState<CvssBandId | ''>('');
-  const [minCvss, setMinCvss] = useState(0);
-  const [ransomwareOnly, setRansomwareOnly] = useState(false);
-  const [query, setQuery] = useState('');
+  // Filters live in the URL (#/vulns/kev?vendor=…&min=7) so a filtered view can be bookmarked or shared
+  const [daysParam, setDaysParam] = useHashParam('days', '90');
+  const days = RANGES.some((r) => String(r.days) === daysParam) ? Number(daysParam) : 90;
+  const setDays = (d: number) => setDaysParam(String(d));
+  const [vendor, setVendor] = useHashParam('vendor');
+  const [product, setProduct] = useHashParam('product');
+  const [cwe, setCwe] = useHashParam('cwe');
+  const [bandParam, setBand] = useHashParam('cvss');
+  const band = (CVSS_BANDS.some((b) => b.id === bandParam) ? bandParam : '') as CvssBandId | '';
+  const [minParam, setMinParam] = useHashParam('min', '0');
+  const minCvss = Math.min(10, Math.max(0, Number(minParam) || 0));
+  const setMinCvss = (n: number) => setMinParam(String(n));
+  const [ransomwareParam, setRansomwareParam] = useHashParam('ransomware');
+  const ransomwareOnly = ransomwareParam === '1';
+  const setRansomwareOnly = (on: boolean) => setRansomwareParam(on ? '1' : '');
+  const [query, setQuery] = useHashParam('q');
 
   // Every filter except the time range applies to the chart too; the range only to the stats and lists
   const filtered = useMemo(() => {
@@ -175,7 +184,26 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
         </aside>
 
         <div className="lg:col-span-3 overflow-x-auto">
-          <table className="w-full text-xs font-mono">
+          {/* Phones get cards; the table needs more width than a phone has */}
+          <ul className="md:hidden divide-y divide-theme-border/60 text-xs">
+            {inRange.slice(0, visibleCount).map((k) => (
+              <li key={k.cve} className="py-2.5 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 font-mono">
+                  <CveButton cve={k.cve} onOpen={onOpenCve} />
+                  <SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} />
+                  <span className="text-theme-text-muted">EPSS <EpssValue epss={k.epss} /></span>
+                  {k.ransomware && <span className="px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
+                </div>
+                <p className="font-serif text-theme-text">{k.name}</p>
+                <p className="font-mono text-[11px] text-theme-text-muted">
+                  added {k.dateAdded}
+                  {k.dueDate && <> · <span className={k.dueDate >= today && k.dueDate <= in14Days ? 'text-orange-500 font-bold' : ''}>due {k.dueDate}</span></>}
+                  {news.get(k.cve)?.length ? ` · ${news.get(k.cve)!.length} articles` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden md:table w-full text-xs font-mono">
             <thead>
               <tr className="text-left text-theme-text-muted uppercase tracking-wider border-b border-theme-border">
                 <th className="py-2 pr-3 font-semibold">Added</th>
@@ -193,7 +221,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
                   <td className="py-2 pr-3 whitespace-nowrap text-theme-text-muted">{k.dateAdded}</td>
                   <td className="py-2 pr-3"><CveButton cve={k.cve} onOpen={onOpenCve} /></td>
                   <td className="py-2 pr-3 text-theme-text">
-                    <span className="font-serif" title={k.description}>{k.name}</span>
+                    <span className="font-serif">{k.name}</span>
                     {k.ransomware && <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
                   </td>
                   <td className="py-2 pr-3"><SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} /></td>

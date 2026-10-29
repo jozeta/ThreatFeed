@@ -1,4 +1,5 @@
 import { Article } from '../types';
+import type { CveChange } from './intelligence/cveWatch';
 import { checkWatchlistMatch } from './intelligence/watchlist';
 
 export function notificationsSupported(): boolean {
@@ -33,4 +34,20 @@ export function notifyWatchlistMatches(newArticles: Article[], keywords: string[
     notification.close();
   };
   return matches.length;
+}
+
+/** One notification for changes to watched CVEs (KEV listing, EPSS jump, new coverage) */
+export function notifyCveChanges(changes: CveChange[]): void {
+  if (!notificationsSupported() || Notification.permission !== 'granted' || changes.length === 0) return;
+  const lines = changes.slice(0, 4).map(c => `• ${c.cve}: ${c.text}`);
+  if (changes.length > 4) lines.push(`…and ${changes.length - 4} more`);
+  const notification = new Notification(
+    `ThreatFeed: ${changes.length} update${changes.length === 1 ? '' : 's'} on watched CVEs`,
+    { body: lines.join('\n'), tag: 'threatfeed-cve-watch', icon: `${import.meta.env.BASE_URL}icon.svg` }
+  );
+  notification.onclick = () => {
+    window.focus();
+    window.location.hash = '#/vulns/watching';
+    notification.close();
+  };
 }

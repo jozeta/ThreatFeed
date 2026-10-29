@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
+import { useVulns } from '../hooks/useVulns';
+import { buildHash } from '../hooks/useHashRoute';
 import { useSettings } from '../context/SettingsContext';
 import { buildBriefing, briefingToMarkdown, BriefingStory } from '../services/intelligence/briefing';
 import { downloadText } from '../services/intelligence/iocExport';
@@ -35,15 +37,17 @@ const Empty: React.FC<{ text: string }> = ({ text }) => <p className="text-xs fo
 
 export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSearch }) => {
   const { articles, cveIntel, incidents } = useFeeds();
+  const vulns = useVulns();
   const { settings } = useSettings();
   const [windowHours, setWindowHours] = useState(24);
   const [copied, setCopied] = useState(false);
 
   const briefing = useMemo(
-    () => buildBriefing(articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, Date.now(), incidents),
-    [articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, incidents]
+    () => buildBriefing(articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, Date.now(), incidents, vulns),
+    [articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, incidents, vulns]
   );
 
+  const stackVulnCount = briefing.stackVulns.kev.length + briefing.stackVulns.cves.length + briefing.stackVulns.advisories.length;
   const markdown = () => briefingToMarkdown(briefing);
   const handleCopy = async () => {
     await navigator.clipboard.writeText(markdown());
@@ -122,6 +126,43 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
             {settings.stackKeywords.length === 0
               ? <Empty text='Add the products you run under Settings → "My Stack" to see stories that affect you.' />
               : briefing.stack.length ? <ul className="divide-y divide-theme-border/60">{briefing.stack.map((s) => storyRow(s, s.stackTerms))}</ul> : <Empty text="No stories mention your stack." />}
+          </Section>
+
+          <Section icon={<ShieldAlert className="w-4 h-4 text-rose-500" />} title="Vulnerabilities in Your Stack" count={stackVulnCount}>
+            {settings.stackKeywords.length === 0
+              ? <Empty text='Add the products you run under Settings → "My Stack" to see new KEV entries, critical CVEs and advisories that affect them.' />
+              : !vulns
+                ? <Empty text="Vulnerability data arrives with the server snapshot." />
+                : stackVulnCount === 0
+                  ? <Empty text="Nothing new for your stack in this window." />
+                  : (
+                    <ul className="divide-y divide-theme-border/60 text-xs">
+                      {briefing.stackVulns.kev.map((k) => (
+                        <li key={k.cve} className="py-2">
+                          <a href={buildHash('vulnerabilities', 'kev', new URLSearchParams({ cve: k.cve }))} className="font-mono font-bold text-theme-accent hover:underline">{k.cve}</a>
+                          <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">added to KEV</span>
+                          <p className="font-serif text-theme-text mt-0.5">{k.name}</p>
+                          <p className="font-mono text-[11px] text-amber-600 dark:text-amber-400">{k.terms.join(', ')}</p>
+                        </li>
+                      ))}
+                      {briefing.stackVulns.cves.map((r) => (
+                        <li key={r.id} className="py-2">
+                          <a href={buildHash('vulnerabilities', 'new', new URLSearchParams({ cve: r.id }))} className="font-mono font-bold text-theme-accent hover:underline">{r.id}</a>
+                          <span className="ml-1.5 font-mono text-rose-500 font-bold">CVSS {r.score}</span>
+                          <p className="font-serif text-theme-text mt-0.5 line-clamp-2">{r.description}</p>
+                          <p className="font-mono text-[11px] text-amber-600 dark:text-amber-400">{r.terms.join(', ')}</p>
+                        </li>
+                      ))}
+                      {briefing.stackVulns.advisories.map((a) => (
+                        <li key={a.id} className="py-2">
+                          <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-mono font-bold text-theme-accent hover:underline">{a.id}</a>
+                          <span className="ml-1.5 font-mono text-theme-text-muted">{a.severity} · {a.ecosystem}/{a.package}</span>
+                          <p className="font-serif text-theme-text mt-0.5">{a.summary}</p>
+                          <p className="font-mono text-[11px] text-amber-600 dark:text-amber-400">{a.terms.join(', ')}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
           </Section>
         </div>
 

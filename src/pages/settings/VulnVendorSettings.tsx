@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useSettings } from '../../context/SettingsContext';
-import { useFeeds } from '../../context/FeedContext';
+import { useVulns } from '../../hooks/useVulns';
 import { ChevronDown, Plus, Search, ShieldAlert, X } from 'lucide-react';
 
 /**
@@ -9,7 +9,7 @@ import { ChevronDown, Plus, Search, ShieldAlert, X } from 'lucide-react';
  */
 export const VulnVendorSettings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
-  const { vulns } = useFeeds();
+  const vulns = useVulns();
   const [showHidden, setShowHidden] = useState(false);
   const [query, setQuery] = useState('');
 

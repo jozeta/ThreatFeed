@@ -20,7 +20,7 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, D
 const { parseFeedXml } = await import('../src/services/rss/parser');
 const { filterAndLimitArticles } = await import('../src/services/rss/fetcher');
 const { normalizeVictim, normalizeGroup, normalizeBreach, mergeVictims } = await import('../src/services/intelligence/incidents');
-const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory } = await import('../src/services/intelligence/vulns');
+const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory, encodeNvdCache, decodeNvdCache, applyNvdUpdates } = await import('../src/services/intelligence/vulns');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
@@ -31,9 +31,22 @@ type KevEntry = import('../src/types').KevEntry;
 type CveRecord = import('../src/types').CveRecord;
 type OssAdvisory = import('../src/types').OssAdvisory;
 type VulnData = import('../src/types').VulnData;
+type DataSourceStatus = import('../src/types').DataSourceStatus;
+type NvdCache = import('../src/services/intelligence/vulns').NvdCache;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
+const VULNS_OUT = resolve(root, 'public/data/vulns.json'); // loaded by the app only when a vulnerability view needs it
+const NVD_CACHE_OUT = resolve(root, 'public/data/nvd-cache.json'); // read back by the next run, never by the app
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// How every external source fared this run; published in the snapshot and shown in Feed Health
+const sources: DataSourceStatus[] = [];
+const report = (status: DataSourceStatus) => {
+  sources.push(status);
+  if (status.status !== 'ok') console.warn(`  ${status.label}: ${status.status}${status.detail ? ` (${status.detail})` : ''}`);
+};
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 200);
 const USER_AGENT = 'ThreatFeed snapshot bot (+https://github.com/jozeta/ThreatFeed)';
 const MAX_ARTICLES_PER_FEED = 25;
 const MAX_AGE_DAYS = 30;
@@ -83,15 +96,18 @@ async function loadKev(): Promise<KevEntry[]> {
   try {
     const { status, text } = await fetchText('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', 'application/json');
     if (status !== 200) throw new Error(`HTTP ${status}`);
-    return (JSON.parse(text).vulnerabilities || []).map(normalizeKev).filter((k: KevEntry | null): k is KevEntry => k !== null);
+    const entries = (JSON.parse(text).vulnerabilities || []).map(normalizeKev).filter((k: KevEntry | null): k is KevEntry => k !== null);
+    report({ id: 'kev', label: 'CISA KEV catalog', status: 'ok', count: entries.length });
+    return entries;
   } catch (err) {
-    console.warn('KEV catalog unavailable:', err);
+    report({ id: 'kev', label: 'CISA KEV catalog', status: 'failed', detail: errorText(err) });
     return [];
   }
 }
 
 async function loadEpss(cves: string[]): Promise<Map<string, { epss: number; percentile: number }>> {
   const scores = new Map<string, { epss: number; percentile: number }>();
+  let failed = 0;
   for (let i = 0; i < cves.length; i += 100) {
     const batch = cves.slice(i, i + 100);
     try {
@@ -101,9 +117,12 @@ async function loadEpss(cves: string[]): Promise<Map<string, { epss: number; per
         scores.set(String(row.cve).toUpperCase(), { epss: Number(row.epss), percentile: Number(row.percentile) });
       }
     } catch (err) {
+      failed++;
       console.warn('EPSS batch failed:', err);
     }
   }
+  const batches = Math.ceil(cves.length / 100);
+  report({ id: 'epss', label: 'FIRST EPSS scores', status: failed === 0 ? 'ok' : 'failed', count: scores.size, detail: failed ? `${failed} of ${batches} batches failed` : undefined });
   return scores;
 }
 
@@ -130,65 +149,90 @@ const feedHealth = Object.fromEntries(results.map(r => [r.health.feedId, r.healt
  */
 const NVD_DAYS = 14;
 const ADVISORY_DAYS = 14;
+const NVD_MAX_CACHE_AGE_MS = 2 * DAY_MS; // older than this, refetch the whole window
 
-async function loadNvd(): Promise<{ records: CveRecord[]; from: Date; to: Date } | null> {
+// NVD allows 5 requests per 30 seconds without an API key (50 with one); every NVD call goes through here
+const NVD_SPACING_MS = process.env.NVD_API_KEY ? 700 : 6500;
+let lastNvdRequest = 0;
+async function nvdPages(query: string, maxResults: number): Promise<CveRecord[]> {
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+  if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
+  const records: CveRecord[] = [];
+  for (let start = 0, total = Infinity; start < total; start += 2000) {
+    const wait = lastNvdRequest + NVD_SPACING_MS - Date.now();
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    lastNvdRequest = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    const res = await fetch(`https://services.nvd.nist.gov/rest/json/cves/2.0?${query}&resultsPerPage=2000&startIndex=${start}`, { headers, signal: controller.signal })
+      .finally(() => clearTimeout(timer));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const page = await res.json();
+    total = Math.min(Number(page.totalResults) || 0, maxResults);
+    for (const v of page.vulnerabilities || []) {
+      const record = normalizeNvdCve(v?.cve);
+      if (record) records.push(record);
+    }
+  }
+  return records;
+}
+
+/**
+ * Every CVE published in the window plus CVSS scores for the KEV catalog. With the previous run's cache
+ * (PREVIOUS_NVD_CACHE_URL) only CVEs modified since then are fetched, usually one small request;
+ * otherwise the whole window (about 8,000 CVEs) and the whole KEV catalog are downloaded.
+ */
+async function loadNvdData(kevIds: Set<string>): Promise<{ cache: NvdCache; from: Date; to: Date } | null> {
   const to = new Date();
   const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() - (NVD_DAYS - 1)));
   const fmt = (d: Date) => d.toISOString().replace('Z', '');
-  const records: CveRecord[] = [];
-  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
-  if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
-  try {
-    for (let start = 0, total = Infinity; start < total; start += 2000) {
-      // Without an API key NVD allows 5 requests per 30 seconds
-      if (start > 0) await new Promise(r => setTimeout(r, process.env.NVD_API_KEY ? 1000 : 6500));
-      const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=${fmt(from)}&pubEndDate=${fmt(to)}&resultsPerPage=2000&startIndex=${start}`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60000);
-      const res = await fetch(url, { headers, signal: controller.signal }).finally(() => clearTimeout(timer));
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const page = await res.json();
-      total = Math.min(Number(page.totalResults) || 0, 20000);
-      for (const v of page.vulnerabilities || []) {
-        const record = normalizeNvdCve(v?.cve);
-        if (record) records.push(record);
-      }
+  const scoreOf = (r: CveRecord) => r.score ?? 0; // 0 = looked up, not scored yet (so it isn't looked up every run)
+
+  let previous: NvdCache | null = null;
+  if (process.env.PREVIOUS_NVD_CACHE_URL) {
+    try {
+      const { status, text } = await fetchText(process.env.PREVIOUS_NVD_CACHE_URL, 'application/json');
+      if (status === 200) previous = decodeNvdCache(JSON.parse(text));
+    } catch {
+      // No cache (first run, or the site is down): fall back to a full fetch
     }
-    return { records, from, to };
+  }
+  const age = previous ? to.getTime() - Date.parse(previous.fetchedAt) : Infinity;
+
+  try {
+    if (previous && age > 0 && age < NVD_MAX_CACHE_AGE_MS) {
+      // Overlap by 15 minutes so CVEs modified while the last run was fetching aren't missed
+      const since = new Date(Date.parse(previous.fetchedAt) - 15 * 60 * 1000);
+      const updates = await nvdPages(`lastModStartDate=${fmt(since)}&lastModEndDate=${fmt(to)}`, 20000);
+      const records = applyNvdUpdates(previous.records, updates, from);
+      const kevScores = { ...previous.kevScores };
+      for (const u of updates) if (kevIds.has(u.id)) kevScores[u.id] = scoreOf(u);
+      const missing = [...kevIds].filter(id => kevScores[id] === undefined);
+      if (missing.length > 20) {
+        for (const r of await nvdPages('hasKev', 10000)) kevScores[r.id] = scoreOf(r);
+      } else {
+        for (const id of missing) for (const r of await nvdPages(`cveId=${encodeURIComponent(id)}`, 1)) kevScores[r.id] = scoreOf(r);
+      }
+      report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'ok', count: records.length, detail: `incremental: ${updates.length} changed CVEs, ${missing.length} new KEV scores` });
+      return { cache: { fetchedAt: to.toISOString(), records, kevScores }, from, to };
+    }
+    const records = await nvdPages(`pubStartDate=${fmt(from)}&pubEndDate=${fmt(to)}`, 20000);
+    const kevScores: Record<string, number> = {};
+    for (const r of await nvdPages('hasKev', 10000)) kevScores[r.id] = scoreOf(r);
+    report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'ok', count: records.length, detail: previous ? 'full refresh (cache too old)' : 'full download (no cache)' });
+    return { cache: { fetchedAt: to.toISOString(), records, kevScores }, from, to };
   } catch (err) {
-    console.warn(`  NVD unavailable: ${err instanceof Error ? err.message : err}`);
+    if (previous) {
+      report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'cached', count: previous.records.length, detail: `${errorText(err)}; reusing data from ${previous.fetchedAt}` });
+      return { cache: { ...previous, records: applyNvdUpdates(previous.records, [], from) }, from, to };
+    }
+    report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'failed', detail: errorText(err) });
     return null;
   }
 }
 
-/** CVSS scores for the whole KEV catalog: NVD's hasKev filter returns every KEV CVE in one or two pages */
-async function loadKevCvss(): Promise<Map<string, number>> {
-  const scores = new Map<string, number>();
-  const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
-  if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
-  try {
-    for (let start = 0, total = Infinity; start < total; start += 2000) {
-      if (start > 0) await new Promise(r => setTimeout(r, process.env.NVD_API_KEY ? 1000 : 6500));
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60000);
-      const res = await fetch(`https://services.nvd.nist.gov/rest/json/cves/2.0?hasKev&resultsPerPage=2000&startIndex=${start}`, { headers, signal: controller.signal })
-        .finally(() => clearTimeout(timer));
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const page = await res.json();
-      total = Math.min(Number(page.totalResults) || 0, 10000);
-      for (const v of page.vulnerabilities || []) {
-        const record = normalizeNvdCve(v?.cve);
-        if (record?.score !== undefined) scores.set(record.id, record.score);
-      }
-    }
-  } catch (err) {
-    console.warn(`  NVD KEV scores unavailable: ${err instanceof Error ? err.message : err}`);
-  }
-  return scores;
-}
-
 async function loadAdvisories(): Promise<OssAdvisory[]> {
-  const since = new Date(Date.now() - ADVISORY_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const since = new Date(Date.now() - ADVISORY_DAYS * DAY_MS).toISOString().slice(0, 10);
   const headers: Record<string, string> = { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   const advisories: OssAdvisory[] = [];
@@ -203,8 +247,9 @@ async function loadAdvisories(): Promise<OssAdvisory[]> {
       }
       url = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null;
     }
+    report({ id: 'ghsa', label: 'GitHub Advisory Database', status: 'ok', count: advisories.length });
   } catch (err) {
-    console.warn(`  GitHub advisories unavailable: ${err instanceof Error ? err.message : err}`);
+    report({ id: 'ghsa', label: 'GitHub Advisory Database', status: 'failed', count: advisories.length, detail: errorText(err) });
   }
   return advisories;
 }
@@ -213,26 +258,24 @@ async function loadEpssTop(): Promise<VulnData['epssTop']> {
   try {
     const { status, text } = await fetchText('https://api.first.org/data/v1/epss?epss-gt=0.9&limit=2000', 'application/json');
     if (status !== 200) throw new Error(`HTTP ${status}`);
-    return (JSON.parse(text).data || [])
+    const top = (JSON.parse(text).data || [])
       .map((row: any) => ({ cve: String(row.cve).toUpperCase(), epss: Number(row.epss), percentile: Number(row.percentile) }))
       .sort((a: { epss: number }, b: { epss: number }) => b.epss - a.epss)
       .slice(0, 200);
+    report({ id: 'epss-top', label: 'FIRST EPSS top list', status: 'ok', count: top.length });
+    return top;
   } catch (err) {
-    console.warn(`  EPSS top list unavailable: ${err instanceof Error ? err.message : err}`);
+    report({ id: 'epss-top', label: 'FIRST EPSS top list', status: 'failed', detail: errorText(err) });
     return [];
   }
 }
 
-// Both NVD loaders share NVD's rate limit, so they run one after the other
-const nvdData = (async () => {
-  const nvd = await loadNvd();
-  await new Promise(r => setTimeout(r, process.env.NVD_API_KEY ? 1000 : 6500));
-  return { nvd, kevCvss: await loadKevCvss() };
-})();
-const [kevEntries, { nvd, kevCvss }, advisories, epssTop] = await Promise.all([loadKev(), nvdData, loadAdvisories(), loadEpssTop()]);
-const notable = (nvd?.records ?? []).filter(r => (r.score ?? 0) >= 9).sort((a, b) => b.published.localeCompare(a.published));
+const kevEntries = await loadKev();
+const [nvd, advisories, epssTop] = await Promise.all([loadNvdData(new Set(kevEntries.map(k => k.cve))), loadAdvisories(), loadEpssTop()]);
+const kevScores = nvd?.cache.kevScores ?? {};
+const notable = (nvd?.cache.records ?? []).filter(r => (r.score ?? 0) >= 9).sort((a, b) => b.published.localeCompare(a.published));
 
-// EPSS for every CVE the app shows: in articles, the KEV catalog, critical NVD records and advisories
+// EPSS for every CVE the app shows: in articles, the KEV catalog and critical NVD records
 const cves = Array.from(new Set([
   ...articles.flatMap(a => a.cves || []),
   ...kevEntries.map(k => k.cve),
@@ -251,8 +294,11 @@ for (const cve of new Set(articles.flatMap(a => a.cves || []))) {
 }
 const vulns: VulnData = {
   updatedAt: new Date().toISOString(),
-  kev: kevEntries.map(k => ({ ...k, ...epss.get(k.cve), cvss: kevCvss.get(k.cve) })).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
-  nvd: nvd ? summarizeNvd(nvd.records, nvd.from, nvd.to) : null,
+  // Descriptions stay out of the file (they were half its size); the CVE panel fetches one from NVD on demand
+  kev: kevEntries
+    .map(({ description: _description, ...k }) => ({ ...k, ...epss.get(k.cve), cvss: kevScores[k.cve] > 0 ? kevScores[k.cve] : undefined }))
+    .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
+  nvd: nvd ? summarizeNvd(nvd.cache.records, nvd.from, nvd.to) : null,
   notable: notable.map(r => ({ ...r, epss: epss.get(r.id)?.epss })),
   advisories,
   epssTop,
@@ -272,11 +318,13 @@ async function loadIncidents(): Promise<IncidentData> {
     if (data && !Array.isArray(data) && typeof data.message === 'string') throw new Error(data.message); // rate limited
     return data;
   };
-  const tryJson = async (label: string, url: string) => {
+  const tryJson = async (id: string, label: string, url: string) => {
     try {
-      return await getJson(url);
+      const data = await getJson(url);
+      report({ id, label, status: 'ok', count: Array.isArray(data) ? data.length : undefined });
+      return data;
     } catch (err) {
-      console.warn(`  ${label} unavailable: ${err instanceof Error ? err.message : err}`);
+      report({ id, label, status: 'failed', detail: errorText(err) });
       return null;
     }
   };
@@ -284,10 +332,10 @@ async function loadIncidents(): Promise<IncidentData> {
     Array.isArray(list) ? list.map(normalizeVictim).filter((v): v is LeakSiteVictim => v !== null) : [];
 
   const previousUrl = process.env.PREVIOUS_SNAPSHOT_URL;
-  const previous = previousUrl ? await tryJson('previous snapshot', previousUrl) : null;
-  const recent = await tryJson('Ransomware.live recent victims', 'https://api.ransomware.live/v2/recentvictims');
+  const previous = previousUrl ? await tryJson('previous', 'Previous snapshot (history carry-over)', previousUrl) : null;
+  const recent = await tryJson('rl-recent', 'Ransomware.live recent victims', 'https://api.ransomware.live/v2/recentvictims');
   const now = new Date();
-  const month = await tryJson('Ransomware.live month victims', `https://api.ransomware.live/v2/victims/${now.getUTCFullYear()}/${now.getUTCMonth() + 1}`);
+  const month = await tryJson('rl-month', 'Ransomware.live victims this month', `https://api.ransomware.live/v2/victims/${now.getUTCFullYear()}/${now.getUTCMonth() + 1}`);
   // Carried-over victims were normalized by an earlier run; still check their shape since they come over the network
   const carried: LeakSiteVictim[] = (Array.isArray(previous?.incidents?.victims) ? previous.incidents.victims : []).filter((v: any) =>
     v && typeof v.id === 'string' && typeof v.victim === 'string' && typeof v.group === 'string' && !isNaN(Date.parse(v.discoveredAt))
@@ -296,7 +344,7 @@ async function loadIncidents(): Promise<IncidentData> {
 
   const groupNames = new Set(victims.map(v => v.group.toLowerCase()));
   const groups: IncidentData['groups'] = { ...(previous?.incidents?.groups ?? {}) };
-  const groupList = await tryJson('Ransomware.live groups', 'https://api.ransomware.live/v2/groups');
+  const groupList = await tryJson('rl-groups', 'Ransomware.live group profiles', 'https://api.ransomware.live/v2/groups');
   for (const raw of Array.isArray(groupList) ? groupList : []) {
     const profile = normalizeGroup(raw);
     if (profile && groupNames.has(profile.name.toLowerCase())) groups[profile.name.toLowerCase()] = profile;
@@ -304,7 +352,7 @@ async function loadIncidents(): Promise<IncidentData> {
   for (const key of Object.keys(groups)) if (!groupNames.has(key)) delete groups[key];
 
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  const hibp = await tryJson('Have I Been Pwned breaches', 'https://haveibeenpwned.com/api/v3/breaches');
+  const hibp = await tryJson('hibp', 'Have I Been Pwned breaches', 'https://haveibeenpwned.com/api/v3/breaches');
   const breaches = Array.isArray(hibp)
     ? hibp.map(normalizeBreach).filter((b): b is NonNullable<typeof b> => b !== null && b.addedAt >= ninetyDaysAgo).sort((a, b) => b.addedAt.localeCompare(a.addedAt))
     : previous?.incidents?.breaches ?? [];
@@ -315,11 +363,16 @@ async function loadIncidents(): Promise<IncidentData> {
 const incidents = await loadIncidents();
 
 mkdirSync(dirname(OUT), { recursive: true });
-const json = JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), feedHealth, cveIntel, incidents, vulns, articles });
+const generatedAt = new Date().toISOString();
+const json = JSON.stringify({ version: 1, generatedAt, feedHealth, sources, cveIntel, incidents, articles });
 writeFileSync(OUT, json);
+const vulnsJson = JSON.stringify({ version: 1, generatedAt, ...vulns });
+writeFileSync(VULNS_OUT, vulnsJson);
+if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${(json.length / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${kevCvss.size} with CVSS), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs`);
+console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${(vulnsJson.length / 1e6).toFixed(2)} MB`);
+console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 console.log(`Incidents: ${incidents.victims.length} leak-site victims (30d), ${Object.keys(incidents.groups).length} group profiles, ${incidents.breaches.length} HIBP breaches (90d)`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

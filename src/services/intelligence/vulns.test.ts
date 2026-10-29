@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignerName, cvssBand, kevPerMonth, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
+import { applyNvdUpdates, assignerName, cvssBand, decodeNvdCache, encodeNvdCache, kevPerMonth, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
 import { KevEntry } from '../../types';
 
 describe('normalizeKev', () => {
@@ -99,5 +99,37 @@ describe('cvssBand', () => {
     expect(cvssBand(0.1)).toBe('low');
     expect(cvssBand(0)).toBe('unscored');
     expect(cvssBand(undefined)).toBe('unscored');
+  });
+});
+
+describe('NVD cache', () => {
+  const records = [
+    { id: 'CVE-2026-0001', published: '2026-10-20T00:00:00.000Z', score: 9.8, severity: 'CRITICAL' as const, cwe: 'CWE-787', assigner: 'x.com', description: 'Critical bug.' },
+    { id: 'CVE-2026-0002', published: '2026-10-21T00:00:00.000Z', score: 5.0, severity: 'MEDIUM' as const, description: 'Not stored.' },
+    { id: 'CVE-2026-0003', published: '2026-10-22T00:00:00.000Z' },
+  ];
+
+  it('round-trips, keeping descriptions only for critical CVEs', () => {
+    const decoded = decodeNvdCache(JSON.parse(JSON.stringify(encodeNvdCache({ fetchedAt: '2026-10-29T10:00:00.000Z', records, kevScores: { 'CVE-2021-1': 9.8, 'CVE-2021-2': 0 } }))));
+    expect(decoded?.records[0]).toEqual(records[0]);
+    expect(decoded?.records[1]).toMatchObject({ id: 'CVE-2026-0002', score: 5, severity: 'MEDIUM', description: undefined });
+    expect(decoded?.records[2].score).toBeUndefined();
+    expect(decoded?.kevScores).toEqual({ 'CVE-2021-1': 9.8, 'CVE-2021-2': 0 });
+  });
+
+  it('rejects malformed caches', () => {
+    expect(decodeNvdCache(null)).toBeNull();
+    expect(decodeNvdCache({ version: 2, fetchedAt: '2026-10-29', records: [] })).toBeNull();
+    expect(decodeNvdCache({ version: 1, fetchedAt: 'nope', records: [] })).toBeNull();
+  });
+
+  it('applies updates and drops CVEs that left the window', () => {
+    const updated = applyNvdUpdates(records, [
+      { id: 'CVE-2026-0003', published: '2026-10-22T00:00:00.000Z', score: 9.1, severity: 'CRITICAL' },
+      { id: 'CVE-2026-0004', published: '2026-10-29T00:00:00.000Z' },
+      { id: 'CVE-2019-0001', published: '2019-01-01T00:00:00.000Z', score: 7 },
+    ], new Date('2026-10-21T00:00:00.000Z'));
+    expect(updated.map(r => r.id).sort()).toEqual(['CVE-2026-0002', 'CVE-2026-0003', 'CVE-2026-0004']);
+    expect(updated.find(r => r.id === 'CVE-2026-0003')?.score).toBe(9.1);
   });
 });

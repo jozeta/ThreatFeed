@@ -1,4 +1,4 @@
-import React, { useState, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useFeeds } from './context/FeedContext';
 import { useSettings } from './context/SettingsContext';
 import { useFilter } from './context/FilterContext';
@@ -14,6 +14,8 @@ import { KeyboardShortcutsModal } from './components/Common/KeyboardShortcutsMod
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
+import { CveWatchMonitor } from './components/CveWatchMonitor';
+import { useHashRoute } from './hooks/useHashRoute';
 
 // Secondary pages load on first visit, keeping the initial bundle to what the front page needs
 const SourcesPage = lazy(() => import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage })));
@@ -29,7 +31,10 @@ export const App: React.FC = () => {
   const { settings } = useSettings();
   const { filters, updateFilter } = useFilter();
 
-  const [activeTab, setActiveTab] = useState<ActiveNavTab>('newspaper');
+  // The page lives in the URL hash (#/vulns, #/briefing…) so views can be bookmarked and Back works
+  const [route, navigate] = useHashRoute();
+  const activeTab: ActiveNavTab = route.page;
+  const setActiveTab = useCallback((tab: ActiveNavTab) => navigate(tab), [navigate]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
@@ -131,6 +136,8 @@ export const App: React.FC = () => {
           SECURITY INTELLIGENCE DAILY · {formatMastheadDate()}
         </p>
       </div>
+
+      <CveWatchMonitor />
 
       {/* Screen Masthead, Navigation & Controls Header */}
       <Header

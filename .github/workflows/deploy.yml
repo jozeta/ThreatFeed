@@ -36,6 +36,10 @@ jobs:
         env:
           # Carries ransomware victim history over between runs (the API only returns the latest ~100)
           PREVIOUS_SNAPSHOT_URL: https://jozeta.github.io/ThreatFeed/data/snapshot.json
+          # Lets the next run ask NVD only for CVEs changed since this one, instead of ~40 MB every time
+          PREVIOUS_NVD_CACHE_URL: https://jozeta.github.io/ThreatFeed/data/nvd-cache.json
+          # Optional (repo secret): a free NVD API key allows 10x the request rate. Empty is fine.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           # Raises the GitHub Advisory Database API limit from 60 to 1000+ requests an hour (read-only use)
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run build
