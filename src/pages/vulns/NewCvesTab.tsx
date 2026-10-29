@@ -3,7 +3,7 @@ import { Article, CveRecord, NvdStats } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
-import { BarList, SectionTitle } from '../incidents/shared';
+import { BarList, chipClass, SectionTitle } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from './shared';
 import { Search } from 'lucide-react';
@@ -18,6 +18,8 @@ interface NewCvesTabProps {
 
 export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, news, onOpenCve }) => {
   const [query, setQuery] = useState('');
+  const [cwe, setCwe] = useState('');
+  const [assigner, setAssigner] = useState('');
   const totals = useMemo(() => stats.daily.reduce(
     (t, d) => ({ critical: t.critical + d.critical, high: t.high + d.high, unscored: t.unscored + d.unscored }),
     { critical: 0, high: 0, unscored: 0 }
@@ -26,8 +28,11 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
 
   const rows = useMemo(() => {
     const q = query.toLowerCase();
-    return notable.filter((r) => !q || `${r.id} ${r.description ?? ''} ${r.assigner ?? ''} ${r.cwe ?? ''}`.toLowerCase().includes(q));
-  }, [notable, query]);
+    return notable.filter((r) =>
+      (!cwe || r.cwe === cwe) &&
+      (!assigner || r.assigner === assigner) &&
+      (!q || `${r.id} ${r.description ?? ''} ${r.assigner ?? ''} ${r.cwe ?? ''}`.toLowerCase().includes(q)));
+  }, [notable, query, cwe, assigner]);
   const { visibleCount, hasMore, remaining, showMore } = usePagedCount(rows.length, 50);
 
   return (
@@ -63,17 +68,22 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
         <aside className="space-y-6">
           <div>
             <SectionTitle>Weaknesses (CWE)</SectionTitle>
-            <BarList color="bg-sky-500/70" rows={stats.cwes.slice(0, 10).map(([c, n]) => ({ key: c, label: c, value: n }))} />
+            <BarList color="bg-sky-500/70" rows={stats.cwes.slice(0, 10).map(([c, n]) => ({ key: c, label: c, value: n, active: cwe === c, onClick: () => setCwe(cwe === c ? '' : c) }))} />
           </div>
           <div>
             <SectionTitle>Assigned by (CNA)</SectionTitle>
-            <BarList color="bg-amber-500/70" rows={stats.assigners.slice(0, 10).map(([a, n]) => ({ key: a, label: a, value: n }))} />
+            <BarList color="bg-amber-500/70" rows={stats.assigners.slice(0, 10).map(([a, n]) => ({ key: a, label: a, value: n, active: assigner === a, onClick: () => setAssigner(assigner === a ? '' : a) }))} />
           </div>
+          <p className="text-[10px] font-mono text-theme-text-muted">Counts cover every new CVE; click one to filter the critical list.</p>
         </aside>
 
         <div className="lg:col-span-3 overflow-x-auto space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <SectionTitle>Critical CVEs ({rows.length})</SectionTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <SectionTitle>Critical CVEs ({rows.length})</SectionTitle>
+              {cwe && <button onClick={() => setCwe('')} className={chipClass(true)}>{cwe} ×</button>}
+              {assigner && <button onClick={() => setAssigner('')} className={chipClass(true)}>{assigner} ×</button>}
+            </div>
             <label className="flex items-center gap-1.5 bg-theme-card border border-theme-border rounded px-2 py-1.5 text-xs">
               <Search className="w-3.5 h-3.5 text-theme-text-muted" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="CVE, product, CWE…" className="bg-transparent font-mono text-theme-text focus:outline-none w-36" />

@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Article, KevEntry } from '../../types';
-import { kevPerMonth, patchPriority } from '../../services/intelligence/vulns';
+import { CVSS_BANDS, CvssBandId, cvssBand, kevPerMonth, patchPriority, severityFromScore } from '../../services/intelligence/vulns';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
-import { CveButton, EpssValue, StatCards } from './shared';
+import { CveButton, EpssValue, SeverityPill, StatCards } from './shared';
 import { Search, Skull } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -16,29 +16,38 @@ const RANGES = [
   { days: 0, label: 'All' },
 ];
 
+const productKey = (k: KevEntry) => `${k.vendor} ${k.product}`;
+
 interface KevTabProps {
-  kev: KevEntry[]; // newest first
+  kev: KevEntry[]; // newest first, hidden vendors already removed
+  hiddenVendorCount: number;
   news: Map<string, Article[]>;
   onOpenCve: (cve: string) => void;
 }
 
-export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
+export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, onOpenCve }) => {
   const [days, setDays] = useState(90);
   const [vendor, setVendor] = useState('');
+  const [product, setProduct] = useState('');
   const [cwe, setCwe] = useState('');
+  const [band, setBand] = useState<CvssBandId | ''>('');
+  const [minCvss, setMinCvss] = useState(0);
   const [ransomwareOnly, setRansomwareOnly] = useState(false);
   const [query, setQuery] = useState('');
 
-  // Vendor, weakness and text filters apply to the chart too; the time range only to the stats and lists
+  // Every filter except the time range applies to the chart too; the range only to the stats and lists
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return kev.filter((k) =>
       (!vendor || k.vendor === vendor) &&
+      (!product || productKey(k) === product) &&
       (!cwe || k.cwes.includes(cwe)) &&
+      (!band || cvssBand(k.cvss) === band) &&
+      (minCvss === 0 || (k.cvss ?? 0) >= minCvss) &&
       (!ransomwareOnly || k.ransomware) &&
       (!q || `${k.cve} ${k.vendor} ${k.product} ${k.name}`.toLowerCase().includes(q))
     );
-  }, [kev, vendor, cwe, ransomwareOnly, query]);
+  }, [kev, vendor, product, cwe, band, minCvss, ransomwareOnly, query]);
 
   const today = new Date().toISOString().slice(0, 10);
   const since = days ? new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10) : '';
@@ -52,11 +61,15 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
 
   const months = useMemo(() => kevPerMonth(filtered, 24), [filtered]);
   const vendors = countBy(inRange, (k) => k.vendor);
-  const products = countBy(inRange, (k) => `${k.vendor} ${k.product}`);
+  const products = countBy(inRange, productKey);
   const weaknesses = useMemo(() => {
     const m = new Map<string, number>();
     for (const k of inRange) for (const c of k.cwes) m.set(c, (m.get(c) || 0) + 1);
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [inRange]);
+  const bands = useMemo(() => {
+    const counts = countBy(inRange, (k) => cvssBand(k.cvss));
+    return CVSS_BANDS.map((b) => ({ ...b, count: counts.find(([id]) => id === b.id)?.[1] ?? 0 }));
   }, [inRange]);
   const allVendors = useMemo(() => countBy(kev, (k) => k.vendor), [kev]);
 
@@ -66,6 +79,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
   );
   const { visibleCount, hasMore, remaining, showMore } = usePagedCount(inRange.length, 100);
   const rangeLabel = RANGES.find((r) => r.days === days)?.label;
+  const toggle = (current: string, value: string, set: (v: string) => void) => set(current === value ? '' : value);
 
   return (
     <div className="space-y-6">
@@ -79,17 +93,30 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
           <option value="">All vendors ({allVendors.length})</option>
           {allVendors.map(([v, n]) => <option key={v} value={v}>{v} ({n})</option>)}
         </select>
-        {cwe && <button onClick={() => setCwe('')} className={chipClass(true)}>{cwe} ×</button>}
+        <label className="flex items-center gap-2 bg-theme-card border border-theme-border rounded px-2 py-1.5 text-xs font-mono text-theme-text-muted" title="Hide vulnerabilities with a CVSS score below this value">
+          CVSS ≥
+          <input type="range" min={0} max={10} step={0.5} value={minCvss} onChange={(e) => setMinCvss(Number(e.target.value))} className="w-24 accent-theme-accent" aria-label="Minimum CVSS score" />
+          <span className="w-7 text-theme-text font-bold">{minCvss === 0 ? 'any' : minCvss.toFixed(1)}</span>
+        </label>
         <label className="flex items-center gap-1.5 bg-theme-card border border-theme-border rounded px-2 py-1.5 text-xs">
           <Search className="w-3.5 h-3.5 text-theme-text-muted" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="CVE, product…" className="bg-transparent font-mono text-theme-text focus:outline-none w-36" />
         </label>
       </div>
 
+      {(product || cwe || band) && (
+        <div className="flex flex-wrap items-center gap-2 -mt-3 text-xs font-mono">
+          <span className="text-theme-text-muted">Filtered by:</span>
+          {product && <button onClick={() => setProduct('')} className={chipClass(true)}>{product} ×</button>}
+          {cwe && <button onClick={() => setCwe('')} className={chipClass(true)}>{cwe} ×</button>}
+          {band && <button onClick={() => setBand('')} className={chipClass(true)}>CVSS {CVSS_BANDS.find((b) => b.id === band)?.label} ×</button>}
+        </div>
+      )}
+
       <StatCards stats={[
         { label: 'Added', value: inRange.length, note: change === null ? (days ? '' : `${kev.length} in the catalog`) : `${change >= 0 ? '+' : ''}${change}% vs previous ${rangeLabel}` },
         { label: 'Ransomware-linked', value: ransomwareCount, note: inRange.length ? `${Math.round((ransomwareCount / inRange.length) * 100)}% of added` : '' },
-        { label: 'Vendors', value: vendors.length, note: vendors[0] ? `most: ${vendors[0][0]}` : '' },
+        { label: 'Vendors', value: vendors.length, note: hiddenVendorCount ? `${hiddenVendorCount} hidden in Settings` : vendors[0] ? `most: ${vendors[0][0]}` : '' },
         { label: 'Due in 14 days', value: dueSoon, note: 'federal remediation deadline' },
       ]} />
 
@@ -130,16 +157,21 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
         <aside className="space-y-6">
           <div>
             <SectionTitle>Vendors</SectionTitle>
-            <BarList rows={vendors.slice(0, 10).map(([v, n]) => ({ key: v, label: v, value: n, active: vendor === v, onClick: () => setVendor(vendor === v ? '' : v) }))} />
+            <BarList rows={vendors.slice(0, 10).map(([v, n]) => ({ key: v, label: v, value: n, active: vendor === v, onClick: () => toggle(vendor, v, setVendor) }))} />
           </div>
           <div>
             <SectionTitle>Products</SectionTitle>
-            <BarList color="bg-amber-500/70" rows={products.slice(0, 8).map(([p, n]) => ({ key: p, label: p, value: n }))} />
+            <BarList color="bg-amber-500/70" rows={products.slice(0, 8).map(([p, n]) => ({ key: p, label: p, value: n, active: product === p, onClick: () => toggle(product, p, setProduct) }))} />
           </div>
           <div>
             <SectionTitle>Weaknesses (CWE)</SectionTitle>
-            <BarList color="bg-sky-500/70" rows={weaknesses.slice(0, 8).map(([c, n]) => ({ key: c, label: c, value: n, active: cwe === c, onClick: () => setCwe(cwe === c ? '' : c) }))} />
+            <BarList color="bg-sky-500/70" rows={weaknesses.slice(0, 8).map(([c, n]) => ({ key: c, label: c, value: n, active: cwe === c, onClick: () => toggle(cwe, c, setCwe) }))} />
           </div>
+          <div>
+            <SectionTitle>CVSS score</SectionTitle>
+            <BarList color="bg-orange-500/70" rows={bands.filter((b) => b.count > 0 || band === b.id).map((b) => ({ key: b.id, label: b.label, value: b.count, active: band === b.id, onClick: () => setBand(band === b.id ? '' : b.id) }))} />
+          </div>
+          <p className="text-[10px] font-mono text-theme-text-muted">Click a bar to filter the list; click it again to clear.</p>
         </aside>
 
         <div className="lg:col-span-3 overflow-x-auto">
@@ -149,6 +181,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
                 <th className="py-2 pr-3 font-semibold">Added</th>
                 <th className="py-2 pr-3 font-semibold">CVE</th>
                 <th className="py-2 pr-3 font-semibold">Vulnerability</th>
+                <th className="py-2 pr-3 font-semibold" title="CVSS base score from NVD">CVSS</th>
                 <th className="py-2 pr-3 font-semibold" title="Probability of exploitation in the next 30 days">EPSS</th>
                 <th className="py-2 pr-3 font-semibold">Due</th>
                 <th className="py-2 pr-3 font-semibold">News</th>
@@ -163,6 +196,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, news, onOpenCve }) => {
                     <span className="font-serif" title={k.description}>{k.name}</span>
                     {k.ransomware && <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
                   </td>
+                  <td className="py-2 pr-3"><SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} /></td>
                   <td className="py-2 pr-3"><EpssValue epss={k.epss} /></td>
                   <td className={`py-2 pr-3 whitespace-nowrap ${k.dueDate && k.dueDate >= today && k.dueDate <= in14Days ? 'text-orange-500 font-bold' : 'text-theme-text-muted'}`}>{k.dueDate ?? '—'}</td>
                   <td className="py-2 pr-3 text-theme-text-muted">{news.get(k.cve)?.length || ''}</td>

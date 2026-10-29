@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
+import { useSettings } from '../context/SettingsContext';
 import { formatRelativeTime } from '../utils/date';
 import { KevTab } from './vulns/KevTab';
 import { NewCvesTab } from './vulns/NewCvesTab';
@@ -15,14 +16,20 @@ type Tab = 'kev' | 'new' | 'epss' | 'oss' | 'news';
 
 export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
   const { articles, feeds, vulns } = useFeeds();
+  const { settings } = useSettings();
   const [tab, setTab] = useState<Tab>('kev');
   const [openCve, setOpenCve] = useState<string | null>(null);
 
   const news = useMemo(() => articlesByCve(articles), [articles]);
   const kevIds = useMemo(() => new Set(vulns?.kev.map((k) => k.cve) ?? []), [vulns]);
+  // Vendors hidden in Settings drop out of the KEV views (but a CVE still counts as "in KEV" elsewhere)
+  const kev = useMemo(() => {
+    const hidden = new Set(settings.hiddenVulnVendors);
+    return (vulns?.kev ?? []).filter((k) => !hidden.has(k.vendor));
+  }, [vulns, settings.hiddenVulnVendors]);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
-    { id: 'kev', label: 'Known exploited (KEV)', icon: <Flame className="w-4 h-4" />, count: vulns?.kev.length },
+    { id: 'kev', label: 'Known exploited (KEV)', icon: <Flame className="w-4 h-4" />, count: kev.length },
     { id: 'new', label: 'New CVEs', icon: <FilePlus2 className="w-4 h-4" />, count: vulns?.nvd?.total },
     { id: 'epss', label: 'Exploit prediction', icon: <Gauge className="w-4 h-4" /> },
     { id: 'oss', label: 'Open source', icon: <Package className="w-4 h-4" />, count: vulns?.advisories.length },
@@ -64,9 +71,9 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
         ))}
       </div>
 
-      {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={vulns.kev} news={news} onOpenCve={setOpenCve} /> : noData('The CISA KEV catalog'))}
+      {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} onOpenCve={setOpenCve} /> : noData('The CISA KEV catalog'))}
       {tab === 'new' && (vulns?.nvd ? <NewCvesTab stats={vulns.nvd} notable={vulns.notable} kevIds={kevIds} news={news} onOpenCve={setOpenCve} /> : noData('NVD data'))}
-      {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
+      {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
       {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={setOpenCve} /> : noData('GitHub advisory data'))}
       {tab === 'news' && <VulnNewsTab articles={articles} feeds={feeds} kevIds={kevIds} onOpenArticle={onOpenArticle} />}
 

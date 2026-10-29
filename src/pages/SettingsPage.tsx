@@ -3,6 +3,7 @@ import { useSettings, DEFAULT_NEWSPAPER_SECTIONS } from '../context/SettingsCont
 import { useFeeds } from '../context/FeedContext';
 import { WATCHLIST_PRESETS } from '../services/intelligence/watchlist';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
+import { VulnVendorSettings } from './settings/VulnVendorSettings';
 import { SyncSettings } from './settings/SyncSettings';
 import { exportAllThreatFeedData, importThreatFeedData } from '../services/storage/indexeddb';
 import {
@@ -798,6 +799,7 @@ export const SettingsPage: React.FC = () => {
       </section>
 
       <IntelligenceSettings />
+      <VulnVendorSettings />
 
       {/* SECTION 6: EDITORIAL SECTIONS & MULTI-SOURCE CLUSTERING */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Article, VulnData } from '../../types';
-import { nvdUrl } from '../../services/intelligence/vulns';
+import { nvdUrl, severityFromScore } from '../../services/intelligence/vulns';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
 import { EpssValue, SeverityPill } from './shared';
@@ -29,7 +29,9 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, onOpenArti
 
   const facts: [string, React.ReactNode][] = [
     ['EPSS (30-day exploitation probability)', <EpssValue epss={epss} />],
-    ...(nvd ? [['CVSS', <SeverityPill severity={nvd.severity} score={nvd.score} />] as [string, React.ReactNode]] : []),
+    ...(nvd || kev?.cvss !== undefined
+      ? [['CVSS', <SeverityPill severity={nvd?.severity ?? severityFromScore(kev!.cvss!)} score={nvd?.score ?? kev!.cvss} />] as [string, React.ReactNode]]
+      : []),
     ...(kev ? [
       ['Added to KEV', kev.dateAdded] as [string, React.ReactNode],
       ['Federal due date', kev.dueDate ?? '—'] as [string, React.ReactNode],

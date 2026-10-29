@@ -111,6 +111,22 @@ export function normalizeAdvisory(raw: any): OssAdvisory | null {
   };
 }
 
+/** CVSS score bands for the "CVSS score" breakdowns; `min` is inclusive, `max` exclusive */
+export const CVSS_BANDS = [
+  { id: 'critical', label: 'Critical (9.0–10)', min: 9, max: 11 },
+  { id: 'high', label: 'High (7.0–8.9)', min: 7, max: 9 },
+  { id: 'medium', label: 'Medium (4.0–6.9)', min: 4, max: 7 },
+  { id: 'low', label: 'Low (0.1–3.9)', min: 0.1, max: 4 },
+  { id: 'unscored', label: 'Not scored', min: NaN, max: NaN },
+] as const;
+
+export type CvssBandId = (typeof CVSS_BANDS)[number]['id'];
+
+export function cvssBand(score: number | undefined): CvssBandId {
+  if (score === undefined || !(score > 0)) return 'unscored';
+  return CVSS_BANDS.find(b => score >= b.min && score < b.max)?.id ?? 'unscored';
+}
+
 /** KEV additions per calendar month, oldest first, ending with the current month */
 export function kevPerMonth(kev: KevEntry[], months: number, now = new Date()): { month: string; total: number; ransomware: number }[] {
   const buckets = Array.from({ length: months }, (_, i) => {
