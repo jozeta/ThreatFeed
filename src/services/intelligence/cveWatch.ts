@@ -110,3 +110,27 @@ export async function fetchEpssScores(cves: string[]): Promise<Map<string, numbe
 }
 
 export const isCveId = (value: string) => /^CVE-\d{4}-\d{4,}$/.test(value);
+
+const epssHistory = new Map<string, Promise<{ date: string; epss: number }[]>>();
+
+/** The last 30 days of EPSS scores for one CVE, oldest first (empty when FIRST has none or is unreachable) */
+export function fetchEpssHistory(cve: string): Promise<{ date: string; epss: number }[]> {
+  const cached = epssHistory.get(cve);
+  if (cached) return cached;
+  const request = fetch(`https://api.first.org/data/v1/epss?cve=${encodeURIComponent(cve)}&scope=time-series`)
+    .then(res => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    .then(data => {
+      const row = data?.data?.[0];
+      if (!row) return [];
+      const points = [{ date: row.date, epss: row.epss }, ...(Array.isArray(row['time-series']) ? row['time-series'] : [])]
+        .map((p: any) => ({ date: String(p.date), epss: Number(p.epss) }))
+        .filter(p => /^\d{4}-\d{2}-\d{2}$/.test(p.date) && !isNaN(p.epss));
+      return [...new Map(points.map(p => [p.date, p])).values()].sort((a, b) => a.date.localeCompare(b.date));
+    })
+    .catch(() => {
+      epssHistory.delete(cve);
+      return [];
+    });
+  epssHistory.set(cve, request);
+  return request;
+}

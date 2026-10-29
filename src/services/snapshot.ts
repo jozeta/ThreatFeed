@@ -1,4 +1,4 @@
-import { Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, VulnData } from '../types';
+import { Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, RansomwareIntel, VulnData } from '../types';
 
 export interface FeedSnapshot {
   generatedAt: string;
@@ -44,6 +44,19 @@ export async function loadVulnData(): Promise<VulnData | null> {
     const data = await res.json();
     if (!data || !Array.isArray(data.kev) || !Array.isArray(data.notable) || !Array.isArray(data.advisories) || !Array.isArray(data.epssTop)) return null;
     return data as VulnData;
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/ransomware.json (group profiles, ATT&CK, linked CVEs, public reports, payments) for the Ransomware page */
+export async function loadRansomwareIntel(): Promise<RansomwareIntel | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/ransomware.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || typeof data.groups !== 'object' || !Array.isArray(data.attacks)) return null;
+    return data as RansomwareIntel;
   } catch {
     return null;
   }

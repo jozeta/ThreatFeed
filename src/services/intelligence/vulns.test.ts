@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyNvdUpdates, assignerName, cvssBand, decodeNvdCache, encodeNvdCache, kevPerMonth, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
+import { applyNvdUpdates, assignerName, cvssBand, daysToKev, median, timeToKevBucket, decodeNvdCache, encodeNvdCache, isRemoteNoAuth, kevPerMonth, parseVector, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
 import { KevEntry } from '../../types';
 
 describe('normalizeKev', () => {
@@ -104,23 +104,25 @@ describe('cvssBand', () => {
 
 describe('NVD cache', () => {
   const records = [
-    { id: 'CVE-2026-0001', published: '2026-10-20T00:00:00.000Z', score: 9.8, severity: 'CRITICAL' as const, cwe: 'CWE-787', assigner: 'x.com', description: 'Critical bug.' },
-    { id: 'CVE-2026-0002', published: '2026-10-21T00:00:00.000Z', score: 5.0, severity: 'MEDIUM' as const, description: 'Not stored.' },
+    { id: 'CVE-2026-0001', published: '2026-10-20T00:00:00.000Z', score: 9.8, severity: 'CRITICAL' as const, cwe: 'CWE-787', assigner: 'x.com', description: 'Critical bug.',
+      vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H', ssvc: { exploitation: 'active' as const, automatable: 'yes' as const, impact: 'total' as const }, products: ['Acme Gateway'] },
+    { id: 'CVE-2026-0002', published: '2026-10-21T00:00:00.000Z', score: 5.0, severity: 'MEDIUM' as const, description: 'Not stored.', vector: 'CVSS:3.1/AV:L/AC:L/PR:L/UI:R/S:U/C:L/I:N/A:N', products: ['Not stored'] },
     { id: 'CVE-2026-0003', published: '2026-10-22T00:00:00.000Z' },
   ];
+  const kev = { 'CVE-2021-1': { id: 'CVE-2021-1', published: '2021-01-01T00:00:00.000Z', score: 9.8, severity: 'CRITICAL' as const, vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H', products: ['Acme VPN'] } };
 
-  it('round-trips, keeping descriptions only for critical CVEs', () => {
-    const decoded = decodeNvdCache(JSON.parse(JSON.stringify(encodeNvdCache({ fetchedAt: '2026-10-29T10:00:00.000Z', records, kevScores: { 'CVE-2021-1': 9.8, 'CVE-2021-2': 0 } }))));
+  it('round-trips, keeping full detail only for critical CVEs and KEV entries', () => {
+    const decoded = decodeNvdCache(JSON.parse(JSON.stringify(encodeNvdCache({ fetchedAt: '2026-10-29T10:00:00.000Z', records, kev }))));
     expect(decoded?.records[0]).toEqual(records[0]);
-    expect(decoded?.records[1]).toMatchObject({ id: 'CVE-2026-0002', score: 5, severity: 'MEDIUM', description: undefined });
+    expect(decoded?.records[1]).toMatchObject({ id: 'CVE-2026-0002', score: 5, description: undefined, vector: 'AV:L/PR:L/UI:R', products: undefined });
     expect(decoded?.records[2].score).toBeUndefined();
-    expect(decoded?.kevScores).toEqual({ 'CVE-2021-1': 9.8, 'CVE-2021-2': 0 });
+    expect(decoded?.kev['CVE-2021-1']).toMatchObject({ score: 9.8, products: ['Acme VPN'], vector: kev['CVE-2021-1'].vector });
   });
 
-  it('rejects malformed caches', () => {
+  it('rejects malformed caches and the old format', () => {
     expect(decodeNvdCache(null)).toBeNull();
-    expect(decodeNvdCache({ version: 2, fetchedAt: '2026-10-29', records: [] })).toBeNull();
-    expect(decodeNvdCache({ version: 1, fetchedAt: 'nope', records: [] })).toBeNull();
+    expect(decodeNvdCache({ version: 1, fetchedAt: '2026-10-29', records: [], kevScores: {} })).toBeNull();
+    expect(decodeNvdCache({ version: 2, fetchedAt: 'nope', records: [], kev: [] })).toBeNull();
   });
 
   it('applies updates and drops CVEs that left the window', () => {
@@ -131,5 +133,49 @@ describe('NVD cache', () => {
     ], new Date('2026-10-21T00:00:00.000Z'));
     expect(updated.map(r => r.id).sort()).toEqual(['CVE-2026-0002', 'CVE-2026-0003', 'CVE-2026-0004']);
     expect(updated.find(r => r.id === 'CVE-2026-0003')?.score).toBe(9.1);
+  });
+});
+
+describe('NVD enrichment', () => {
+  it('reads the vector, CISA SSVC and affected products', () => {
+    const r = normalizeNvdCve({
+      id: 'CVE-2026-0005', published: '2026-10-28T10:00:00.000',
+      metrics: {
+        cvssMetricV31: [{ type: 'Primary', cvssData: { baseScore: 9.8, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' } }],
+        ssvcV203: [{ ssvcData: { options: [{ exploitation: 'active' }, { automatable: 'yes' }, { technicalImpact: 'total' }] } }],
+      },
+      affected: [{ affectedData: [{ vendor: 'GitLab', product: 'GitLab' }, { vendor: 'n/a', product: 'Widget' }] }],
+      configurations: [{ nodes: [{ cpeMatch: [{ vulnerable: true, criteria: 'cpe:2.3:a:gitlab:gitlab:*:*:*:*:*:*:*:*' }, { vulnerable: true, criteria: 'cpe:2.3:o:microsoft:windows_server:2019:*:*:*:*:*:*:*' }] }] }],
+    });
+    expect(r?.ssvc).toEqual({ exploitation: 'active', automatable: 'yes', impact: 'total' });
+    expect(r?.products).toEqual(['GitLab GitLab', 'Widget', 'microsoft windows server']);
+    expect(isRemoteNoAuth(r?.vector)).toBe(true);
+    expect(isRemoteNoAuth('CVSS:3.1/AV:N/AC:L/PR:L/UI:N')).toBe(false);
+    expect(parseVector('CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P')).toEqual({ av: 'L', pr: 'N', ui: 'P' });
+  });
+
+  it('summarizes attack vectors, remote no-auth bugs and SSVC ratings', () => {
+    const stats = summarizeNvd([
+      { id: 'A', published: '2026-10-27T05:00:00Z', vector: 'AV:N/PR:N/UI:N', ssvc: { exploitation: 'poc' } },
+      { id: 'B', published: '2026-10-27T06:00:00Z', vector: 'AV:L/PR:L/UI:N' },
+      { id: 'C', published: '2026-10-27T07:00:00Z' },
+    ], new Date('2026-10-27T00:00:00Z'), new Date('2026-10-28T00:00:00Z'));
+    expect(stats.remoteNoAuth).toBe(1);
+    expect(Object.fromEntries(stats.attackVectors!)).toEqual({ Network: 1, Local: 1, Unknown: 1 });
+    expect(stats.ssvcExploitation).toEqual([['poc', 1]]);
+  });
+});
+
+describe('time to KEV', () => {
+  it('measures days from publication to listing and buckets them', () => {
+    const entry = (published: string, dateAdded: string) => ({ cve: 'CVE-1', dateAdded, published } as KevEntry);
+    expect(daysToKev(entry('2026-10-01T12:00:00.000Z', '2026-10-01'))).toBe(0);
+    expect(daysToKev(entry('2026-10-01T12:00:00.000Z', '2026-10-06'))).toBe(5);
+    expect(daysToKev(entry('2026-10-10T00:00:00.000Z', '2026-10-06'))).toBe(-4); // listed before NVD published it
+    expect(daysToKev({ cve: 'CVE-1', dateAdded: '2026-10-06' } as KevEntry)).toBeUndefined();
+    expect([-4, 0, 5, 30, 200, 900].map(timeToKevBucket)).toEqual(['zero', 'zero', 'week', 'month', 'year', 'older']);
+    expect(median([5, 1, 9])).toBe(5);
+    expect(median([1, 2, 3, 10])).toBe(3);
+    expect(median([])).toBeUndefined();
   });
 });

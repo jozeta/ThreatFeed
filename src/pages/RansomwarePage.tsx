@@ -1,18 +1,28 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Article, LeakSiteVictim } from '../types';
 import { useFeeds } from '../context/FeedContext';
+import { useRansomwareIntel } from '../hooks/useVulns';
+import { useHashRoute } from '../hooks/useHashRoute';
 import { ransomwareVictims } from '../services/intelligence/ransomware';
 import { countryCodeFromName } from '../utils/countries';
 import { VictimsTab } from './incidents/VictimsTab';
 import { BreachesTab } from './incidents/BreachesTab';
 import { IncidentNewsTab } from './incidents/IncidentNewsTab';
-import { Skull, Database, Newspaper } from 'lucide-react';
+import { PublicReportsTab } from './incidents/PublicReportsTab';
+import { PaymentsTab } from './incidents/PaymentsTab';
+import { Skull, Database, Newspaper, Megaphone, Bitcoin } from 'lucide-react';
 
-type Tab = 'victims' | 'breaches' | 'news';
+const TABS = ['victims', 'reports', 'breaches', 'payments', 'news'] as const;
+type Tab = (typeof TABS)[number];
 
 export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
   const { articles, incidents } = useFeeds();
-  const [tab, setTab] = useState<Tab>('victims');
+  const intel = useRansomwareIntel();
+
+  // The tab lives in the URL (#/ransomware/reports) like the Vulns page; the open group is ?group=
+  const [route, navigate] = useHashRoute();
+  const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'victims';
+  const setTab = (t: Tab) => navigate('ransomware', t === 'victims' ? '' : t);
 
   // Structured victims come with the snapshot; without one, fall back to parsing the RSS feed
   const victims: LeakSiteVictim[] = useMemo(() => {
@@ -34,9 +44,14 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
     { id: 'victims', label: 'Leak-site victims', icon: <Skull className="w-4 h-4" />, count: victims.length },
+    { id: 'reports', label: 'Public reports', icon: <Megaphone className="w-4 h-4" />, count: intel?.attacks.length },
     { id: 'breaches', label: 'Data breaches', icon: <Database className="w-4 h-4" />, count: breaches.length },
+    { id: 'payments', label: 'Ransom payments', icon: <Bitcoin className="w-4 h-4" /> },
     { id: 'news', label: 'Incident news', icon: <Newspaper className="w-4 h-4" /> },
   ];
+  const noData = (what: string) => (
+    <p className="text-sm font-serif text-theme-text-muted">{what} arrives with the server snapshot (Settings → Data Source).</p>
+  );
 
   return (
     <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -46,7 +61,7 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
           <span>Ransomware & Breaches</span>
         </h1>
         <p className="font-serif text-sm text-theme-text-muted mt-1">
-          Who ransomware groups are posting on their leak sites, which breaches just surfaced, and how the news is covering them.
+          Who ransomware groups are posting on their leak sites, how they operate, which attacks made the news, which breaches just surfaced, and what victims paid.
         </p>
       </div>
 
@@ -69,11 +84,11 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
       </div>
 
       {tab === 'victims' && (
-        <VictimsTab victims={victims} groups={incidents?.groups ?? {}} articles={articles} structured={structured} onOpenArticle={onOpenArticle} />
+        <VictimsTab victims={victims} groups={incidents?.groups ?? {}} articles={articles} structured={structured} intel={intel} onOpenArticle={onOpenArticle} />
       )}
-      {tab === 'breaches' && (breaches.length > 0
-        ? <BreachesTab breaches={breaches} />
-        : <p className="text-sm font-serif text-theme-text-muted">Breach data from Have I Been Pwned arrives with the server snapshot (Settings → Data Source).</p>)}
+      {tab === 'reports' && (intel?.attacks.length ? <PublicReportsTab attacks={intel.attacks} /> : noData('Public attack reports'))}
+      {tab === 'breaches' && (breaches.length > 0 ? <BreachesTab breaches={breaches} /> : noData('Breach data from Have I Been Pwned'))}
+      {tab === 'payments' && (intel?.payments?.families.length ? <PaymentsTab families={intel.payments.families} updatedAt={intel.payments.updatedAt} /> : noData('Ransom payment data'))}
       {tab === 'news' && <IncidentNewsTab articles={articles} groupNames={groupNames} onOpenArticle={onOpenArticle} />}
     </div>
   );

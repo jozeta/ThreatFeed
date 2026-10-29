@@ -28,3 +28,4 @@ dist-ssr
 public/data/snapshot.json
 public/data/vulns.json
 public/data/nvd-cache.json
+public/data/ransomware.json

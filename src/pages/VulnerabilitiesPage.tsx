@@ -87,9 +87,9 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
         ))}
       </div>
 
-      {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} onOpenCve={setOpenCve} /> : noData('The CISA KEV catalog'))}
-      {tab === 'new' && (vulns?.nvd ? <NewCvesTab stats={vulns.nvd} notable={vulns.notable} kevIds={kevIds} news={news} onOpenCve={setOpenCve} /> : noData('NVD data'))}
-      {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
+      {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} stackKeywords={settings.stackKeywords} onOpenCve={setOpenCve} /> : noData('The CISA KEV catalog'))}
+      {tab === 'new' && (vulns?.nvd ? <NewCvesTab stats={vulns.nvd} notable={vulns.notable} kevIds={kevIds} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} onOpenCve={setOpenCve} /> : noData('NVD data'))}
+      {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} exploits={vulns.exploits ?? {}} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
       {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={setOpenCve} /> : noData('GitHub advisory data'))}
       {tab === 'news' && <VulnNewsTab articles={articles} feeds={feeds} kevIds={kevIds} onOpenArticle={onOpenArticle} />}
       {tab === 'watching' && (

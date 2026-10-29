@@ -1,12 +1,17 @@
 import React, { useMemo } from 'react';
 import { useHashParam } from '../../hooks/useHashRoute';
-import { Article, KevEntry } from '../../types';
-import { CVSS_BANDS, CvssBandId, cvssBand, kevPerMonth, patchPriority, severityFromScore } from '../../services/intelligence/vulns';
+import { Article, ExploitInfo, KevEntry } from '../../types';
+import {
+  ATTACK_VECTORS, CVSS_BANDS, CvssBandId, cvssBand, daysToKev, isRemoteNoAuth, kevPerMonth, median, parseVector, patchPriority, severityFromScore,
+  TIME_TO_KEV_BUCKETS, timeToKevBucket,
+} from '../../services/intelligence/vulns';
+import { hasPublicExploit } from '../../services/intelligence/enrichment';
+import { containsTerm } from '../../utils/textMatch';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
-import { CveButton, EpssValue, SeverityPill, StatCards } from './shared';
+import { CveButton, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
 import { Search, Skull } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -19,14 +24,23 @@ const RANGES = [
 
 const productKey = (k: KevEntry) => `${k.vendor} ${k.product}`;
 
+/** Stack keywords matched against the catalog's vendor/product and NVD's affected-product list */
+const inStack = (k: KevEntry, keywords: string[]) => {
+  const text = `${k.vendor} ${k.product} ${k.name} ${(k.products ?? []).join(' ')}`;
+  return keywords.some((kw) => containsTerm(text, kw));
+};
+
 interface KevTabProps {
   kev: KevEntry[]; // newest first, hidden vendors already removed
   hiddenVendorCount: number;
   news: Map<string, Article[]>;
+  exploits: Record<string, ExploitInfo>;
+  cweNames: Record<string, string>;
+  stackKeywords: string[];
   onOpenCve: (cve: string) => void;
 }
 
-export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, onOpenCve }) => {
+export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, exploits, cweNames, stackKeywords, onOpenCve }) => {
   // Filters live in the URL (#/vulns/kev?vendor=…&min=7) so a filtered view can be bookmarked or shared
   const [daysParam, setDaysParam] = useHashParam('days', '90');
   const days = RANGES.some((r) => String(r.days) === daysParam) ? Number(daysParam) : 90;
@@ -43,6 +57,16 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
   const ransomwareOnly = ransomwareParam === '1';
   const setRansomwareOnly = (on: boolean) => setRansomwareParam(on ? '1' : '');
   const [query, setQuery] = useHashParam('q');
+  const [av, setAv] = useHashParam('av');
+  // On/off filters: public exploit code, remote with no login or click, CISA "automatable", My Stack
+  const [flagsParam, setFlagsParam] = useHashParam('only');
+  const flags = new Set(flagsParam.split(',').filter(Boolean));
+  const toggleFlag = (flag: string) => {
+    const next = new Set(flags);
+    if (next.has(flag)) next.delete(flag);
+    else next.add(flag);
+    setFlagsParam([...next].join(','));
+  };
 
   // Every filter except the time range applies to the chart too; the range only to the stats and lists
   const filtered = useMemo(() => {
@@ -54,9 +78,14 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
       (!band || cvssBand(k.cvss) === band) &&
       (minCvss === 0 || (k.cvss ?? 0) >= minCvss) &&
       (!ransomwareOnly || k.ransomware) &&
-      (!q || `${k.cve} ${k.vendor} ${k.product} ${k.name}`.toLowerCase().includes(q))
+      (!av || parseVector(k.vector).av === av) &&
+      (!flags.has('exploit') || hasPublicExploit(exploits[k.cve])) &&
+      (!flags.has('remote') || isRemoteNoAuth(k.vector)) &&
+      (!flags.has('auto') || k.ssvc?.automatable === 'yes') &&
+      (!flags.has('stack') || inStack(k, stackKeywords)) &&
+      (!q || `${k.cve} ${k.vendor} ${k.product} ${k.name} ${(k.products ?? []).join(' ')}`.toLowerCase().includes(q))
     );
-  }, [kev, vendor, product, cwe, band, minCvss, ransomwareOnly, query]);
+  }, [kev, vendor, product, cwe, band, minCvss, ransomwareOnly, query, av, flagsParam, exploits, stackKeywords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = new Date().toISOString().slice(0, 10);
   const since = days ? new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10) : '';
@@ -81,6 +110,26 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
     return CVSS_BANDS.map((b) => ({ ...b, count: counts.find(([id]) => id === b.id)?.[1] ?? 0 }));
   }, [inRange]);
   const allVendors = useMemo(() => countBy(kev, (k) => k.vendor), [kev]);
+  const vectors = countBy(inRange, (k) => parseVector(k.vector).av);
+
+  // Time from disclosure to KEV listing, and how much of it has exploit code in the open
+  const timing = useMemo(() => {
+    const days = inRange.map(daysToKev).filter((d): d is number => d !== undefined);
+    const counts = countBy(days, (d) => timeToKevBucket(d));
+    return {
+      median: median(days.filter((d) => d >= 0)),
+      zeroDay: days.filter((d) => d <= 0).length,
+      buckets: TIME_TO_KEV_BUCKETS.map((b) => ({ ...b, count: counts.find(([id]) => id === b.id)?.[1] ?? 0 })),
+    };
+  }, [inRange]);
+  const exploitStats = useMemo(() => ({
+    any: inRange.filter((k) => hasPublicExploit(exploits[k.cve])).length,
+    msf: inRange.filter((k) => exploits[k.cve]?.msf?.length).length,
+    nuclei: inRange.filter((k) => exploits[k.cve]?.nuclei).length,
+    remote: inRange.filter((k) => isRemoteNoAuth(k.vector)).length,
+    automatable: inRange.filter((k) => k.ssvc?.automatable === 'yes').length,
+  }), [inRange, exploits]);
+  const pct = (n: number) => (inRange.length ? `${Math.round((n / inRange.length) * 100)}%` : '');
 
   const patchFirst = useMemo(
     () => [...inRange].map((k) => ({ k, score: patchPriority(k, news.get(k.cve)?.length ?? 0) })).sort((a, b) => b.score - a.score).slice(0, 8),
@@ -113,9 +162,19 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
         </label>
       </div>
 
-      {(product || cwe || band) && (
+      <div className="flex flex-wrap items-center gap-2 -mt-3">
+        <button onClick={() => toggleFlag('exploit')} className={chipClass(flags.has('exploit'))} title="Metasploit module, Nuclei template or proof-of-concept code on GitHub">Public exploit</button>
+        <button onClick={() => toggleFlag('remote')} className={chipClass(flags.has('remote'))} title="CVSS: network attack vector, no privileges, no user interaction">Remote · no login · no click</button>
+        <button onClick={() => toggleFlag('auto')} className={chipClass(flags.has('auto'))} title="CISA SSVC: exploitation can be automated">Automatable</button>
+        {stackKeywords.length > 0 && (
+          <button onClick={() => toggleFlag('stack')} className={chipClass(flags.has('stack'))} title="Matches your My Stack products (vendor, product or NVD's affected products)">My stack</button>
+        )}
+      </div>
+
+      {(product || cwe || band || av) && (
         <div className="flex flex-wrap items-center gap-2 -mt-3 text-xs font-mono">
           <span className="text-theme-text-muted">Filtered by:</span>
+          {av && <button onClick={() => setAv('')} className={chipClass(true)}>{ATTACK_VECTORS[av] ?? av} ×</button>}
           {product && <button onClick={() => setProduct('')} className={chipClass(true)}>{product} ×</button>}
           {cwe && <button onClick={() => setCwe('')} className={chipClass(true)}>{cwe} ×</button>}
           {band && <button onClick={() => setBand('')} className={chipClass(true)}>CVSS {CVSS_BANDS.find((b) => b.id === band)?.label} ×</button>}
@@ -143,6 +202,30 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
             ],
           }))}
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
+          <SectionTitle>Time from disclosure to KEV</SectionTitle>
+          <BarList color="bg-rose-500/70" rows={timing.buckets.map((b) => ({ key: b.id, label: b.label, value: b.count }))} />
+          <p className="mt-3 text-[11px] font-mono text-theme-text-muted">
+            {timing.median !== undefined ? <>Median <strong className="text-theme-text">{timing.median} days</strong> from publication to listing</> : 'No publication dates yet'}
+            {timing.zeroDay > 0 && <> · <strong className="text-rose-500">{timing.zeroDay}</strong> already exploited when disclosed</>}
+          </p>
+        </div>
+        <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
+          <SectionTitle>How easy to exploit</SectionTitle>
+          <BarList color="bg-violet-500/70" rows={[
+            { key: 'any', label: 'Public exploit code', value: exploitStats.any },
+            { key: 'msf', label: 'Metasploit module', value: exploitStats.msf },
+            { key: 'nuclei', label: 'Nuclei template', value: exploitStats.nuclei },
+            { key: 'remote', label: 'Remote, no login/click', value: exploitStats.remote },
+            { key: 'auto', label: 'Automatable (SSVC)', value: exploitStats.automatable },
+          ]} />
+          <p className="mt-3 text-[11px] font-mono text-theme-text-muted">
+            {pct(exploitStats.any)} of these have exploit code in the open (Metasploit, Nuclei, GitHub PoCs)
+          </p>
+        </div>
       </div>
 
       {patchFirst.length > 0 && (
@@ -174,7 +257,11 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
           </div>
           <div>
             <SectionTitle>Weaknesses (CWE)</SectionTitle>
-            <BarList color="bg-sky-500/70" rows={weaknesses.slice(0, 8).map(([c, n]) => ({ key: c, label: c, value: n, active: cwe === c, onClick: () => toggle(cwe, c, setCwe) }))} />
+            <BarList color="bg-sky-500/70" rows={weaknesses.slice(0, 8).map(([c, n]) => ({ key: c, label: cweLabel(c, cweNames), value: n, active: cwe === c, onClick: () => toggle(cwe, c, setCwe) }))} />
+          </div>
+          <div>
+            <SectionTitle>Attack vector</SectionTitle>
+            <BarList color="bg-violet-500/70" rows={vectors.map(([v, n]) => ({ key: v, label: ATTACK_VECTORS[v] ?? v, value: n, active: av === v, onClick: () => toggle(av, v, setAv) }))} />
           </div>
           <div>
             <SectionTitle>CVSS score</SectionTitle>
@@ -193,6 +280,8 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
                   <SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} />
                   <span className="text-theme-text-muted">EPSS <EpssValue epss={k.epss} /></span>
                   {k.ransomware && <span className="px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
+                  <ExploitBadges info={exploits[k.cve]} />
+                  <SsvcBadge ssvc={k.ssvc} inKev />
                 </div>
                 <p className="font-serif text-theme-text">{k.name}</p>
                 <p className="font-mono text-[11px] text-theme-text-muted">
@@ -211,6 +300,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
                 <th className="py-2 pr-3 font-semibold">Vulnerability</th>
                 <th className="py-2 pr-3 font-semibold" title="CVSS base score from NVD">CVSS</th>
                 <th className="py-2 pr-3 font-semibold" title="Probability of exploitation in the next 30 days">EPSS</th>
+                <th className="py-2 pr-3 font-semibold" title="Public exploit code and CISA's SSVC assessment">Exploit</th>
                 <th className="py-2 pr-3 font-semibold">Due</th>
                 <th className="py-2 pr-3 font-semibold">News</th>
               </tr>
@@ -226,6 +316,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, on
                   </td>
                   <td className="py-2 pr-3"><SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} /></td>
                   <td className="py-2 pr-3"><EpssValue epss={k.epss} /></td>
+                  <td className="py-2 pr-3"><div className="flex flex-col gap-1 items-start"><ExploitBadges info={exploits[k.cve]} /><SsvcBadge ssvc={k.ssvc} inKev /></div></td>
                   <td className={`py-2 pr-3 whitespace-nowrap ${k.dueDate && k.dueDate >= today && k.dueDate <= in14Days ? 'text-orange-500 font-bold' : 'text-theme-text-muted'}`}>{k.dueDate ?? '—'}</td>
                   <td className="py-2 pr-3 text-theme-text-muted">{news.get(k.cve)?.length || ''}</td>
                 </tr>

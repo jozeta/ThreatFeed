@@ -14,7 +14,8 @@ export const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children
 export const BarList: React.FC<{
   rows: { key: string; label: React.ReactNode; value: number; active?: boolean; onClick?: () => void }[];
   color?: string;
-}> = ({ rows, color = 'bg-rose-500/70' }) => {
+  format?: (n: number) => string; // e.g. currency; defaults to the plain number
+}> = ({ rows, color = 'bg-rose-500/70', format = String }) => {
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <ul className="space-y-1 text-xs font-mono">
@@ -23,7 +24,7 @@ export const BarList: React.FC<{
           <>
             <span className="w-28 truncate text-left">{r.label}</span>
             <span className={`h-1.5 rounded ${color}`} style={{ width: `${Math.max(3, (r.value / max) * 90)}px` }} />
-            <span className="text-theme-text-muted">{r.value}</span>
+            <span className="text-theme-text-muted">{format(r.value)}</span>
           </>
         );
         return (

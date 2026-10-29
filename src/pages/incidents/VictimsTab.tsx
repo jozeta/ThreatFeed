@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Article, LeakSiteVictim, RansomwareGroupProfile } from '../../types';
+import { useHashParam } from '../../hooks/useHashRoute';
+import { isPubliclyReported, publicReportIndex } from '../../services/intelligence/enrichment';
+import { Article, LeakSiteVictim, RansomwareGroupProfile, RansomwareIntel } from '../../types';
 import { countryFlag, countryName, groupDisplayName, localCountry, NORDIC_COUNTRIES } from '../../utils/countries';
 import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
@@ -14,6 +16,7 @@ const RANGES = [
   { days: 1, label: '24h' },
   { days: 7, label: '7 days' },
   { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
 ];
 
 interface VictimsTabProps {
@@ -21,17 +24,26 @@ interface VictimsTabProps {
   groups: Record<string, RansomwareGroupProfile>;
   articles: Article[];
   structured: boolean; // false = fallback parsed from the RSS feed
+  intel: RansomwareIntel | null;
   onOpenArticle: (article: Article) => void;
 }
 
-export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, articles, structured, onOpenArticle }) => {
+export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, articles, structured, intel, onOpenArticle }) => {
   const [days, setDays] = useState(7);
   const [region, setRegion] = useState<'all' | 'local' | 'nordic'>('all');
   const [group, setGroup] = useState('');
   const [country, setCountry] = useState('');
   const [sector, setSector] = useState('');
   const [query, setQuery] = useState('');
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [reportedOnly, setReportedOnly] = useState(false);
+  // The open group lives in the URL (#/ransomware?group=akira) so it can be linked from the Vulns page
+  const [groupParam, setGroupParam] = useHashParam('group');
+  const openGroup = groupParam || null;
+  const setOpenGroup = (g: string | null) => setGroupParam(g ? g.toLowerCase() : '', Boolean(g));
+
+  // Victims that also show up in press reports or official breach notices (Ransomware.live)
+  const reports = useMemo(() => publicReportIndex(intel?.attacks ?? []), [intel]);
+  const reported = useMemo(() => new Set(victims.filter((v) => isPubliclyReported(v, reports)).map((v) => v.id)), [victims, reports]);
   const home = localCountry();
 
   // Region and text filters apply to the chart too; the time range only to the lists below it
@@ -40,8 +52,24 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
     (!group || v.group === group) &&
     (!country || v.country === country) &&
     (!sector || v.sector === sector) &&
+    (!reportedOnly || reported.has(v.id)) &&
     (!query || `${v.victim} ${v.domain ?? ''} ${v.sector ?? ''} ${v.description ?? ''}`.toLowerCase().includes(query.toLowerCase()))
-  ), [victims, region, home, group, country, sector, query]);
+  ), [victims, region, home, group, country, sector, query, reportedOnly, reported]);
+
+  // Groups that appeared recently (first seen by Ransomware.live in the last 90 days) and ones that went quiet
+  // (3+ victims in the 60 days before the last 30, none since)
+  const { newGroups, quietGroups } = useMemo(() => {
+    const cutoff = new Date(Date.now() - 90 * DAY_MS).toISOString().slice(0, 10);
+    const recent = new Set(victims.filter((v) => Date.now() - new Date(v.discoveredAt).getTime() < 30 * DAY_MS).map((v) => v.group.toLowerCase()));
+    const before = countBy(victims.filter((v) => Date.now() - new Date(v.discoveredAt).getTime() >= 30 * DAY_MS), (v) => v.group.toLowerCase());
+    return {
+      newGroups: Object.entries(intel?.groups ?? {})
+        .filter(([, g]) => g.firstSeen && g.firstSeen >= cutoff)
+        .sort((a, b) => (b[1].firstSeen ?? '').localeCompare(a[1].firstSeen ?? ''))
+        .map(([key, g]) => ({ key, name: g.name, firstSeen: g.firstSeen! })),
+      quietGroups: before.filter(([g, n]) => n >= 3 && !recent.has(g)).map(([key, n]) => ({ key, count: n })),
+    };
+  }, [victims, intel]);
 
   const inRange = useMemo(() => filtered.filter((v) => Date.now() - new Date(v.discoveredAt).getTime() < days * DAY_MS), [filtered, days]);
   const previous = filtered.filter((v) => {
@@ -67,6 +95,11 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
         <button onClick={() => setRegion('all')} className={chipClass(region === 'all')}>🌍 All</button>
         {home && <button onClick={() => setRegion('local')} className={chipClass(region === 'local')}>{countryFlag(home)} {countryName(home)}</button>}
         <button onClick={() => setRegion('nordic')} className={chipClass(region === 'nordic')}>Nordics</button>
+        {reported.size > 0 && (
+          <button onClick={() => setReportedOnly(!reportedOnly)} className={chipClass(reportedOnly)} title="Victims also named in press reports or official breach notices">
+            Publicly reported ({reported.size})
+          </button>
+        )}
         <select value={group} onChange={(e) => setGroup(e.target.value)} className={selectClass} aria-label="Filter by group">
           <option value="">All groups ({allGroups.length})</option>
           {allGroups.map(([g, n]) => <option key={g} value={g}>{groupDisplayName(g)} ({n})</option>)}
@@ -101,8 +134,8 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
       </div>
 
       <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
-        <SectionTitle>Leak-site posts per day (last 30 days)</SectionTitle>
-        <ActivityChart victims={filtered} highlightDays={days} />
+        <SectionTitle>Leak-site posts per day (last 90 days)</SectionTitle>
+        <ActivityChart victims={filtered} days={90} highlightDays={days} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -120,6 +153,32 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
             <SectionTitle>Countries</SectionTitle>
             <BarList color="bg-sky-500/70" rows={countriesInRange.slice(0, 8).map(([c, n]) => ({ key: c, label: `${countryFlag(c)} ${countryName(c)}`, value: n, active: country === c, onClick: () => setCountry(country === c ? '' : c) }))} />
           </div>
+          {newGroups.length > 0 && (
+            <div>
+              <SectionTitle>New groups (90 days)</SectionTitle>
+              <ul className="space-y-1 text-xs font-mono">
+                {newGroups.slice(0, 8).map((g) => (
+                  <li key={g.key} className="flex items-center gap-2">
+                    <button onClick={() => setOpenGroup(g.key)} className="text-rose-500 font-bold hover:underline truncate">{groupDisplayName(g.name)}</button>
+                    <span className="text-theme-text-muted ml-auto whitespace-nowrap">since {g.firstSeen}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {quietGroups.length > 0 && (
+            <div>
+              <SectionTitle>Gone quiet</SectionTitle>
+              <ul className="space-y-1 text-xs font-mono">
+                {quietGroups.slice(0, 8).map((g) => (
+                  <li key={g.key} className="flex items-center gap-2">
+                    <button onClick={() => setOpenGroup(g.key)} className="text-theme-text hover:underline truncate">{groupDisplayName(g.key)}</button>
+                    <span className="text-theme-text-muted ml-auto whitespace-nowrap">{g.count} earlier, none in 30d</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </aside>
 
         <div className="lg:col-span-3 overflow-x-auto">
@@ -146,6 +205,7 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
                         {v.victim} <ExternalLink className="w-3 h-3 opacity-60" />
                       </a>
                     ) : <span title={v.description}>{v.victim}</span>}
+                    {reported.has(v.id) && <span className="ml-1.5 px-1 rounded bg-sky-600 text-white text-[9px] font-bold uppercase" title="Also named in a press report or official breach notice">reported</span>}
                     {v.domain && v.domain !== v.victim.toLowerCase() && <span className="block text-[10px] text-theme-text-muted">{v.domain}</span>}
                   </td>
                   <td className="py-2 pr-3 text-theme-text-muted">{v.sector ?? '—'}</td>
@@ -170,6 +230,7 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
           group={openGroup}
           victims={victims}
           profile={groups[openGroup.toLowerCase()]}
+          intel={intel?.groups[openGroup.toLowerCase()]}
           articles={articles}
           onOpenArticle={(a) => { setOpenGroup(null); onOpenArticle(a); }}
           onClose={() => setOpenGroup(null)}
