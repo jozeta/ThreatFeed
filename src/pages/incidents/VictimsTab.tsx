@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useHashParam } from '../../hooks/useHashRoute';
 import { isPubliclyReported, publicReportIndex } from '../../services/intelligence/enrichment';
-import { Article, LeakSiteVictim, RansomwareGroupProfile, RansomwareIntel } from '../../types';
+import { LeakSiteVictim, RansomwareIntel } from '../../types';
 import { countryFlag, countryName, groupDisplayName, localCountry, NORDIC_COUNTRIES } from '../../utils/countries';
 import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { ActivityChart } from './ActivityChart';
-import { GroupPanel } from './GroupPanel';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from './shared';
 import { ExternalLink, Search } from 'lucide-react';
 
@@ -21,14 +20,11 @@ const RANGES = [
 
 interface VictimsTabProps {
   victims: LeakSiteVictim[];
-  groups: Record<string, RansomwareGroupProfile>;
-  articles: Article[];
   structured: boolean; // false = fallback parsed from the RSS feed
   intel: RansomwareIntel | null;
-  onOpenArticle: (article: Article) => void;
 }
 
-export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, articles, structured, intel, onOpenArticle }) => {
+export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, intel }) => {
   const [days, setDays] = useState(7);
   const [region, setRegion] = useState<'all' | 'local' | 'nordic'>('all');
   const [group, setGroup] = useState('');
@@ -36,10 +32,9 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
   const [sector, setSector] = useState('');
   const [query, setQuery] = useState('');
   const [reportedOnly, setReportedOnly] = useState(false);
-  // The open group lives in the URL (#/ransomware?group=akira) so it can be linked from the Vulns page
-  const [groupParam, setGroupParam] = useHashParam('group');
-  const openGroup = groupParam || null;
-  const setOpenGroup = (g: string | null) => setGroupParam(g ? g.toLowerCase() : '', Boolean(g));
+  // Opening a group sets ?group= in the URL; the Ransomware page shows the panel (on any tab)
+  const [, setGroupParam] = useHashParam('group');
+  const setOpenGroup = (g: string) => setGroupParam(g.toLowerCase(), true);
 
   // Victims that also show up in press reports or official breach notices (Ransomware.live)
   const reports = useMemo(() => publicReportIndex(intel?.attacks ?? []), [intel]);
@@ -227,17 +222,6 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, groups, article
           : 'Showing victims parsed from the Ransomware.live RSS feed (country and sector are best-effort). The full dataset arrives with the server snapshot.'}
       </p>
 
-      {openGroup && (
-        <GroupPanel
-          group={openGroup}
-          victims={victims}
-          profile={groups[openGroup.toLowerCase()]}
-          intel={intel?.groups[openGroup.toLowerCase()]}
-          articles={articles}
-          onOpenArticle={(a) => { setOpenGroup(null); onOpenArticle(a); }}
-          onClose={() => setOpenGroup(null)}
-        />
-      )}
     </div>
   );
 };

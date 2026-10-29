@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Article, LeakSiteVictim } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useRansomwareIntel } from '../hooks/useVulns';
-import { useHashRoute } from '../hooks/useHashRoute';
+import { useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { ransomwareVictims } from '../services/intelligence/ransomware';
 import { countryCodeFromName } from '../utils/countries';
 import { VictimsTab } from './incidents/VictimsTab';
@@ -10,9 +10,11 @@ import { BreachesTab } from './incidents/BreachesTab';
 import { IncidentNewsTab } from './incidents/IncidentNewsTab';
 import { PublicReportsTab } from './incidents/PublicReportsTab';
 import { PaymentsTab } from './incidents/PaymentsTab';
-import { Skull, Database, Newspaper, Megaphone, Bitcoin } from 'lucide-react';
+import { GroupsTab } from './incidents/GroupsTab';
+import { GroupPanel } from './incidents/GroupPanel';
+import { Skull, Database, Newspaper, Megaphone, Bitcoin, Users } from 'lucide-react';
 
-const TABS = ['victims', 'reports', 'breaches', 'payments', 'news'] as const;
+const TABS = ['victims', 'groups', 'reports', 'breaches', 'payments', 'news'] as const;
 type Tab = (typeof TABS)[number];
 
 export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
@@ -23,6 +25,9 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
   const [route, navigate] = useHashRoute();
   const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'victims';
   const setTab = (t: Tab) => navigate('ransomware', t === 'victims' ? '' : t);
+  // The open group panel is ?group=<name>, so any tab (and the Vulns page) can link to it
+  const [groupParam, setGroupParam] = useHashParam('group');
+  const openGroup = (g: string) => setGroupParam(g.toLowerCase(), true);
 
   // Structured victims come with the snapshot; without one, fall back to parsing the RSS feed
   const victims: LeakSiteVictim[] = useMemo(() => {
@@ -44,6 +49,7 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
     { id: 'victims', label: 'Leak-site victims', icon: <Skull className="w-4 h-4" />, count: victims.length },
+    { id: 'groups', label: 'Groups', icon: <Users className="w-4 h-4" />, count: new Set(victims.map((v) => v.group.toLowerCase())).size },
     { id: 'reports', label: 'Public reports', icon: <Megaphone className="w-4 h-4" />, count: intel?.attacks.length },
     { id: 'breaches', label: 'Data breaches', icon: <Database className="w-4 h-4" />, count: breaches.length },
     { id: 'payments', label: 'Ransom payments', icon: <Bitcoin className="w-4 h-4" /> },
@@ -84,12 +90,25 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
       </div>
 
       {tab === 'victims' && (
-        <VictimsTab victims={victims} groups={incidents?.groups ?? {}} articles={articles} structured={structured} intel={intel} onOpenArticle={onOpenArticle} />
+        <VictimsTab victims={victims} structured={structured} intel={intel} />
       )}
+      {tab === 'groups' && <GroupsTab victims={victims} intel={intel} onOpenGroup={openGroup} />}
       {tab === 'reports' && (intel?.attacks.length ? <PublicReportsTab attacks={intel.attacks} /> : noData('Public attack reports'))}
       {tab === 'breaches' && (breaches.length > 0 ? <BreachesTab breaches={breaches} /> : noData('Breach data from Have I Been Pwned'))}
       {tab === 'payments' && (intel?.payments?.families.length ? <PaymentsTab families={intel.payments.families} updatedAt={intel.payments.updatedAt} /> : noData('Ransom payment data'))}
       {tab === 'news' && <IncidentNewsTab articles={articles} groupNames={groupNames} onOpenArticle={onOpenArticle} />}
+
+      {groupParam && (
+        <GroupPanel
+          group={groupParam}
+          victims={victims}
+          profile={incidents?.groups[groupParam]}
+          intel={intel?.groups[groupParam]}
+          articles={articles}
+          onOpenArticle={(a) => { setGroupParam(''); onOpenArticle(a); }}
+          onClose={() => setGroupParam('')}
+        />
+      )}
     </div>
   );
 };

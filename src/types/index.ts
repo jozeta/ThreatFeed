@@ -259,6 +259,11 @@ export interface GroupIntel {
   attack?: { id: string; name: string; url: string; aliases: string[]; techniques: { id: string; name: string }[]; software: string[] };
   cves?: { cve: string; source: 'ransomware.live' | 'cisa' | 'news'; articles?: number }[];
   payments?: { totalUsd: number; transactions: number; byYear: Record<string, number> };
+  leakSites?: { total: number; online: number; types: Record<string, number> }; // counts only, never addresses
+  attribution?: string[]; // e.g. Microsoft's "Storm-1567" (Malpedia)
+  references?: string[]; // research write-ups (Malpedia)
+  malpediaUrl?: string;
+  advisories?: { title: string; url: string; date: string }[]; // CISA #StopRansomware
 }
 
 export interface PaymentFamily {

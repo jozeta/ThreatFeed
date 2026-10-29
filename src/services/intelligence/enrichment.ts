@@ -92,7 +92,7 @@ export const normalizeGroupName = (name: string) =>
 
 // ---------- Ransomware.live group details ----------
 
-/** /v2/group/<name>. Leak-site locations (.onion addresses) are deliberately not kept. */
+/** One group from /v2/groups (or /v2/group/<name>). Leak-site addresses (.onion) are deliberately not kept. */
 export function normalizeGroupDetail(raw: any, now = new Date()): Partial<GroupIntel> | null {
   const g = Array.isArray(raw) ? raw[0] : raw;
   if (!g || typeof g.name !== 'string') return null;
@@ -114,7 +114,15 @@ export function normalizeGroupDetail(raw: any, now = new Date()): Partial<GroupI
   }
   const altNames = (typeof g.altname === 'string' ? g.altname.split(/[,;]/) : Array.isArray(g.altname) ? g.altname : [])
     .map((x: unknown) => clean(x, 40)).filter((x: string | undefined): x is string => Boolean(x));
+  // Leak-site infrastructure as counts: how many sites, how many answered Ransomware.live's last check
+  const locations: any[] = Array.isArray(g.locations) ? g.locations.filter((l: any) => l && l.enabled !== false) : [];
+  const types: Record<string, number> = {};
+  for (const l of locations) {
+    const type = clean(l.type, 20) ?? 'other';
+    types[type] = (types[type] ?? 0) + 1;
+  }
   return {
+    leakSites: locations.length ? { total: locations.length, online: locations.filter(l => l.available === true).length, types } : undefined,
     firstSeen: typeof g.added_date === 'string' && !isNaN(Date.parse(g.added_date)) ? g.added_date.slice(0, 10) : undefined,
     altNames: altNames.length ? altNames : undefined,
     description: clean(g.description ? stripHtmlToText(String(g.description)) : undefined, 800),
@@ -290,4 +298,59 @@ export function paymentFamilyFor(group: string, families: PaymentFamily[]): Paym
   const key = normalizeGroupName(group);
   if (key.length < 3) return undefined;
   return families.find(f => f.family.split(/[/(),]/).some(part => normalizeGroupName(part) === key));
+}
+
+// ---------- Malpedia ----------
+
+const MALPEDIA = 'https://malpedia.caad.fkie.fraunhofer.de/details/';
+
+/**
+ * Malpedia's family list (/api/get/families): attribution, aliases and research write-ups per family.
+ * Malpedia covers all malware, so a family only matches when it is clearly ransomware (its name, aliases,
+ * description or references say so); otherwise short names like "Storm" or "Helix" would hit unrelated malware.
+ */
+export function malpediaProfiles(families: Record<string, any>, groupNames: string[]): Map<string, Pick<GroupIntel, 'attribution' | 'references' | 'malpediaUrl' | 'altNames'>> {
+  const index = new Map<string, [string, any]>();
+  for (const [id, f] of Object.entries(families ?? {})) {
+    if (!f || typeof f.common_name !== 'string') continue;
+    const urls: string[] = Array.isArray(f.urls) ? f.urls.filter((u: unknown) => typeof u === 'string') : [];
+    const names: string[] = [f.common_name, ...(Array.isArray(f.alt_names) ? f.alt_names : [])].filter((n: unknown) => typeof n === 'string');
+    const isRansomware = /ransom/i.test(`${names.join(' ')} ${f.description ?? ''}`) || urls.some(u => /ransom/i.test(u));
+    if (!isRansomware) continue;
+    // Several platform variants (win.akira, elf.akira): keep the one with the most references
+    for (const n of names) {
+      const key = normalizeGroupName(n);
+      const existing = index.get(key);
+      if (key.length >= 3 && (!existing || urls.length > (existing[1].urls?.length ?? 0))) index.set(key, [id, f]);
+    }
+  }
+  const result = new Map<string, Pick<GroupIntel, 'attribution' | 'references' | 'malpediaUrl' | 'altNames'>>();
+  for (const group of groupNames) {
+    const hit = index.get(normalizeGroupName(group));
+    if (!hit) continue;
+    const [id, f] = hit;
+    const urls: string[] = (Array.isArray(f.urls) ? f.urls : []).filter((u: unknown): u is string => typeof u === 'string' && /^https:\/\//.test(u) && !/\.onion\b/i.test(u));
+    const list = (v: unknown) => (Array.isArray(v) ? v.map(x => clean(x, 60)).filter((x): x is string => Boolean(x)) : []);
+    result.set(group.toLowerCase(), {
+      attribution: list(f.attribution).length ? list(f.attribution) : undefined,
+      altNames: list(f.alt_names).length ? list(f.alt_names) : undefined,
+      // Malpedia lists references alphabetically, without dates; a dozen is plenty for "further reading"
+      references: urls.length ? urls.slice(0, 12) : undefined,
+      malpediaUrl: `${MALPEDIA}${encodeURIComponent(id)}`,
+    });
+  }
+  return result;
+}
+
+/** CISA "#StopRansomware: <Group>" advisories in the articles, per group */
+export function stopRansomwareAdvisories(articles: Article[], groupNames: string[]): Map<string, { title: string; url: string; date: string }[]> {
+  const keyed = new Map(groupNames.map(g => [normalizeGroupName(g), g.toLowerCase()]));
+  const result = new Map<string, { title: string; url: string; date: string }[]>();
+  for (const a of articles) {
+    const m = a.title.match(/#StopRansomware:?\s*(.+)/i);
+    const group = m && keyed.get(normalizeGroupName(m[1]));
+    if (!group || !/^https:\/\//.test(a.url)) continue;
+    result.set(group, [...(result.get(group) ?? []), { title: a.title, url: a.url, date: a.publishedAt.slice(0, 10) }]);
+  }
+  return result;
 }

@@ -23,7 +23,7 @@ const { normalizeVictim, normalizeGroup, normalizeBreach, mergeVictims } = await
 const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory, encodeNvdCache, decodeNvdCache, applyNvdUpdates, statsVector } = await import('../src/services/intelligence/vulns');
 const {
   parseMetasploit, parseNuclei, parsePocIndex, exploitInfo, normalizeGroupDetail, cvesInTtps, normalizePublicAttack,
-  cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor,
+  cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor, malpediaProfiles, stopRansomwareAdvisories,
 } = await import('../src/services/intelligence/enrichment');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
@@ -339,7 +339,7 @@ async function loadExploitSources() {
 // ---------- Ransomware.live (1 request per minute) ----------
 
 const RL_SPACING_MS = 61_000;
-const RL_MAX_CALLS = Number(process.env.RL_MAX_CALLS) || 4; // ~3 minutes of waiting, overlapping the feed downloads
+const RL_MAX_CALLS = Number(process.env.RL_MAX_CALLS) || 4; // at most ~3 minutes of waiting, overlapping the feed downloads
 let rlCalls = 0;
 let lastRlCall = 0;
 async function rlJson(id: string, label: string, path: string) {
@@ -351,49 +351,29 @@ async function rlJson(id: string, label: string, path: string) {
 }
 
 /**
- * The two "recent" lists every run, then whatever is most overdue: the group list (daily), this month's
- * victims (twice-daily backfill) and detailed profiles for groups that have none or an old one (weekly).
+ * The two "recent" lists every run, then the group list (daily; it carries every group's full profile:
+ * techniques, tools, aliases, leak-site status) and this month's victims (6-hourly backfill).
  */
-async function loadRansomwareLive(previousSnapshot: any, previousIntel: RansomwareIntel | null) {
+async function loadRansomwareLive(previousIntel: RansomwareIntel | null) {
   const updates = { ...(previousIntel?.sourceUpdates ?? {}) };
   const recent = await rlJson('rl-recent', 'Ransomware.live recent victims', 'recentvictims');
   const attacks = await rlJson('rl-attacks', 'Ransomware.live publicly reported attacks', 'recentcyberattacks');
   if (attacks) updates.rlAttacks = new Date().toISOString();
 
   let groupList: any = null;
-  if (hoursSince(updates.rlGroups) > 24) {
-    groupList = await rlJson('rl-groups', 'Ransomware.live group list', 'groups');
-    if (groupList) updates.rlGroups = new Date().toISOString();
+  if (hoursSince(updates.rlGroupProfiles) > 24) {
+    groupList = await rlJson('rl-groups', 'Ransomware.live groups and profiles', 'groups');
+    if (groupList) updates.rlGroupProfiles = new Date().toISOString();
   } else {
-    report({ id: 'rl-groups', label: 'Ransomware.live group list', status: 'cached', detail: `refreshed daily, last ${updates.rlGroups?.slice(0, 16)}` });
+    report({ id: 'rl-groups', label: 'Ransomware.live groups and profiles', status: 'cached', detail: `refreshed daily, last ${updates.rlGroupProfiles?.slice(0, 16)}` });
   }
   let month: any = null;
-  if (rlCalls < RL_MAX_CALLS && hoursSince(updates.rlMonth) > 12) {
+  if (rlCalls < RL_MAX_CALLS && hoursSince(updates.rlMonth) > 6) {
     const now = new Date();
     month = await rlJson('rl-month', 'Ransomware.live victims this month', `victims/${now.getUTCFullYear()}/${now.getUTCMonth() + 1}`);
     if (month) updates.rlMonth = new Date().toISOString();
   }
-
-  // Group profiles: never fetched first (most victims first), then the stalest older than a week
-  const victimCounts = new Map<string, number>();
-  for (const v of [...(Array.isArray(recent) ? recent : []), ...(previousSnapshot?.incidents?.victims ?? [])]) {
-    const g = String(v?.group ?? '').toLowerCase();
-    if (g) victimCounts.set(g, (victimCounts.get(g) || 0) + 1);
-  }
-  const fetchedAt = (g: string) => previousIntel?.groups?.[g]?.detailFetchedAt;
-  const due = [...victimCounts.entries()]
-    .filter(([g]) => hoursSince(fetchedAt(g)) > 24 * 7)
-    .sort((a, b) => Number(Boolean(fetchedAt(a[0]))) - Number(Boolean(fetchedAt(b[0]))) || b[1] - a[1])
-    .map(([g]) => g);
-  const details = new Map<string, Partial<GroupIntel>>();
-  for (const group of due) {
-    if (rlCalls >= RL_MAX_CALLS) break;
-    const raw = await rlJson(`rl-group-${group}`, `Ransomware.live profile: ${group}`, `group/${encodeURIComponent(group)}`);
-    const detail = raw ? normalizeGroupDetail(raw) : null;
-    if (detail) details.set(group, detail);
-  }
-  if (due.length > details.size) console.log(`  Ransomware.live: ${due.length - details.size} group profiles still to fetch in later runs`);
-  return { recent, attacks, groupList, month, details, updates };
+  return { recent, attacks, groupList, month, updates };
 }
 
 // ---------- Slow-changing sources: refreshed once a day, carried over in between ----------
@@ -416,7 +396,14 @@ async function loadDailySources(previousIntel: RansomwareIntel | null, updates: 
   } else {
     report({ id: 'payments', label: 'Ransomwhere payments', status: 'cached', detail: `refreshed daily, last ${updates.payments?.slice(0, 16)}` });
   }
-  return { attackBundle, payments };
+  let malpedia: any = null;
+  if (hoursSince(updates.malpedia) > 24) {
+    malpedia = await tryJson('malpedia', 'Malpedia families', 'https://malpedia.caad.fkie.fraunhofer.de/api/get/families', 120000);
+    if (malpedia) updates.malpedia = new Date().toISOString();
+  } else {
+    report({ id: 'malpedia', label: 'Malpedia families', status: 'cached', detail: `refreshed daily, last ${updates.malpedia?.slice(0, 16)}` });
+  }
+  return { attackBundle, payments, malpedia };
 }
 
 // ---------- Feeds ----------
@@ -446,7 +433,7 @@ const [previousSnapshot, previousIntelRaw] = await Promise.all([
 const previousIntel: RansomwareIntel | null = previousIntelRaw && typeof previousIntelRaw.groups === 'object' ? previousIntelRaw : null;
 
 // Everything slow starts now and runs while the feeds download
-const rlPromise = loadRansomwareLive(previousSnapshot, previousIntel);
+const rlPromise = loadRansomwareLive(previousIntel);
 const exploitsPromise = loadExploitSources();
 const dailyPromise = rlPromise.then(rl => loadDailySources(previousIntel, rl.updates));
 const kevEntries = await loadKev();
@@ -538,18 +525,40 @@ for (const a of [...(previousIntel?.attacks ?? []), ...(Array.isArray(rl.attacks
   if (a && typeof a.id === 'string' && a.added >= ninetyDaysAgo.slice(0, 10)) attackMap.set(a.id, a);
 }
 
-const { attackBundle, payments } = await dailyPromise;
+const { attackBundle, payments, malpedia } = await dailyPromise;
 const groupNames = [...groupKeys];
 const attackFor = attackBundle ? attackProfiles(attackBundle, groupNames) : null;
+const malpediaFor = malpedia ? malpediaProfiles(malpedia, groupNames) : null;
+const advisoriesFor = stopRansomwareAdvisories(articles, groupNames);
+// Full profiles for every group come with the (daily) group list; in between, last run's are carried over
+const profilesFor = new Map<string, Partial<GroupIntel>>();
+for (const raw of Array.isArray(rl.groupList) ? rl.groupList : []) {
+  const key = typeof raw?.name === 'string' ? raw.name.toLowerCase() : '';
+  const detail = groupKeys.has(key) ? normalizeGroupDetail(raw) : null;
+  if (detail) profilesFor.set(key, detail);
+}
 const ransomwareKev = new Set(kevEntries.filter(k => k.ransomware).map(k => k.cve));
 const articleCves = cvesFromArticles(articles, groupNames, ransomwareKev);
 
 const intelGroups: Record<string, GroupIntel> = {};
 for (const key of groupNames) {
   const prev = previousIntel?.groups?.[key];
-  const detail = rl.details.get(key);
+  const detail = profilesFor.get(key);
   const merged: GroupIntel = { ...prev, ...detail, name: prev?.name ?? victims.find(v => v.group.toLowerCase() === key)?.group ?? key };
   merged.attack = attackFor ? attackFor.get(key) : prev?.attack;
+  if (malpediaFor) {
+    const m = malpediaFor.get(key);
+    merged.attribution = m?.attribution;
+    merged.references = m?.references;
+    merged.malpediaUrl = m?.malpediaUrl;
+    // Aliases from both sources, without duplicates
+    const aliases = [...new Set([...(detail?.altNames ?? prev?.altNames ?? []), ...(m?.altNames ?? [])])];
+    merged.altNames = aliases.length ? aliases.slice(0, 10) : undefined;
+  }
+  // CISA advisories accumulate (the feed only holds the last month of them)
+  const advisories = new Map((prev?.advisories ?? []).map(a => [a.url, a]));
+  for (const a of advisoriesFor.get(key) ?? []) advisories.set(a.url, a);
+  merged.advisories = advisories.size ? [...advisories.values()].sort((a, b) => b.date.localeCompare(a.date)) : undefined;
   const family = payments ? paymentFamilyFor(key, payments.families) : undefined;
   merged.payments = family ? { totalUsd: family.totalUsd, transactions: family.transactions, byYear: family.byYear } : undefined;
   // CVEs: the group's documented techniques, CISA advisories and news, accumulated across runs
@@ -591,6 +600,6 @@ const healthy = results.filter(r => r.health.status === 'healthy').length;
 const mb = (s: string) => `${(s.length / 1e6).toFixed(2)} MB`;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${mb(json)}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
-console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
+console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);
