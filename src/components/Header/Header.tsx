@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useFeeds } from '../../context/FeedContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useFilter } from '../../context/FilterContext';
@@ -24,6 +24,9 @@ import {
 } from 'lucide-react';
 import { LayoutMode, ActiveNavTab } from '../../types';
 import { NavigationTabs } from '../Navigation/NavigationTabs';
+
+// Roughly 10 cm of scrolling on a typical screen (96 CSS px per inch)
+const COLLAPSE_AFTER_PX = 380;
 
 interface HeaderProps {
   onOpenSettings: () => void;
@@ -76,8 +79,40 @@ export const Header: React.FC<HeaderProps> = ({
     updateSettings({ layout: mode });
   };
 
+  // After the page has scrolled about 10 cm, the status bar and masthead slide up out of view and
+  // only the tabs and toolbar stay pinned. A transform (not a height change) keeps the page from jumping.
+  const mastheadRef = useRef<HTMLDivElement>(null);
+  const [mastheadHeight, setMastheadHeight] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const el = mastheadRef.current;
+    if (!el) return;
+    setMastheadHeight(el.offsetHeight);
+    const observer = new ResizeObserver(() => setMastheadHeight(el.offsetHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Hidden controls shouldn't be reachable with Tab or by screen readers (React 18 has no `inert` prop)
+  useEffect(() => {
+    if (mastheadRef.current) mastheadRef.current.inert = collapsed;
+  }, [collapsed]);
+
+  useEffect(() => {
+    // React skips the re-render when the value is unchanged, so this is cheap on every scroll event
+    const onScroll = () => setCollapsed(window.scrollY > COLLAPSE_AFTER_PX);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <header className="border-b border-theme-border bg-theme-surface/90 backdrop-blur-md sticky top-0 z-30 transition-colors">
+    <header
+      className="border-b border-theme-border bg-theme-surface/90 backdrop-blur-md sticky top-0 z-30 transition-[transform,background-color,border-color] duration-300 ease-out"
+      style={{ transform: collapsed && mastheadHeight ? `translateY(-${mastheadHeight}px)` : undefined }}
+    >
+      <div ref={mastheadRef}>
       {/* Offline Alert Banner */}
       {isOffline && (
         <div className="bg-amber-600/90 text-white text-xs font-mono py-1 px-4 text-center flex items-center justify-center gap-2">
@@ -216,6 +251,7 @@ export const Header: React.FC<HeaderProps> = ({
           <time dateTime={new Date().toISOString()}>{formatMastheadDate()}</time>
           <div className="h-[1px] w-8 sm:w-16 bg-theme-border" />
         </div>
+      </div>
       </div>
 
       {/* Navigation Tabs with Category Dropdown & Watchlist Button */}
