@@ -1,5 +1,6 @@
 import React from 'react';
-import { Article } from '../../types';
+import { Article, ExploitInfo, SsvcDecision } from '../../types';
+import { ATTACK_VECTORS, parseVector } from '../../services/intelligence/vulns';
 
 export const SEVERITY_FILL = {
   critical: 'fill-rose-600',
@@ -64,3 +65,51 @@ export function articlesByCve(articles: Article[]): Map<string, Article[]> {
 export const CveButton: React.FC<{ cve: string; onOpen: (cve: string) => void }> = ({ cve, onOpen }) => (
   <button onClick={() => onOpen(cve)} className="font-mono font-bold text-theme-accent hover:underline whitespace-nowrap">{cve}</button>
 );
+
+/** Compact markers for public exploit code: Metasploit module, Nuclei template, GitHub PoCs */
+export const ExploitBadges: React.FC<{ info?: ExploitInfo }> = ({ info }) => {
+  if (!info) return null;
+  const badge = 'inline-block px-1 rounded text-[9px] font-bold uppercase whitespace-nowrap';
+  return (
+    <span className="inline-flex flex-wrap gap-1 align-middle">
+      {info.msf?.length ? <span className={`${badge} bg-rose-600 text-white`} title={`Metasploit: ${info.msf.join(', ')}`}>MSF</span> : null}
+      {info.nuclei ? <span className={`${badge} bg-violet-600 text-white`} title={`Nuclei template: ${info.nuclei}`}>Nuclei</span> : null}
+      {info.pocs ? <span className={`${badge} bg-theme-text text-theme-bg`} title={`${info.pocs} proof-of-concept repositories on GitHub`}>PoC {info.pocs > 1 ? `×${info.pocs}` : ''}</span> : null}
+    </span>
+  );
+};
+
+/**
+ * CISA's SSVC call: exploitation status and whether exploitation can be automated. The exploitation rating
+ * is made when the CVE is published, so for KEV entries (`inKev`), where KEV itself confirms exploitation,
+ * an older "none" or "poc" would only contradict it and is left out.
+ */
+export const SsvcBadge: React.FC<{ ssvc?: SsvcDecision; inKev?: boolean }> = ({ ssvc: raw, inKev = false }) => {
+  const ssvc = raw && inKev ? { ...raw, exploitation: undefined } : raw;
+  if (!ssvc?.exploitation && ssvc?.automatable !== 'yes') return null;
+  const exploitation = ssvc.exploitation === 'active' ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/40'
+    : ssvc.exploitation === 'poc' ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/40'
+    : 'text-theme-text-muted border-theme-border';
+  return (
+    <span className="inline-flex gap-1 align-middle" title="CISA SSVC assessment (Vulnrichment)">
+      {ssvc.exploitation && <span className={`px-1 rounded border text-[9px] font-bold uppercase ${exploitation}`}>{ssvc.exploitation === 'none' ? 'no known exploit' : ssvc.exploitation}</span>}
+      {ssvc.automatable === 'yes' && <span className="px-1 rounded border text-[9px] font-bold uppercase border-amber-500/40 text-amber-600 dark:text-amber-400">automatable</span>}
+    </span>
+  );
+};
+
+/** "CWE-79 Improper Neutralization of Input…" with the full name on hover */
+export const cweLabel = (cwe: string, names?: Record<string, string>) => {
+  const name = names?.[cwe];
+  return <span title={name ? `${cwe}: ${name}` : cwe}>{cwe}{name && <span className="text-theme-text-muted"> {name}</span>}</span>;
+};
+
+const PRIVILEGES: Record<string, string> = { N: 'no privileges', L: 'low privileges', H: 'high privileges' };
+const INTERACTION: Record<string, string> = { N: 'no user interaction', R: 'user interaction', P: 'passive user interaction', A: 'active user interaction' };
+
+/** CVSS vector in words, e.g. "Network · no privileges · no user interaction" */
+export function vectorText(vector: string | undefined): string | undefined {
+  const { av, pr, ui } = parseVector(vector);
+  if (!av) return undefined;
+  return [ATTACK_VECTORS[av] ?? av, pr && PRIVILEGES[pr], ui && INTERACTION[ui]].filter(Boolean).join(' · ');
+}

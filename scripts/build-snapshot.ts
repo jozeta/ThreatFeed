@@ -20,7 +20,11 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, D
 const { parseFeedXml } = await import('../src/services/rss/parser');
 const { filterAndLimitArticles } = await import('../src/services/rss/fetcher');
 const { normalizeVictim, normalizeGroup, normalizeBreach, mergeVictims } = await import('../src/services/intelligence/incidents');
-const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory, encodeNvdCache, decodeNvdCache, applyNvdUpdates } = await import('../src/services/intelligence/vulns');
+const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory, encodeNvdCache, decodeNvdCache, applyNvdUpdates, statsVector } = await import('../src/services/intelligence/vulns');
+const {
+  parseMetasploit, parseNuclei, parsePocIndex, exploitInfo, normalizeGroupDetail, cvesInTtps, normalizePublicAttack,
+  cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor,
+} = await import('../src/services/intelligence/enrichment');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
@@ -33,11 +37,19 @@ type OssAdvisory = import('../src/types').OssAdvisory;
 type VulnData = import('../src/types').VulnData;
 type DataSourceStatus = import('../src/types').DataSourceStatus;
 type NvdCache = import('../src/services/intelligence/vulns').NvdCache;
+type RansomwareIntel = import('../src/types').RansomwareIntel;
+type GroupIntel = import('../src/types').GroupIntel;
+type PublicAttack = import('../src/types').PublicAttack;
+type ExploitInfo = import('../src/types').ExploitInfo;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
 const VULNS_OUT = resolve(root, 'public/data/vulns.json'); // loaded by the app only when a vulnerability view needs it
 const NVD_CACHE_OUT = resolve(root, 'public/data/nvd-cache.json'); // read back by the next run, never by the app
+const RANSOMWARE_OUT = resolve(root, 'public/data/ransomware.json'); // group intel, public reports, payments: Ransomware page only
+const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
+// The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
+const PREVIOUS_BASE = process.env.PREVIOUS_SNAPSHOT_URL?.replace(/snapshot\.json$/, '');
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // How every external source fared this run; published in the snapshot and shown in Feed Health
@@ -126,22 +138,6 @@ async function loadEpss(cves: string[]): Promise<Map<string, { epss: number; per
   return scores;
 }
 
-const feeds: Feed[] = JSON.parse(readFileSync(resolve(root, 'public/data/feeds.json'), 'utf8')).feeds.filter((f: Feed) => f.enabled);
-const t0 = Date.now();
-const results: { articles: Article[]; health: FeedHealth }[] = [];
-const queue = [...feeds];
-await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
-  for (let feed = queue.shift(); feed; feed = queue.shift()) {
-    const started = Date.now();
-    const result = await snapshotFeed(feed);
-    results.push(result);
-    console.log(`  ${result.health.status === 'healthy' ? '✓' : '✗'} ${feed.id} (${result.articles.length} articles, ${Date.now() - started}ms)`);
-  }
-}));
-
-const articles = results.flatMap(r => r.articles);
-const feedHealth = Object.fromEntries(results.map(r => [r.health.feedId, r.health]));
-
 /**
  * Vulnerability data for the Vulnerabilities page: the whole CISA KEV catalog, every CVE NVD published
  * in the last NVD_DAYS days (aggregated; only critical ones kept individually), reviewed GitHub
@@ -183,10 +179,10 @@ async function nvdPages(query: string, maxResults: number): Promise<CveRecord[]>
  * otherwise the whole window (about 8,000 CVEs) and the whole KEV catalog are downloaded.
  */
 async function loadNvdData(kevIds: Set<string>): Promise<{ cache: NvdCache; from: Date; to: Date } | null> {
+  const nvdLabel = 'NVD (new CVEs, KEV details)';
   const to = new Date();
   const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() - (NVD_DAYS - 1)));
   const fmt = (d: Date) => d.toISOString().replace('Z', '');
-  const scoreOf = (r: CveRecord) => r.score ?? 0; // 0 = looked up, not scored yet (so it isn't looked up every run)
 
   let previous: NvdCache | null = null;
   if (process.env.PREVIOUS_NVD_CACHE_URL) {
@@ -205,28 +201,29 @@ async function loadNvdData(kevIds: Set<string>): Promise<{ cache: NvdCache; from
       const since = new Date(Date.parse(previous.fetchedAt) - 15 * 60 * 1000);
       const updates = await nvdPages(`lastModStartDate=${fmt(since)}&lastModEndDate=${fmt(to)}`, 20000);
       const records = applyNvdUpdates(previous.records, updates, from);
-      const kevScores = { ...previous.kevScores };
-      for (const u of updates) if (kevIds.has(u.id)) kevScores[u.id] = scoreOf(u);
-      const missing = [...kevIds].filter(id => kevScores[id] === undefined);
+      // KEV CVEs: changed ones come with the updates; ones newly added to the catalog are looked up
+      const kev = { ...previous.kev };
+      for (const u of updates) if (kevIds.has(u.id)) kev[u.id] = u;
+      const missing = [...kevIds].filter(id => !kev[id]);
       if (missing.length > 20) {
-        for (const r of await nvdPages('hasKev', 10000)) kevScores[r.id] = scoreOf(r);
+        for (const r of await nvdPages('hasKev', 10000)) kev[r.id] = r;
       } else {
-        for (const id of missing) for (const r of await nvdPages(`cveId=${encodeURIComponent(id)}`, 1)) kevScores[r.id] = scoreOf(r);
+        for (const id of missing) for (const r of await nvdPages(`cveId=${encodeURIComponent(id)}`, 1)) kev[r.id] = r;
       }
-      report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'ok', count: records.length, detail: `incremental: ${updates.length} changed CVEs, ${missing.length} new KEV scores` });
-      return { cache: { fetchedAt: to.toISOString(), records, kevScores }, from, to };
+      report({ id: 'nvd', label: nvdLabel, status: 'ok', count: records.length, detail: `incremental: ${updates.length} changed CVEs, ${missing.length} new KEV entries looked up` });
+      return { cache: { fetchedAt: to.toISOString(), records, kev }, from, to };
     }
     const records = await nvdPages(`pubStartDate=${fmt(from)}&pubEndDate=${fmt(to)}`, 20000);
-    const kevScores: Record<string, number> = {};
-    for (const r of await nvdPages('hasKev', 10000)) kevScores[r.id] = scoreOf(r);
-    report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'ok', count: records.length, detail: previous ? 'full refresh (cache too old)' : 'full download (no cache)' });
-    return { cache: { fetchedAt: to.toISOString(), records, kevScores }, from, to };
+    const kev: Record<string, CveRecord> = {};
+    for (const r of await nvdPages('hasKev', 10000)) kev[r.id] = r;
+    report({ id: 'nvd', label: nvdLabel, status: 'ok', count: records.length, detail: previous ? 'full refresh (cache too old)' : 'full download (no usable cache)' });
+    return { cache: { fetchedAt: to.toISOString(), records, kev }, from, to };
   } catch (err) {
     if (previous) {
-      report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'cached', count: previous.records.length, detail: `${errorText(err)}; reusing data from ${previous.fetchedAt}` });
+      report({ id: 'nvd', label: nvdLabel, status: 'cached', count: previous.records.length, detail: `${errorText(err)}; reusing data from ${previous.fetchedAt}` });
       return { cache: { ...previous, records: applyNvdUpdates(previous.records, [], from) }, from, to };
     }
-    report({ id: 'nvd', label: 'NVD (new CVEs, KEV scores)', status: 'failed', detail: errorText(err) });
+    report({ id: 'nvd', label: nvdLabel, status: 'failed', detail: errorText(err) });
     return null;
   }
 }
@@ -270,9 +267,198 @@ async function loadEpssTop(): Promise<VulnData['epssTop']> {
   }
 }
 
+
+// ---------- Generic helpers for optional JSON sources ----------
+
+async function getJson(url: string, timeoutMs = TIMEOUT_MS): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
+    if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (/^\s*</.test(text)) throw new Error('got HTML instead of JSON');
+    const data = JSON.parse(text);
+    if (data && !Array.isArray(data) && typeof data.message === 'string' && Object.keys(data).length === 1) throw new Error(data.message); // rate limited
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Fetches and reports; null on failure (every enrichment source is optional) */
+async function tryJson(id: string, label: string, url: string, timeoutMs?: number): Promise<any> {
+  try {
+    const data = await getJson(url, timeoutMs);
+    report({ id, label, status: 'ok', count: Array.isArray(data) ? data.length : undefined });
+    return data;
+  } catch (err) {
+    report({ id, label, status: 'failed', detail: errorText(err) });
+    return null;
+  }
+}
+
+const hoursSince = (iso: string | undefined) => (iso ? (Date.now() - Date.parse(iso)) / 3600000 : Infinity);
+
+// ---------- Exploit datasets (fetched every run; a few MB each from GitHub) ----------
+
+async function loadExploitSources() {
+  const text = async (id: string, label: string, url: string) => {
+    try {
+      const { status, text } = await fetchText(url, '*/*');
+      if (status !== 200) throw new Error(`HTTP ${status}`);
+      return text;
+    } catch (err) {
+      report({ id, label, status: 'failed', detail: errorText(err) });
+      return null;
+    }
+  };
+  const [msfText, nucleiText, pocText] = await Promise.all([
+    text('msf', 'Metasploit modules', 'https://raw.githubusercontent.com/rapid7/metasploit-framework/master/db/modules_metadata_base.json'),
+    text('nuclei', 'Nuclei templates', 'https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/cves.json'),
+    text('poc', 'PoC-in-GitHub', 'https://raw.githubusercontent.com/nomi-sec/PoC-in-GitHub/master/README.md'),
+  ]);
+  const parse = <T>(id: string, label: string, raw: string | null, fn: (raw: string) => Map<string, T>) => {
+    if (raw === null) return new Map<string, T>();
+    try {
+      const map = fn(raw);
+      report({ id, label, status: 'ok', count: map.size, detail: 'CVEs covered' });
+      return map;
+    } catch (err) {
+      report({ id, label, status: 'failed', detail: errorText(err) });
+      return new Map<string, T>();
+    }
+  };
+  return {
+    msf: parse('msf', 'Metasploit modules', msfText, t => parseMetasploit(JSON.parse(t))),
+    nuclei: parse('nuclei', 'Nuclei templates', nucleiText, parseNuclei),
+    pocs: parse('poc', 'PoC-in-GitHub', pocText, parsePocIndex),
+  };
+}
+
+// ---------- Ransomware.live (1 request per minute) ----------
+
+const RL_SPACING_MS = 61_000;
+const RL_MAX_CALLS = Number(process.env.RL_MAX_CALLS) || 4; // ~3 minutes of waiting, overlapping the feed downloads
+let rlCalls = 0;
+let lastRlCall = 0;
+async function rlJson(id: string, label: string, path: string) {
+  const wait = lastRlCall + RL_SPACING_MS - Date.now();
+  if (lastRlCall && wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastRlCall = Date.now();
+  rlCalls++;
+  return tryJson(id, label, `https://api.ransomware.live/v2/${path}`);
+}
+
+/**
+ * The two "recent" lists every run, then whatever is most overdue: the group list (daily), this month's
+ * victims (twice-daily backfill) and detailed profiles for groups that have none or an old one (weekly).
+ */
+async function loadRansomwareLive(previousSnapshot: any, previousIntel: RansomwareIntel | null) {
+  const updates = { ...(previousIntel?.sourceUpdates ?? {}) };
+  const recent = await rlJson('rl-recent', 'Ransomware.live recent victims', 'recentvictims');
+  const attacks = await rlJson('rl-attacks', 'Ransomware.live publicly reported attacks', 'recentcyberattacks');
+  if (attacks) updates.rlAttacks = new Date().toISOString();
+
+  let groupList: any = null;
+  if (hoursSince(updates.rlGroups) > 24) {
+    groupList = await rlJson('rl-groups', 'Ransomware.live group list', 'groups');
+    if (groupList) updates.rlGroups = new Date().toISOString();
+  } else {
+    report({ id: 'rl-groups', label: 'Ransomware.live group list', status: 'cached', detail: `refreshed daily, last ${updates.rlGroups?.slice(0, 16)}` });
+  }
+  let month: any = null;
+  if (rlCalls < RL_MAX_CALLS && hoursSince(updates.rlMonth) > 12) {
+    const now = new Date();
+    month = await rlJson('rl-month', 'Ransomware.live victims this month', `victims/${now.getUTCFullYear()}/${now.getUTCMonth() + 1}`);
+    if (month) updates.rlMonth = new Date().toISOString();
+  }
+
+  // Group profiles: never fetched first (most victims first), then the stalest older than a week
+  const victimCounts = new Map<string, number>();
+  for (const v of [...(Array.isArray(recent) ? recent : []), ...(previousSnapshot?.incidents?.victims ?? [])]) {
+    const g = String(v?.group ?? '').toLowerCase();
+    if (g) victimCounts.set(g, (victimCounts.get(g) || 0) + 1);
+  }
+  const fetchedAt = (g: string) => previousIntel?.groups?.[g]?.detailFetchedAt;
+  const due = [...victimCounts.entries()]
+    .filter(([g]) => hoursSince(fetchedAt(g)) > 24 * 7)
+    .sort((a, b) => Number(Boolean(fetchedAt(a[0]))) - Number(Boolean(fetchedAt(b[0]))) || b[1] - a[1])
+    .map(([g]) => g);
+  const details = new Map<string, Partial<GroupIntel>>();
+  for (const group of due) {
+    if (rlCalls >= RL_MAX_CALLS) break;
+    const raw = await rlJson(`rl-group-${group}`, `Ransomware.live profile: ${group}`, `group/${encodeURIComponent(group)}`);
+    const detail = raw ? normalizeGroupDetail(raw) : null;
+    if (detail) details.set(group, detail);
+  }
+  if (due.length > details.size) console.log(`  Ransomware.live: ${due.length - details.size} group profiles still to fetch in later runs`);
+  return { recent, attacks, groupList, month, details, updates };
+}
+
+// ---------- Slow-changing sources: refreshed once a day, carried over in between ----------
+
+async function loadDailySources(previousIntel: RansomwareIntel | null, updates: Record<string, string>) {
+  let attackBundle: any = null;
+  if (hoursSince(updates.attack) > 24) {
+    attackBundle = await tryJson('attack', 'MITRE ATT&CK (enterprise)', 'https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json', 120000);
+    if (attackBundle) updates.attack = new Date().toISOString();
+  } else {
+    report({ id: 'attack', label: 'MITRE ATT&CK (enterprise)', status: 'cached', detail: `refreshed daily, last ${updates.attack?.slice(0, 16)}` });
+  }
+  let payments = previousIntel?.payments ?? null;
+  if (hoursSince(updates.payments) > 24) {
+    const raw = await tryJson('payments', 'Ransomwhere payments', 'https://api.ransomwhe.re/export', 120000);
+    if (raw) {
+      payments = { updatedAt: new Date().toISOString(), families: aggregatePayments(raw) };
+      updates.payments = payments.updatedAt;
+    }
+  } else {
+    report({ id: 'payments', label: 'Ransomwhere payments', status: 'cached', detail: `refreshed daily, last ${updates.payments?.slice(0, 16)}` });
+  }
+  return { attackBundle, payments };
+}
+
+// ---------- Feeds ----------
+
+async function fetchFeeds() {
+  const feeds: Feed[] = JSON.parse(readFileSync(resolve(root, 'public/data/feeds.json'), 'utf8')).feeds.filter((f: Feed) => f.enabled);
+  const results: { articles: Article[]; health: FeedHealth }[] = [];
+  const queue = [...feeds];
+  await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
+    for (let feed = queue.shift(); feed; feed = queue.shift()) {
+      const started = Date.now();
+      const result = await snapshotFeed(feed);
+      results.push(result);
+      console.log(`  ${result.health.status === 'healthy' ? '✓' : '✗'} ${feed.id} (${result.articles.length} articles, ${Date.now() - started}ms)`);
+    }
+  }));
+  return { feeds, results };
+}
+
+// ---------- Main ----------
+
+const t0 = Date.now();
+const [previousSnapshot, previousIntelRaw] = await Promise.all([
+  PREVIOUS_BASE ? tryJson('previous', 'Previous snapshot (history carry-over)', `${PREVIOUS_BASE}snapshot.json`) : null,
+  PREVIOUS_BASE ? tryJson('previous-rw', 'Previous ransomware intel (carry-over)', `${PREVIOUS_BASE}ransomware.json`) : null,
+]);
+const previousIntel: RansomwareIntel | null = previousIntelRaw && typeof previousIntelRaw.groups === 'object' ? previousIntelRaw : null;
+
+// Everything slow starts now and runs while the feeds download
+const rlPromise = loadRansomwareLive(previousSnapshot, previousIntel);
+const exploitsPromise = loadExploitSources();
+const dailyPromise = rlPromise.then(rl => loadDailySources(previousIntel, rl.updates));
 const kevEntries = await loadKev();
-const [nvd, advisories, epssTop] = await Promise.all([loadNvdData(new Set(kevEntries.map(k => k.cve))), loadAdvisories(), loadEpssTop()]);
-const kevScores = nvd?.cache.kevScores ?? {};
+const vulnSourcesPromise = Promise.all([loadNvdData(new Set(kevEntries.map(k => k.cve))), loadAdvisories(), loadEpssTop()]);
+const { feeds, results } = await fetchFeeds();
+const articles = results.flatMap(r => r.articles);
+const feedHealth = Object.fromEntries(results.map(r => [r.health.feedId, r.health]));
+
+// ---------- Vulnerabilities ----------
+
+const [nvd, advisories, epssTop] = await vulnSourcesPromise;
+const nvdKev = nvd?.cache.kev ?? {};
 const notable = (nvd?.cache.records ?? []).filter(r => (r.score ?? 0) >= 9).sort((a, b) => b.published.localeCompare(a.published));
 
 // EPSS for every CVE the app shows: in articles, the KEV catalog and critical NVD records
@@ -282,85 +468,114 @@ const cves = Array.from(new Set([
   ...notable.map(r => r.id),
 ]));
 const epss = await loadEpss(cves);
-const kev = new Map(kevEntries.map(k => [k.cve, k]));
+const kevById = new Map(kevEntries.map(k => [k.cve, k]));
 const cveIntel: Record<string, CveIntel> = {};
 for (const cve of new Set(articles.flatMap(a => a.cves || []))) {
-  const k = kev.get(cve);
+  const k = kevById.get(cve);
   const entry: CveIntel = {
     ...(k ? { kev: true, kevDateAdded: k.dateAdded, kevRansomware: k.ransomware, kevName: k.name } : { kev: false }),
     ...(epss.get(cve) || {}),
   };
   if (entry.kev || entry.epss !== undefined) cveIntel[cve] = entry;
 }
+
+const { msf, nuclei, pocs } = await exploitsPromise;
+const exploits: Record<string, ExploitInfo> = {};
+for (const cve of new Set([...kevEntries.map(k => k.cve), ...notable.map(r => r.id), ...epssTop.map(e => e.cve)])) {
+  const info = exploitInfo(cve, msf, nuclei, pocs);
+  if (info) exploits[cve] = info;
+}
+
 const vulns: VulnData = {
   updatedAt: new Date().toISOString(),
   // Descriptions stay out of the file (they were half its size); the CVE panel fetches one from NVD on demand
   kev: kevEntries
-    .map(({ description: _description, ...k }) => ({ ...k, ...epss.get(k.cve), cvss: kevScores[k.cve] > 0 ? kevScores[k.cve] : undefined }))
+    .map(({ description: _description, ...k }) => {
+      const n = nvdKev[k.cve];
+      // The app only reads attack vector, privileges and interaction from the vector; three products are plenty
+      return { ...k, ...epss.get(k.cve), cvss: n?.score, published: n?.published, vector: statsVector(n?.vector) ?? undefined, ssvc: n?.ssvc, products: n?.products?.slice(0, 3) };
+    })
     .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
   nvd: nvd ? summarizeNvd(nvd.cache.records, nvd.from, nvd.to) : null,
   notable: notable.map(r => ({ ...r, epss: epss.get(r.id)?.epss })),
   advisories,
   epssTop,
+  exploits,
 };
+const usedCwes = new Set([...vulns.kev.flatMap(k => k.cwes), ...notable.map(r => r.cwe), ...(vulns.nvd?.cwes ?? []).map(([c]) => c)]);
+vulns.cweNames = Object.fromEntries([...usedCwes].filter((c): c is string => Boolean(c && CWE_NAMES[c])).map(c => [c, CWE_NAMES[c]]));
 
-/**
- * Ransomware leak-site victims (Ransomware.live) and verified breaches (Have I Been Pwned).
- * The victims endpoint only returns the latest ~100, so history accumulates by carrying over the
- * victims from the previously published snapshot (PREVIOUS_SNAPSHOT_URL, set in the workflow).
- * Every source is optional: a failure or rate limit just means less data, never a failed build.
- */
-async function loadIncidents(): Promise<IncidentData> {
-  const getJson = async (url: string) => {
-    const { status, text } = await fetchText(url, 'application/json');
-    if (status !== 200) throw new Error(`HTTP ${status}`);
-    const data = JSON.parse(text);
-    if (data && !Array.isArray(data) && typeof data.message === 'string') throw new Error(data.message); // rate limited
-    return data;
-  };
-  const tryJson = async (id: string, label: string, url: string) => {
-    try {
-      const data = await getJson(url);
-      report({ id, label, status: 'ok', count: Array.isArray(data) ? data.length : undefined });
-      return data;
-    } catch (err) {
-      report({ id, label, status: 'failed', detail: errorText(err) });
-      return null;
-    }
-  };
-  const victimsFrom = (list: unknown): LeakSiteVictim[] =>
-    Array.isArray(list) ? list.map(normalizeVictim).filter((v): v is LeakSiteVictim => v !== null) : [];
+// ---------- Ransomware ----------
 
-  const previousUrl = process.env.PREVIOUS_SNAPSHOT_URL;
-  const previous = previousUrl ? await tryJson('previous', 'Previous snapshot (history carry-over)', previousUrl) : null;
-  const recent = await tryJson('rl-recent', 'Ransomware.live recent victims', 'https://api.ransomware.live/v2/recentvictims');
-  const now = new Date();
-  const month = await tryJson('rl-month', 'Ransomware.live victims this month', `https://api.ransomware.live/v2/victims/${now.getUTCFullYear()}/${now.getUTCMonth() + 1}`);
-  // Carried-over victims were normalized by an earlier run; still check their shape since they come over the network
-  const carried: LeakSiteVictim[] = (Array.isArray(previous?.incidents?.victims) ? previous.incidents.victims : []).filter((v: any) =>
-    v && typeof v.id === 'string' && typeof v.victim === 'string' && typeof v.group === 'string' && !isNaN(Date.parse(v.discoveredAt))
-  );
-  const victims = mergeVictims([carried, victimsFrom(month), victimsFrom(recent)]);
+const rl = await rlPromise;
+const VICTIM_DAYS = 90;
+const victimsFrom = (list: unknown): LeakSiteVictim[] =>
+  Array.isArray(list) ? list.map(normalizeVictim).filter((v): v is LeakSiteVictim => v !== null) : [];
+// Carried-over victims were normalized by an earlier run; still check their shape since they come over the network
+const carried: LeakSiteVictim[] = (Array.isArray(previousSnapshot?.incidents?.victims) ? previousSnapshot.incidents.victims : []).filter((v: any) =>
+  v && typeof v.id === 'string' && typeof v.victim === 'string' && typeof v.group === 'string' && !isNaN(Date.parse(v.discoveredAt))
+);
+const victims = mergeVictims([carried, victimsFrom(rl.month), victimsFrom(rl.recent)], VICTIM_DAYS);
+const groupKeys = new Set(victims.map(v => v.group.toLowerCase()));
 
-  const groupNames = new Set(victims.map(v => v.group.toLowerCase()));
-  const groups: IncidentData['groups'] = { ...(previous?.incidents?.groups ?? {}) };
-  const groupList = await tryJson('rl-groups', 'Ransomware.live group profiles', 'https://api.ransomware.live/v2/groups');
-  for (const raw of Array.isArray(groupList) ? groupList : []) {
-    const profile = normalizeGroup(raw);
-    if (profile && groupNames.has(profile.name.toLowerCase())) groups[profile.name.toLowerCase()] = profile;
-  }
-  for (const key of Object.keys(groups)) if (!groupNames.has(key)) delete groups[key];
+const groups: IncidentData['groups'] = { ...(previousSnapshot?.incidents?.groups ?? {}) };
+for (const raw of Array.isArray(rl.groupList) ? rl.groupList : []) {
+  const profile = normalizeGroup(raw);
+  if (profile && groupKeys.has(profile.name.toLowerCase())) groups[profile.name.toLowerCase()] = profile;
+}
+for (const key of Object.keys(groups)) if (!groupKeys.has(key)) delete groups[key];
 
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  const hibp = await tryJson('hibp', 'Have I Been Pwned breaches', 'https://haveibeenpwned.com/api/v3/breaches');
-  const breaches = Array.isArray(hibp)
-    ? hibp.map(normalizeBreach).filter((b): b is NonNullable<typeof b> => b !== null && b.addedAt >= ninetyDaysAgo).sort((a, b) => b.addedAt.localeCompare(a.addedAt))
-    : previous?.incidents?.breaches ?? [];
+const ninetyDaysAgo = new Date(Date.now() - 90 * DAY_MS).toISOString();
+const hibp = await tryJson('hibp', 'Have I Been Pwned breaches', 'https://haveibeenpwned.com/api/v3/breaches');
+const breaches = Array.isArray(hibp)
+  ? hibp.map(normalizeBreach).filter((b): b is NonNullable<typeof b> => b !== null && b.addedAt >= ninetyDaysAgo).sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+  : previousSnapshot?.incidents?.breaches ?? [];
+const incidents: IncidentData = { updatedAt: new Date().toISOString(), victims, groups, breaches };
 
-  return { updatedAt: new Date().toISOString(), victims, groups, breaches };
+// Publicly reported attacks accumulate like the victims (the endpoint only returns the latest 100)
+const attackMap = new Map<string, PublicAttack>();
+for (const a of [...(previousIntel?.attacks ?? []), ...(Array.isArray(rl.attacks) ? rl.attacks.map(normalizePublicAttack) : [])]) {
+  if (a && typeof a.id === 'string' && a.added >= ninetyDaysAgo.slice(0, 10)) attackMap.set(a.id, a);
 }
 
-const incidents = await loadIncidents();
+const { attackBundle, payments } = await dailyPromise;
+const groupNames = [...groupKeys];
+const attackFor = attackBundle ? attackProfiles(attackBundle, groupNames) : null;
+const ransomwareKev = new Set(kevEntries.filter(k => k.ransomware).map(k => k.cve));
+const articleCves = cvesFromArticles(articles, groupNames, ransomwareKev);
+
+const intelGroups: Record<string, GroupIntel> = {};
+for (const key of groupNames) {
+  const prev = previousIntel?.groups?.[key];
+  const detail = rl.details.get(key);
+  const merged: GroupIntel = { ...prev, ...detail, name: prev?.name ?? victims.find(v => v.group.toLowerCase() === key)?.group ?? key };
+  merged.attack = attackFor ? attackFor.get(key) : prev?.attack;
+  const family = payments ? paymentFamilyFor(key, payments.families) : undefined;
+  merged.payments = family ? { totalUsd: family.totalUsd, transactions: family.transactions, byYear: family.byYear } : undefined;
+  // CVEs: the group's documented techniques, CISA advisories and news, accumulated across runs
+  const linked = new Map((prev?.cves ?? []).map(c => [c.cve, { ...c }]));
+  for (const cve of cvesInTtps(merged.ttps)) linked.set(cve, { cve, source: 'ransomware.live' });
+  for (const c of articleCves.get(key) ?? []) {
+    const existing = linked.get(c.cve);
+    if (!existing || existing.source === 'news') linked.set(c.cve, { ...c, articles: Math.max(c.articles, existing?.articles ?? 0) });
+  }
+  merged.cves = linked.size ? [...linked.values()].sort((a, b) => a.cve.localeCompare(b.cve)) : undefined;
+  intelGroups[key] = merged;
+}
+const ransomwareIntel: RansomwareIntel = {
+  updatedAt: new Date().toISOString(),
+  groups: intelGroups,
+  attacks: [...attackMap.values()].sort((a, b) => b.added.localeCompare(a.added)),
+  payments,
+  sourceUpdates: rl.updates,
+};
+
+// Which groups exploit which CVE, for the Vulnerabilities page
+const cveGroups: Record<string, string[]> = {};
+for (const g of Object.values(intelGroups)) for (const c of g.cves ?? []) (cveGroups[c.cve] ??= []).push(g.name);
+vulns.cveGroups = cveGroups;
+
+// ---------- Output ----------
 
 mkdirSync(dirname(OUT), { recursive: true });
 const generatedAt = new Date().toISOString();
@@ -368,11 +583,14 @@ const json = JSON.stringify({ version: 1, generatedAt, feedHealth, sources, cveI
 writeFileSync(OUT, json);
 const vulnsJson = JSON.stringify({ version: 1, generatedAt, ...vulns });
 writeFileSync(VULNS_OUT, vulnsJson);
+const ransomwareJson = JSON.stringify({ version: 1, generatedAt, ...ransomwareIntel });
+writeFileSync(RANSOMWARE_OUT, ransomwareJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
-console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${(json.length / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${(vulnsJson.length / 1e6).toFixed(2)} MB`);
+const mb = (s: string) => `${(s.length / 1e6).toFixed(2)} MB`;
+console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${mb(json)}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
+console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
-console.log(`Incidents: ${incidents.victims.length} leak-site victims (30d), ${Object.keys(incidents.groups).length} group profiles, ${incidents.breaches.length} HIBP breaches (90d)`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

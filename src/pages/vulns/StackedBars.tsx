@@ -13,7 +13,9 @@ export interface BarBucket {
 }
 
 /** Vertical stacked bars (one per day or month), with a tooltip per bar and a small legend. */
-export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; unit: string; dimBefore?: number }> = ({ buckets, ariaLabel, unit, dimBefore = 0 }) => {
+export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; unit: string; dimBefore?: number; format?: (n: number) => string }> = ({
+  buckets, ariaLabel, unit, dimBefore = 0, format = String,
+}) => {
   const totals = buckets.map((b) => b.segments.reduce((sum, s) => sum + s.value, 0));
   const max = Math.max(1, ...totals);
   const width = 600;
@@ -28,7 +30,7 @@ export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; un
           let y = height;
           return (
             <g key={b.label} opacity={i < dimBefore ? 0.35 : 1}>
-              <title>{`${b.label}: ${totals[i]} ${unit}${b.segments.length > 1 ? ` (${b.segments.filter((s) => s.value).map((s) => `${s.value} ${s.name}`).join(', ')})` : ''}`}</title>
+              <title>{`${b.label}: ${format(totals[i])} ${unit}${b.segments.length > 1 ? ` (${b.segments.filter((s) => s.value).map((s) => `${format(s.value)} ${s.name}`).join(', ')})` : ''}`}</title>
               {/* Transparent full-height hit area so thin bars still show their tooltip */}
               <rect x={i * bar} y={0} width={bar} height={height} fill="transparent" />
               {b.segments.map((s) => {
@@ -52,7 +54,7 @@ export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; un
             ))}
           </span>
         )}
-        <span>peak {max} · {buckets[buckets.length - 1]?.short}</span>
+        <span>peak {format(max)} · {buckets[buckets.length - 1]?.short}</span>
       </figcaption>
     </figure>
   );

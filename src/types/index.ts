@@ -127,6 +127,25 @@ export interface KevEntry {
   epss?: number;
   percentile?: number;
   cvss?: number; // CVSS base score from NVD (v3.x preferred)
+  published?: string; // when the CVE was published (NVD), for time-to-KEV
+  vector?: string; // CVSS vector, e.g. CVSS:3.1/AV:N/AC:L/PR:N/UI:N/…
+  ssvc?: SsvcDecision;
+  products?: string[]; // affected "vendor product" pairs from NVD (CPE / CNA data)
+}
+
+/** CISA's SSVC decision points (from CISA Vulnrichment, carried in NVD records) */
+export interface SsvcDecision {
+  exploitation?: 'none' | 'poc' | 'active';
+  automatable?: 'yes' | 'no';
+  impact?: 'partial' | 'total';
+}
+
+/** Public exploit code and detection templates known for a CVE */
+export interface ExploitInfo {
+  msf?: string[]; // Metasploit module paths, e.g. exploit/linux/http/foo_rce
+  nuclei?: string; // Nuclei template path
+  pocs?: number; // GitHub proof-of-concept repositories (PoC-in-GitHub)
+  pocUrls?: string[]; // up to three of them
 }
 
 export type CvssSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -141,6 +160,9 @@ export interface CveRecord {
   assigner?: string;
   description?: string;
   epss?: number;
+  vector?: string;
+  ssvc?: SsvcDecision;
+  products?: string[];
 }
 
 export interface CveDayCount {
@@ -160,6 +182,9 @@ export interface NvdStats {
   daily: CveDayCount[];
   cwes: [string, number][];
   assigners: [string, number][];
+  attackVectors?: [string, number][]; // NETWORK / ADJACENT / LOCAL / PHYSICAL / unknown
+  remoteNoAuth?: number; // network, no privileges, no user interaction
+  ssvcExploitation?: [string, number][]; // active / poc / none, where CISA has assessed
 }
 
 /** A reviewed GitHub Security Advisory (open-source packages) */
@@ -197,6 +222,59 @@ export interface VulnData {
   notable: CveRecord[]; // critical (CVSS >= 9) CVEs from the NVD window
   advisories: OssAdvisory[];
   epssTop: EpssScore[]; // highest exploitation probability across all CVEs
+  exploits?: Record<string, ExploitInfo>; // for the CVEs above
+  cweNames?: Record<string, string>; // names for the CWEs above
+  cveGroups?: Record<string, string[]>; // ransomware groups known to exploit a CVE
+}
+
+/** One publicly reported attack (press, breach notification) from Ransomware.live */
+export interface PublicAttack {
+  id: string;
+  victim: string;
+  domain?: string;
+  country?: string;
+  date?: string; // when it happened, if known
+  added: string; // when Ransomware.live recorded it
+  summary?: string;
+  sourceUrl?: string; // the article or notice
+  group?: string; // claiming ransomware group, if any
+  link?: string; // the Ransomware.live page
+}
+
+export interface GroupTactic {
+  id: string;
+  name: string;
+  techniques: { id: string; name: string; details?: string }[];
+}
+
+/** Everything known about a ransomware group beyond its victims (data/ransomware.json) */
+export interface GroupIntel {
+  name: string;
+  firstSeen?: string;
+  altNames?: string[];
+  description?: string;
+  ttps?: GroupTactic[];
+  tools?: Record<string, string[]>; // by category, e.g. CredentialTheft: [Mimikatz]
+  detailFetchedAt?: string;
+  attack?: { id: string; name: string; url: string; aliases: string[]; techniques: { id: string; name: string }[]; software: string[] };
+  cves?: { cve: string; source: 'ransomware.live' | 'cisa' | 'news'; articles?: number }[];
+  payments?: { totalUsd: number; transactions: number; byYear: Record<string, number> };
+}
+
+export interface PaymentFamily {
+  family: string;
+  totalUsd: number;
+  transactions: number;
+  byYear: Record<string, number>;
+}
+
+export interface RansomwareIntel {
+  updatedAt: string;
+  generatedAt?: string;
+  groups: Record<string, GroupIntel>; // keyed by lowercase group name
+  attacks: PublicAttack[]; // publicly reported attacks, last 90 days
+  payments: { updatedAt: string; families: PaymentFamily[] } | null; // Ransomwhere
+  sourceUpdates?: Record<string, string>; // when slow-changing sources were last refreshed
 }
 
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';

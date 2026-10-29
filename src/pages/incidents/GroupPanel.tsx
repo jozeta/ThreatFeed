@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo } from 'react';
-import { Article, LeakSiteVictim, RansomwareGroupProfile } from '../../types';
+import { Article, GroupIntel, LeakSiteVictim, RansomwareGroupProfile } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
 import { countryFlag, countryName, groupDisplayName } from '../../utils/countries';
 import { formatRelativeTime } from '../../utils/date';
 import { BarList, countBy, SectionTitle } from './shared';
+import { GroupIntelSection } from './GroupIntelSection';
 import { X, ExternalLink } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -12,13 +13,14 @@ interface GroupPanelProps {
   group: string;
   victims: LeakSiteVictim[]; // all victims (30 days)
   profile?: RansomwareGroupProfile;
+  intel?: GroupIntel; // techniques, tools, ATT&CK, CVEs, payments (data/ransomware.json)
   articles: Article[];
   onOpenArticle: (article: Article) => void;
   onClose: () => void;
 }
 
 /** Everything known about one ransomware group: profile, activity, victims, and coverage in the feeds. */
-export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile, articles, onOpenArticle, onClose }) => {
+export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile, intel, articles, onOpenArticle, onClose }) => {
   const mine = useMemo(() => victims.filter((v) => v.group.toLowerCase() === group.toLowerCase()), [victims, group]);
   const name = groupDisplayName(profile?.name || group);
   const lastWeek = mine.filter((v) => Date.now() - new Date(v.discoveredAt).getTime() < 7 * DAY_MS).length;
@@ -45,14 +47,21 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile,
           <div>
             <h2 className="font-serif text-2xl font-extrabold text-theme-text">{name}</h2>
             <p className="text-xs font-mono text-theme-text-muted mt-1">
-              {mine.length} victims in 30 days · {lastWeek} in the last 7
+              {mine.length} victims in 90 days · {lastWeek} in the last 7
               {mine[0] && <> · last post {formatRelativeTime(mine[0].discoveredAt)}</>}
             </p>
+            {(intel?.firstSeen || intel?.altNames) && (
+              <p className="text-xs font-mono text-theme-text-muted mt-0.5">
+                {intel.firstSeen && <>first seen {intel.firstSeen}</>}
+                {intel.firstSeen && intel.altNames && ' · '}
+                {intel.altNames && <>also known as {intel.altNames.join(', ')}</>}
+              </p>
+            )}
           </div>
           <button onClick={onClose} className="p-1 text-theme-text-muted hover:text-theme-text" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
-        {profile?.description && <p className="text-sm font-serif text-theme-text leading-relaxed">{profile.description}</p>}
+        {(intel?.description || profile?.description) && <p className="text-sm font-serif text-theme-text leading-relaxed">{intel?.description || profile?.description}</p>}
         {profile?.url && (
           <a href={profile.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-mono text-theme-accent hover:underline">
             Group profile on Ransomware.live <ExternalLink className="w-3 h-3" />
@@ -69,6 +78,8 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile,
             <BarList rows={countBy(mine, (v) => v.country).slice(0, 6).map(([k, n]) => ({ key: k, label: `${countryFlag(k)} ${countryName(k)}`, value: n }))} />
           </div>
         </div>
+
+        <GroupIntelSection intel={intel} />
 
         <div>
           <SectionTitle>In the news ({news.length})</SectionTitle>

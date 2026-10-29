@@ -100,8 +100,9 @@ export function buildBriefing(
   const withTerms = <T,>(items: T[], text: (item: T) => string) =>
     stackKeywords.length === 0 ? [] : items.map(item => ({ ...item, terms: stackTerms(text(item), stackKeywords) })).filter(x => x.terms.length > 0);
   const stackVulns: Briefing['stackVulns'] = {
-    kev: withTerms((vulns?.kev ?? []).filter(k => k.dateAdded >= sinceDay), k => `${k.vendor} ${k.product} ${k.name}`),
-    cves: withTerms((vulns?.notable ?? []).filter(r => r.published >= sinceIso), r => r.description ?? ''),
+    // NVD's affected-product list (CNA names and CPEs) catches products the description doesn't name
+    kev: withTerms((vulns?.kev ?? []).filter(k => k.dateAdded >= sinceDay), k => `${k.vendor} ${k.product} ${k.name} ${(k.products ?? []).join(' ')}`),
+    cves: withTerms((vulns?.notable ?? []).filter(r => r.published >= sinceIso), r => `${r.description ?? ''} ${(r.products ?? []).join(' ')}`),
     advisories: withTerms((vulns?.advisories ?? []).filter(a => a.publishedAt >= sinceIso), a => `${a.ecosystem ?? ''} ${a.package ?? ''} ${a.summary}`),
   };
 

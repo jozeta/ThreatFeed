@@ -1,4 +1,4 @@
-import { CveDayCount, CveRecord, CvssSeverity, KevEntry, NvdStats, OssAdvisory } from '../../types';
+import { CveDayCount, CveRecord, CvssSeverity, KevEntry, NvdStats, OssAdvisory, SsvcDecision } from '../../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -43,15 +43,78 @@ export function assignerName(sourceIdentifier: unknown): string | undefined {
   return domain ? domain.toLowerCase().replace(/^(www|security|psirt)\./, '') : undefined;
 }
 
+/** Attack vector, privileges required and user interaction from a CVSS v3/v4 vector (v2 has no PR/UI) */
+export function parseVector(vector: string | undefined): { av?: string; pr?: string; ui?: string } {
+  if (!vector) return {};
+  const parts = new Map(vector.split('/').map(p => p.split(':') as [string, string]));
+  return { av: parts.get('AV'), pr: parts.get('PR'), ui: parts.get('UI') };
+}
+
+/** Exploitable over the network with no privileges and no user interaction: the worst kind */
+export function isRemoteNoAuth(vector: string | undefined): boolean {
+  const { av, pr, ui } = parseVector(vector);
+  return av === 'N' && pr === 'N' && ui === 'N';
+}
+
+export const ATTACK_VECTORS: Record<string, string> = { N: 'Network', A: 'Adjacent', L: 'Local', P: 'Physical' };
+
+/** CISA's SSVC options, e.g. [{exploitation: "active"}, {automatable: "no"}, {technicalImpact: "total"}] */
+function readSsvc(metrics: any): SsvcDecision | undefined {
+  const options: any[] = (Array.isArray(metrics?.ssvcV203) ? metrics.ssvcV203 : []).flatMap((m: any) => (Array.isArray(m?.ssvcData?.options) ? m.ssvcData.options : []));
+  const pick = (key: string) => {
+    const value = options.find(o => o && typeof o[key] === 'string')?.[key];
+    return typeof value === 'string' ? value.toLowerCase() : undefined;
+  };
+  const exploitation = pick('exploitation');
+  const automatable = pick('automatable');
+  const impact = pick('technicalImpact');
+  const ssvc: SsvcDecision = {
+    exploitation: exploitation === 'none' || exploitation === 'poc' || exploitation === 'active' ? exploitation : undefined,
+    automatable: automatable === 'yes' || automatable === 'no' ? automatable : undefined,
+    impact: impact === 'partial' || impact === 'total' ? impact : undefined,
+  };
+  return ssvc.exploitation || ssvc.automatable || ssvc.impact ? ssvc : undefined;
+}
+
+/** Affected "vendor product" pairs: the CNA's own names first, then NVD's CPE matches */
+function readProducts(cve: any): string[] | undefined {
+  const names: string[] = [];
+  for (const a of Array.isArray(cve.affected) ? cve.affected : []) {
+    for (const d of Array.isArray(a?.affectedData) ? a.affectedData : []) {
+      const vendor = clean(d?.vendor, 40);
+      const product = clean(d?.product, 60);
+      if (product && !/^n\/?a$/i.test(product)) names.push(vendor && !/^n\/?a$/i.test(vendor) ? `${vendor} ${product}` : product);
+    }
+  }
+  for (const c of Array.isArray(cve.configurations) ? cve.configurations : []) {
+    for (const node of Array.isArray(c?.nodes) ? c.nodes : []) {
+      for (const m of Array.isArray(node?.cpeMatch) ? node.cpeMatch : []) {
+        const [, , , vendor, product] = typeof m?.criteria === 'string' && m.vulnerable ? m.criteria.split(':') : [];
+        if (vendor && product && vendor !== '*' && product !== '*') names.push(`${vendor} ${product}`.replace(/_/g, ' '));
+      }
+    }
+  }
+  const seen = new Set<string>();
+  const unique = names.filter(n => {
+    const key = n.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return unique.length ? unique.slice(0, 6) : undefined;
+}
+
 /** One `cve` object from the NVD 2.0 API */
 export function normalizeNvdCve(cve: any): CveRecord | null {
   if (!cve || typeof cve.id !== 'string' || !isDate(cve.published)) return null;
   let score: number | undefined;
+  let vector: string | undefined;
   for (const key of METRIC_ORDER) {
     const metrics: any[] = Array.isArray(cve.metrics?.[key]) ? cve.metrics[key] : [];
     const best = metrics.find(m => m.type === 'Primary') || metrics[0];
     if (best && typeof best.cvssData?.baseScore === 'number') {
       score = best.cvssData.baseScore;
+      vector = typeof best.cvssData.vectorString === 'string' ? best.cvssData.vectorString : undefined;
       break;
     }
   }
@@ -68,10 +131,16 @@ export function normalizeNvdCve(cve: any): CveRecord | null {
     cwe,
     assigner: assignerName(cve.sourceIdentifier),
     description: clean(description, 300),
+    vector,
+    ssvc: readSsvc(cve.metrics),
+    products: readProducts(cve),
   };
 }
 
-/** Per-day severity counts plus top CWEs and CNAs over every CVE in the window */
+const top = (m: Map<string, number>, n = 15) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+const bump = (m: Map<string, number>, key: string | undefined) => key && m.set(key, (m.get(key) || 0) + 1);
+
+/** Per-day severity counts plus top CWEs and CNAs, attack vectors and CISA's exploitation ratings */
 export function summarizeNvd(records: CveRecord[], from: Date, to: Date): NvdStats {
   const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / DAY_MS));
   const daily: CveDayCount[] = Array.from({ length: days }, (_, i) => ({
@@ -81,56 +150,96 @@ export function summarizeNvd(records: CveRecord[], from: Date, to: Date): NvdSta
   const byDate = new Map(daily.map(d => [d.date, d]));
   const cwes = new Map<string, number>();
   const assigners = new Map<string, number>();
+  const vectors = new Map<string, number>();
+  const exploitation = new Map<string, number>();
+  let remoteNoAuth = 0;
   for (const r of records) {
     const day = byDate.get(r.published.slice(0, 10));
     if (day) day[(r.severity?.toLowerCase() ?? 'unscored') as keyof Omit<CveDayCount, 'date'>]++;
-    if (r.cwe && r.cwe !== 'CWE-Other') cwes.set(r.cwe, (cwes.get(r.cwe) || 0) + 1);
-    if (r.assigner) assigners.set(r.assigner, (assigners.get(r.assigner) || 0) + 1);
+    if (r.cwe && r.cwe !== 'CWE-Other') bump(cwes, r.cwe);
+    bump(assigners, r.assigner);
+    bump(vectors, ATTACK_VECTORS[parseVector(r.vector).av ?? ''] ?? 'Unknown');
+    bump(exploitation, r.ssvc?.exploitation);
+    if (isRemoteNoAuth(r.vector)) remoteNoAuth++;
   }
-  const top = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
-  return { from: from.toISOString(), to: to.toISOString(), total: records.length, daily, cwes: top(cwes), assigners: top(assigners) };
+  return {
+    from: from.toISOString(), to: to.toISOString(), total: records.length, daily, cwes: top(cwes), assigners: top(assigners),
+    attackVectors: top(vectors), remoteNoAuth, ssvcExploitation: top(exploitation),
+  };
 }
 
 /**
  * The snapshot keeps every CVE from the NVD window in data/nvd-cache.json (not loaded by the app), so the
- * next run only asks NVD for what changed since. Records are stored as compact tuples; descriptions only
- * for critical CVEs, the only ones shown individually (a CVE rescored to critical is re-fetched anyway,
- * because rescoring changes its last-modified date).
+ * next run only asks NVD for what changed since. Records are compact tuples. Critical CVEs (the only ones
+ * shown individually) keep their description, full vector and products; the rest keep just enough for the
+ * statistics. A CVE rescored to critical is re-fetched anyway, since rescoring changes its last-modified date.
+ * `kev` holds the NVD data for KEV CVEs (an entry without a score means NVD has none yet).
  */
 export interface NvdCache {
   fetchedAt: string; // end of the window the last successful NVD query covered
   records: CveRecord[];
-  kevScores: Record<string, number>;
+  kev: Record<string, CveRecord>;
 }
 
-type CacheTuple = [string, string, number | null, string | null, string | null, string | null];
+type CacheTuple = [string, string, number | null, string | null, string | null, string | null, string | null, string | null, string[] | null];
 
-export function encodeNvdCache(cache: NvdCache): unknown {
+const SSVC_CODES = { exploitation: ['none', 'poc', 'active'], automatable: ['no', 'yes'], impact: ['partial', 'total'] } as const;
+const encodeSsvc = (s: SsvcDecision | undefined) =>
+  s ? [s.exploitation ?? '-', s.automatable ?? '-', s.impact ?? '-'].join('/') : null;
+function decodeSsvc(code: unknown): SsvcDecision | undefined {
+  if (typeof code !== 'string') return undefined;
+  const [e, a, i] = code.split('/');
+  const ok = <T extends readonly string[]>(list: T, v: string) => (list.includes(v) ? (v as T[number]) : undefined);
+  return { exploitation: ok(SSVC_CODES.exploitation, e), automatable: ok(SSVC_CODES.automatable, a), impact: ok(SSVC_CODES.impact, i) };
+}
+
+// Non-critical records only need attack vector, privileges and user interaction for the statistics
+export const statsVector = (vector: string | undefined) => {
+  const { av, pr, ui } = parseVector(vector);
+  return av ? [`AV:${av}`, pr && `PR:${pr}`, ui && `UI:${ui}`].filter(Boolean).join('/') : null;
+};
+
+function toTuple(r: CveRecord, full: boolean, withDescription: boolean): CacheTuple {
+  return [
+    r.id, r.published, r.score ?? null, r.cwe ?? null, r.assigner ?? null,
+    withDescription ? r.description ?? null : null,
+    full ? r.vector ?? null : statsVector(r.vector),
+    encodeSsvc(r.ssvc),
+    full ? r.products ?? null : null,
+  ];
+}
+
+function fromTuple(t: unknown): CveRecord | null {
+  if (!Array.isArray(t) || typeof t[0] !== 'string' || isNaN(Date.parse(t[1]))) return null;
+  const score = typeof t[2] === 'number' ? t[2] : undefined;
   return {
-    version: 1,
-    fetchedAt: cache.fetchedAt,
-    records: cache.records.map((r): CacheTuple => [r.id, r.published, r.score ?? null, r.cwe ?? null, r.assigner ?? null, (r.score ?? 0) >= 9 ? r.description ?? null : null]),
-    kevScores: cache.kevScores,
+    id: t[0], published: t[1], score, severity: score === undefined ? undefined : severityFromScore(score),
+    cwe: t[3] ?? undefined, assigner: t[4] ?? undefined, description: t[5] ?? undefined,
+    vector: typeof t[6] === 'string' ? t[6] : undefined,
+    ssvc: decodeSsvc(t[7]),
+    products: Array.isArray(t[8]) ? t[8].filter((p: unknown) => typeof p === 'string') : undefined,
   };
 }
 
-/** Parses a cache fetched over the network; anything malformed means "no cache" (a full fetch) */
+export function encodeNvdCache(cache: NvdCache): unknown {
+  return {
+    version: 2,
+    fetchedAt: cache.fetchedAt,
+    records: cache.records.map(r => toTuple(r, (r.score ?? 0) >= 9, (r.score ?? 0) >= 9)),
+    kev: Object.values(cache.kev).map(r => toTuple(r, true, false)),
+  };
+}
+
+/** Parses a cache fetched over the network; anything malformed (or an older format) means a full fetch */
 export function decodeNvdCache(raw: any): NvdCache | null {
-  if (!raw || raw.version !== 1 || isNaN(Date.parse(raw.fetchedAt)) || !Array.isArray(raw.records)) return null;
-  const records: CveRecord[] = [];
-  for (const t of raw.records) {
-    if (!Array.isArray(t) || typeof t[0] !== 'string' || isNaN(Date.parse(t[1]))) continue;
-    const score = typeof t[2] === 'number' ? t[2] : undefined;
-    records.push({
-      id: t[0], published: t[1], score, severity: score === undefined ? undefined : severityFromScore(score),
-      cwe: t[3] ?? undefined, assigner: t[4] ?? undefined, description: t[5] ?? undefined,
-    });
+  if (!raw || raw.version !== 2 || isNaN(Date.parse(raw.fetchedAt)) || !Array.isArray(raw.records) || !Array.isArray(raw.kev)) return null;
+  const records = raw.records.map(fromTuple).filter((r: CveRecord | null): r is CveRecord => r !== null);
+  const kev: Record<string, CveRecord> = {};
+  for (const t of raw.kev) {
+    const r = fromTuple(t);
+    if (r) kev[r.id] = r;
   }
-  const kevScores: Record<string, number> = {};
-  for (const [cve, score] of Object.entries(raw.kevScores && typeof raw.kevScores === 'object' ? raw.kevScores : {})) {
-    if (typeof score === 'number') kevScores[cve] = score;
-  }
-  return { fetchedAt: raw.fetchedAt, records, kevScores };
+  return { fetchedAt: raw.fetchedAt, records, kev };
 }
 
 /** Applies changed CVEs to the cached window: updates replace, new ones are added, ones older than `from` drop out */
@@ -175,6 +284,31 @@ export type CvssBandId = (typeof CVSS_BANDS)[number]['id'];
 export function cvssBand(score: number | undefined): CvssBandId {
   if (score === undefined || !(score > 0)) return 'unscored';
   return CVSS_BANDS.find(b => score >= b.min && score < b.max)?.id ?? 'unscored';
+}
+
+/** Days from a CVE's publication to its KEV listing (0 or less: already exploited when disclosed) */
+export function daysToKev(k: KevEntry): number | undefined {
+  if (!k.published) return undefined;
+  return Math.round((Date.parse(k.dateAdded) - Date.parse(k.published.slice(0, 10))) / DAY_MS);
+}
+
+export const TIME_TO_KEV_BUCKETS = [
+  { id: 'zero', label: 'Same day or before', max: 0 },
+  { id: 'week', label: '1–7 days', max: 7 },
+  { id: 'month', label: '8–30 days', max: 30 },
+  { id: 'year', label: '31–365 days', max: 365 },
+  { id: 'older', label: 'Over a year', max: Infinity },
+] as const;
+
+export function timeToKevBucket(days: number) {
+  return TIME_TO_KEV_BUCKETS.find(b => days <= b.max)!.id;
+}
+
+export function median(values: number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
 /** KEV additions per calendar month, oldest first, ending with the current month */
