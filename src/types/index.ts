@@ -113,7 +113,82 @@ export interface CveIntel {
   percentile?: number;
 }
 
-export type IOCType = 'cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
+/** One entry of the CISA Known Exploited Vulnerabilities catalog */
+export interface KevEntry {
+  cve: string;
+  vendor: string;
+  product: string;
+  name: string;
+  dateAdded: string; // YYYY-MM-DD
+  dueDate?: string; // federal remediation deadline, YYYY-MM-DD
+  ransomware: boolean; // known use in ransomware campaigns
+  cwes: string[];
+  description?: string;
+  epss?: number;
+  percentile?: number;
+}
+
+export type CvssSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+/** A newly published CVE from NVD (only the notable ones are stored individually) */
+export interface CveRecord {
+  id: string;
+  published: string;
+  score?: number;
+  severity?: CvssSeverity;
+  cwe?: string;
+  assigner?: string;
+  description?: string;
+  epss?: number;
+}
+
+export interface CveDayCount {
+  date: string; // YYYY-MM-DD
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unscored: number;
+}
+
+/** Aggregates over every CVE NVD published in the window, computed server-side */
+export interface NvdStats {
+  from: string;
+  to: string;
+  total: number;
+  daily: CveDayCount[];
+  cwes: [string, number][];
+  assigners: [string, number][];
+}
+
+/** A reviewed GitHub Security Advisory (open-source packages) */
+export interface OssAdvisory {
+  id: string; // GHSA-xxxx
+  cve?: string;
+  summary: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown';
+  publishedAt: string;
+  ecosystem?: string;
+  package?: string;
+  url: string;
+}
+
+export interface EpssScore {
+  cve: string;
+  epss: number;
+  percentile: number;
+}
+
+export interface VulnData {
+  updatedAt: string;
+  kev: KevEntry[]; // the whole catalog
+  nvd: NvdStats | null;
+  notable: CveRecord[]; // critical (CVSS >= 9) CVEs from the NVD window
+  advisories: OssAdvisory[];
+  epssTop: EpssScore[]; // highest exploitation probability across all CVEs
+}
+
+export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
 export interface ExtractedIOC {
   type: IOCType;
@@ -197,4 +272,4 @@ export interface FilterState {
   sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity' | 'relevance';
 }
 
-export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'ransomware' | 'bookmarks' | 'sources' | 'health' | 'settings';
+export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';

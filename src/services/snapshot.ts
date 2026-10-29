@@ -1,10 +1,11 @@
-import { Article, CveIntel, FeedHealth, IncidentData } from '../types';
+import { Article, CveIntel, FeedHealth, IncidentData, VulnData } from '../types';
 
 export interface FeedSnapshot {
   generatedAt: string;
   feedHealth: Record<string, FeedHealth>;
   cveIntel: Record<string, CveIntel>;
   incidents: IncidentData | null; // absent in snapshots built before incident data existed
+  vulns: VulnData | null; // likewise for vulnerability data
   articles: Article[];
 }
 
@@ -24,6 +25,7 @@ export async function loadSnapshot(): Promise<FeedSnapshot | null> {
       feedHealth: data.feedHealth,
       cveIntel: data.cveIntel && typeof data.cveIntel === 'object' ? data.cveIntel : {},
       incidents: data.incidents && Array.isArray(data.incidents.victims) && Array.isArray(data.incidents.breaches) ? data.incidents : null,
+      vulns: data.vulns && Array.isArray(data.vulns.kev) && Array.isArray(data.vulns.notable) && Array.isArray(data.vulns.advisories) && Array.isArray(data.vulns.epssTop) ? data.vulns : null,
       articles: data.articles,
     };
   } catch {

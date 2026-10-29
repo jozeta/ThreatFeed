@@ -33,7 +33,7 @@ Inspired by the editorial elegance, typography, and usability of **Newsify for i
 ### 3. Established Security Feeds Configuration
 Pre-configured with curated, verified security feeds organized by category:
 - **Security News**: The Hacker News, Krebs on Security, SANS Internet Storm Center, BleepingComputer, SecurityWeek, Dark Reading, Help Net Security.
-- **Vulnerabilities**: CISA Advisories, Google Project Zero, PortSwigger Web Security Research, Exploit-DB.
+- **Vulnerabilities**: CISA Advisories and Alerts (KEV additions), Google Project Zero, PortSwigger Web Security Research, Exploit-DB, ZDI, MSRC; national CERTs (CERT/CC, CERT-SE, NCSC-NL, CERT-EU, Canadian Centre for Cyber Security, JPCERT/CC); vendor PSIRTs (Cisco, Fortinet, Palo Alto Networks); Ubuntu and Debian security notices, Chrome Releases, Wordfence and Horizon3.ai.
 - **Threat Intelligence**: Cisco Talos, Microsoft Security, SentinelOne Labs, Securelist (Kaspersky).
 - **Malware Research**: Malwarebytes Labs, ESET WeLiveSecurity, Sophos X-Ops.
 - **Red Team & Offensive Tradecraft**: SpecterOps, Bishop Fox.
@@ -125,6 +125,12 @@ Every article is enriched in the browser while its feed is parsed, and the resul
   - **Leak-site victims** from the [Ransomware.live](https://www.ransomware.live) API (30 days, accumulated across snapshot runs): a daily activity chart, filters by period, group, country, sector and text, quick chips for your own country and the Nordics, top groups / sectors / countries, and a panel per group with its profile, victims and coverage in your feeds. Links go to Ransomware.live, never to the leak sites themselves.
   - **Data breaches** added to [Have I Been Pwned](https://haveibeenpwned.com) in the last 90 days, with account counts and exposed data types (high-risk types such as passwords and ID numbers highlighted).
   - **Incident news**: articles from your feeds that report ransomware attacks or data breaches, grouped by story (keyword-based, so the occasional round-up post slips in).
+- **Vulns** tab (Vulnerabilities & KEV), also built from the snapshot. Click any CVE for a panel with its KEV entry, CVSS, EPSS, advisories and coverage in your feeds.
+  - **Known exploited (KEV)**: the whole CISA catalog with additions per month (ransomware-linked highlighted), filters by period, vendor, weakness and text, stats (added, ransomware-linked, vendors, federal due dates in the next 14 days), top vendors / products / CWEs, and a **Patch first** shortlist.
+  - **New CVEs**: every CVE NVD published in the last 14 days, per day by CVSS severity, with top CWEs and CNAs and a searchable list of the critical ones.
+  - **Exploit prediction**: the CVEs with the highest FIRST EPSS scores, the ones not (yet) in KEV, and how the KEV catalog spreads across EPSS bands.
+  - **Open source**: reviewed [GitHub Security Advisories](https://github.com/advisories) from the last 14 days by ecosystem, package and severity.
+  - **Vulnerability news**: your feeds' coverage split into exploited-in-the-wild, vendor & CERT advisories, and other vulnerability reporting, grouped by story.
 - **Trending**: CVEs, ransomware groups, threat actors and frequently exploited products mentioned most this week compared with last week, with per-day sparklines. Shown on top of the newspaper and in the briefing; click one to search for it.
 - **My Stack**: list the products you run (Settings → My Stack). Matching articles get a "Your stack" badge, rank higher within newspaper sections, and get their own briefing section.
 - **Watchlist alerts**: optional desktop notifications summarising new watchlist matches after each refresh (Settings → Watchlist Alerts).
@@ -177,7 +183,7 @@ Without a local snapshot, the dev server falls back to fetching feeds live throu
 
 ## 📦 Feed Snapshot & CVE Intelligence
 
-`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned, plus ransomware leak-site victims (Ransomware.live) and recent breaches (Have I Been Pwned). The result, `data/snapshot.json` (about 1.8 MB compressed), ships with the site.
+`.github/workflows/deploy.yml` runs every 30 minutes (and on every push to `main`): it runs the tests, then `npm run snapshot`, then builds and deploys. The snapshot script (`scripts/build-snapshot.ts`) fetches every enabled default feed server-side (where CORS doesn't apply), parses them with the app's own parser, and adds CISA KEV and FIRST EPSS data for every CVE mentioned, the full KEV catalog, the last 14 days of CVEs from NVD and reviewed GitHub advisories, the top EPSS scores, plus ransomware leak-site victims (Ransomware.live) and recent breaches (Have I Been Pwned). The result, `data/snapshot.json` (about 2.2 MB compressed), ships with the site. Set `NVD_API_KEY` to fetch from NVD faster; without one the script waits between pages to stay inside NVD's public rate limit.
 
 In the browser (Settings → Data Source, on by default), the app loads the snapshot on startup and on each refresh, and only fetches live the feeds it doesn't cover: the ones you added yourself, plus any default feed the snapshot failed to fetch (some sites block GitHub's servers but still answer the proxy). With 120 default feeds this replaces a multi-minute proxied refresh with a few seconds, and avoids the public proxies' blocking and rate limits entirely. A failed snapshot step doesn't block a deploy; the app then falls back to live fetching.
 
