@@ -77,13 +77,13 @@ jobs:
           if [ "$code" = 404 ]; then echo "No trends.json published yet"; exit 0; fi
           echo "::error::trends.json is missing and the published copy couldn't be fetched (HTTP $code); not deploying, so the history isn't lost"
           exit 1
-      # If a failed snapshot left msrc.json or actors.json missing or empty, deploy the published copies rather
-      # than a site without Patch Tuesday or actor data. Best effort: this step never fails the run.
-      - name: Keep the published Patch Tuesday and actor data
+      # If a failed snapshot left msrc.json, actors.json or entities.json missing or empty, deploy the published
+      # copies rather than a site without Patch Tuesday, actor data or entity links. Best effort: this step never fails the run.
+      - name: Keep the published Patch Tuesday, actor and entity data
         continue-on-error: true
         run: |
           mkdir -p public/data
-          for name in msrc actors; do
+          for name in msrc actors entities; do
             f=public/data/$name.json
             [ -s "$f" ] && continue
             if curl -sS -fL --retry 3 --retry-delay 15 --max-time 120 -o "$f.tmp" "https://jozeta.github.io/ThreatFeed/data/$name.json" && [ -s "$f.tmp" ]; then

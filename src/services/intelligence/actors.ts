@@ -259,35 +259,35 @@ export interface Mentions {
 }
 
 // Windows commands that ATT&CK lists as tools: never counted, they're in every how-to article
-const COMMAND_TERMS = new Set([
+export const COMMAND_TERMS = new Set([
   'ping', 'route', 'expand', 'systeminfo', 'ipconfig', 'netstat', 'whoami', 'schtasks', 'tasklist', 'nltest', 'forfiles', 'wevtutil',
   'xcopy', 'msiexec', 'powershell', 'esentutl', 'certutil', 'netsh', 'nbtstat', 'dsquery', 'rundll32', 'regsvr32', 'wmic', 'telnet', 'curl', 'wget',
 ]);
 // Real threat names that are also everyday words, places or products: counted only right next to a threat
 // word ("Play ransomware", "Royal group", "Cuba ransomware gang"), never just anywhere in a security story
-const AMBIGUOUS_TERMS = new Set([
+export const AMBIGUOUS_TERMS = new Set([
   'cuba', 'royal', 'play', 'prestige', 'explosive', 'chaos', 'rover', 'equation', 'silence', 'machete', 'inception', 'patchwork',
   'cleaver', 'axiom', 'lead', 'zinc', 'nickel', 'mercury', 'platinum', 'gold', 'iron', 'cobalt', 'copper', 'radium',
   // Malpedia families seen matching ordinary news (checked against a month of articles)
   'nexus', 'rock', 'dark', 'leverage', 'milan', 'global', 'glasses', 'sage', 'resident', 'anchor', 'stop', 'chromium', 'bluesky',
   'james', 'saga', 'lorem ipsum', 'red alert',
 ]);
-const countable = (term: string) => term.length >= 4 && !COMMAND_TERMS.has(term.toLowerCase());
+export const countable = (term: string) => term.length >= 4 && !COMMAND_TERMS.has(term.toLowerCase());
 const firstWord = (term: string) => term.toLowerCase().match(/\w+/)?.[0];
 // "APT28", "Fancy Bear", "ShinyHunters" are unmistakable; a plain word like "Carbon" or "Sofacy" also
 // needs the article to be about threats, or every carbon-price story would count for Turla's backdoor
-const distinctive = (term: string) => /\d|[\s-]|[a-z][A-Z]/.test(term);
+export const distinctive = (term: string) => /\d|[\s-]|[a-z][A-Z]/.test(term);
 const THREAT_WORDS = 'malware|ransomware|backdoors?|trojans?|(?:info)?stealers?|loaders?|botnets?|RATs?|spyware|wipers?|rootkits?|droppers?|hack(?:er|ers|ed|ing)|threat (?:actor|group)s?|APTs?|espionage|state-sponsored|nation-state';
-const THREAT_CONTEXT = new RegExp(`\\b(?:${THREAT_WORDS})\\b`, 'i');
+export const THREAT_CONTEXT = new RegExp(`\\b(?:${THREAT_WORDS})\\b`, 'i');
 // What may sit right after an ambiguous name ("Play ransomware", "Royal group") or right before it ("the ransomware Play")
-const AFTER = `(?:${THREAT_WORDS}|gang|group|operators?|affiliates?|crew|actors?)`;
-const BEFORE = '(?:ransomware|malware|backdoor|trojan|stealer|botnet|APT|group)';
+export const THREAT_AFTER = `(?:${THREAT_WORDS}|gang|group|operators?|affiliates?|crew|actors?)`;
+export const THREAT_BEFORE = '(?:ransomware|malware|backdoor|trojan|stealer|botnet|APT|group)';
 const adjacentCache = new Map<string, RegExp>();
 function adjacentToThreat(text: string, term: string): boolean {
   let re = adjacentCache.get(term);
   if (!re) {
     const t = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    re = new RegExp(`(?<!\\w)${t}(?:'s)?\\s+${AFTER}\\b|\\b${BEFORE}\\s+${t}(?!\\w)`, 'i');
+    re = new RegExp(`(?<!\\w)${t}(?:'s)?\\s+${THREAT_AFTER}\\b|\\b${THREAT_BEFORE}\\s+${t}(?!\\w)`, 'i');
     adjacentCache.set(term, re);
   }
   return re.test(text);

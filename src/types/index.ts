@@ -343,6 +343,15 @@ export interface ActorsData {
   updates?: Record<string, string>; // when actors and malware were last built, for the snapshot's carry-over
 }
 
+/** The names text is linked by (data/entities.json): each opens its detail panel */
+export interface EntitiesData {
+  generatedAt?: string;
+  vendors: string[]; // KEV vendors, canonical names
+  groups: { key: string; name: string; aliases: string[] }[]; // ransomware groups, keyed like leak-site victims (lowercase)
+  actors: { id: string; name: string; aliases: string[] }[];
+  malware: { id: string; name: string; aliases: string[] }[];
+}
+
 /** Per UTC day (YYYY-MM-DD): articles mentioning each entity, keyed `${kind}:${name}` (data/trends.json) */
 export type TrendDays = Record<string, Record<string, number>>;
 

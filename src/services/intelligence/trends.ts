@@ -29,7 +29,7 @@ const dayNumberOf = (key: string) => dayNumber(Date.parse(`${key}T00:00:00Z`));
 const weekStart = (day: number) => day - ((day + 3) % 7);
 
 // KEV vendors whose names are everyday words: they would count every "progress" and "quest"
-const AMBIGUOUS_VENDORS = new Set([
+export const AMBIGUOUS_VENDORS = new Set([
   'progress', 'arm', 'nice', 'daemon', 'checkbox', 'quest', 'meta', 'git', 'sudo', 'perl', 'looking glass', 'nx', 'vite',
   'prettier', 'plex', 'ietf', 'isc', 'pear', 'gnu', 'rails', 'elastic', 'widget factory', 'npm package', 'lg', 'php', 'ami',
 ]);

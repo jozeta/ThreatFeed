@@ -1,8 +1,9 @@
-import { ActorsData, Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
 import { decodeWatchable } from './intelligence/vulns';
 import { decodeMsrc } from './intelligence/patchTuesday';
 import { decodeActors } from './intelligence/actors';
 import { decodeTrends } from './intelligence/trends';
+import { decodeEntities } from './intelligence/entities';
 
 export interface FeedSnapshot {
   generatedAt: string;
@@ -87,6 +88,18 @@ export async function loadActors(): Promise<ActorsData | null> {
     // Malformed entries are dropped, so the page and panels can't throw on them
     const data = decodeActors(await res.json());
     return data && { generatedAt: data.generatedAt, actors: data.actors, malware: data.malware };
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/entities.json (the vendor, group, actor and malware names text is linked by), shortly after first paint */
+export async function loadEntities(): Promise<EntitiesData | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/entities.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    // Malformed entries are dropped, so linking can't throw on them
+    return decodeEntities(await res.json());
   } catch {
     return null;
   }

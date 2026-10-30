@@ -28,6 +28,7 @@ const {
 } = await import('../src/services/intelligence/enrichment');
 const { refreshPatchMonths, decodeMsrc } = await import('../src/services/intelligence/patchTuesday');
 const { refreshActors, decodeActors, encodeActors } = await import('../src/services/intelligence/actors');
+const { buildEntities } = await import('../src/services/intelligence/entities');
 const { countEntitiesByDay, mergeTrends, pickPreviousTrends, trendsVocab, decodeTrends, TREND_RECOUNT_DAYS } = await import('../src/services/intelligence/trends');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
@@ -56,6 +57,7 @@ const NVD_CACHE_OUT = resolve(root, 'public/data/nvd-cache.json'); // read back 
 const RANSOMWARE_OUT = resolve(root, 'public/data/ransomware.json'); // group intel, public reports, payments: Ransomware page only
 const MSRC_OUT = resolve(root, 'public/data/msrc.json'); // Patch Tuesday releases: the Vulnerabilities page's Patch Tuesday tab only
 const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and malware profiles: the actor and malware panels and trending chips
+const ENTITIES_OUT = resolve(root, 'public/data/entities.json'); // the names text links to their panels, loaded after first paint
 const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // mention counts per entity (daily, then weekly), two years: the detail panels' mention history
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
 // The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
@@ -730,6 +732,14 @@ const msrcJson = JSON.stringify({ version: 1, generatedAt, ...msrc });
 writeFileSync(MSRC_OUT, msrcJson);
 const actorsJson = JSON.stringify({ version: 1, ...encodeActors({ ...actors, generatedAt }) });
 writeFileSync(ACTORS_OUT, actorsJson);
+const entities = buildEntities({
+  kevVendors: kevEntries.map(k => k.vendor),
+  groups: Object.entries(intelGroups).map(([key, g]) => ({ key, name: g.name, aliases: g.altNames ?? [] })),
+  victimGroups: victims.map(v => v.group),
+  actors,
+});
+const entitiesJson = JSON.stringify({ version: 1, generatedAt, ...entities });
+writeFileSync(ENTITIES_OUT, entitiesJson);
 const trendsJson = trendsBase.write ? JSON.stringify({ version: 1, generatedAt, ...trends }) : '';
 if (trendsBase.write) writeFileSync(TRENDS_OUT, trendsJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
@@ -741,6 +751,7 @@ console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filte
 console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Patch Tuesday: ${msrc.months.map(m => `${m.id} ${m.cves.length} CVEs (${m.cves.filter(c => c.exploited).length} exploited)`).join(', ') || 'no data'}, ${mb(msrcJson)}`);
 console.log(`Actors: ${actors.actors.length} threat actors (${actors.actors.filter(a => a.country).length} with a country), ${actors.malware.length} malware and tools (${actors.malware.filter(m => m.malpediaUrl).length} in Malpedia, ${actors.malware.filter(m => !m.attackId).length} Malpedia-only from the news), ${(actorsJson.length / 1024).toFixed(0)} KB${actorsJson.length > 400 * 1024 ? ' (over the 400 KB budget)' : ''}`);
+console.log(`Entities: ${entities.vendors.length} vendors, ${entities.groups.length} groups, ${entities.actors.length} actors, ${entities.malware.length} malware and tools, ${(entitiesJson.length / 1024).toFixed(0)} KB${entitiesJson.length > 80 * 1024 ? ' (over the 80 KB budget)' : ''}`);
 console.log(trendsBase.write
   ? `Trends: ${trendDayKeys.length} days and ${Object.keys(trends.weeks).length} weeks since ${trendsSince}, ${(trendsJson.length / 1024).toFixed(0)} KB${trendsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
   : `Trends: not written, the previous history couldn't be read (${publishedTrends.error})`);
