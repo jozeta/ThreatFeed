@@ -27,19 +27,22 @@ interface Props {
 export default function TvTileCard({ tile, index, now }: Props) {
   const big = tile.col * tile.row > 1;
   const summaryRef = useRef<HTMLParagraphElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   // Show only whole lines: as many as the height left allows, or none when fewer than two fit
   useLayoutEffect(() => {
     const el = summaryRef.current;
-    if (!el) return;
+    const box = boxRef.current;
+    if (!el || !box) return;
     const fit = () => {
       const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
-      const lines = lineHeight > 0 ? Math.floor((el.clientHeight + 0.5) / lineHeight) : 0;
+      const lines = lineHeight > 0 ? Math.floor((box.clientHeight + 0.5) / lineHeight) : 0;
       el.style.webkitLineClamp = String(Math.max(lines, 1));
+      el.style.maxHeight = `${Math.max(lines, 1) * lineHeight}px`;
       el.style.visibility = lines >= 2 ? 'visible' : 'hidden';
     };
     fit();
     const ro = new ResizeObserver(fit);
-    ro.observe(el);
+    ro.observe(box);
     return () => ro.disconnect();
   }, []);
   const age = shortAge(tile.time, now);
@@ -55,7 +58,11 @@ export default function TvTileCard({ tile, index, now }: Props) {
         {age && ` · ${age}`}
       </div>
       <h2 className="tv-tile-headline">{tile.headline}</h2>
-      {tile.summary && <p ref={summaryRef} className="tv-tile-summary">{tile.summary}</p>}
+      {tile.summary && (
+        <div ref={boxRef} className="tv-tile-summary-box">
+          <p ref={summaryRef} className="tv-tile-summary">{tile.summary}</p>
+        </div>
+      )}
     </article>
   );
 }

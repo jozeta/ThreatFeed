@@ -127,7 +127,7 @@ export function tilesForBriefing(b: Briefing, max = 30): TvTile[] {
       tone: 'info',
       source: 'Trending',
       headline: t.name,
-      summary: `${t.count} articles, up from ${t.previous}`,
+      summary: t.previous > 0 && t.count !== t.previous ? `${t.count} articles, ${t.count > t.previous ? 'up' : 'down'} from ${t.previous}` : `${t.count} articles`,
       weight: 4,
     });
   }

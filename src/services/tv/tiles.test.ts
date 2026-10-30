@@ -120,6 +120,17 @@ describe('chunkSets', () => {
 });
 
 describe('tilesForBriefing', () => {
+  it('words the trend comparison by its direction', () => {
+    const trend = (count: number, previous: number) => ({ kind: 'actor', name: `T${count}-${previous}`, count, previous });
+    const b = {
+      generatedAt: ago(0), windowHours: 24, articleCount: 1, topStories: [], watchlist: [], stack: [], newKev: [],
+      ransomware: { count: 0, byGroup: [] }, breaches: [],
+      trending: [trend(19, 28), trend(30, 10), trend(5, 5), trend(4, 0)],
+      stackVulns: { kev: [], cves: [], advisories: [] },
+    } as unknown as Briefing;
+    expect(tilesForBriefing(b).map(t => t.summary)).toEqual(['19 articles, down from 28', '30 articles, up from 10', '5 articles', '4 articles']);
+  });
+
   it('makes a kev tile naming the CVE', () => {
     const b = {
       generatedAt: ago(0), windowHours: 24, articleCount: 1, topStories: [], watchlist: [], stack: [],
