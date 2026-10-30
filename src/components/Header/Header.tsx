@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { LayoutMode, ActiveNavTab } from '../../types';
 import { NavigationTabs } from '../Navigation/NavigationTabs';
+import { useHashRoute } from '../../hooks/useHashRoute';
+import { layoutLocked } from '../../utils/layout';
 
 // Roughly 10 cm of scrolling on a typical screen (96 CSS px per inch)
 const COLLAPSE_AFTER_PX = 380;
@@ -75,9 +77,17 @@ export const Header: React.FC<HeaderProps> = ({
     else updateSettings({ theme: 'dark' });
   };
 
+  const [route] = useHashRoute();
+  const layoutDisabled = layoutLocked(route);
   const handleLayoutChange = (mode: LayoutMode) => {
     updateSettings({ layout: mode });
   };
+  const layoutButtonClass = (mode: LayoutMode) =>
+    `p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+      settings.layout === mode && !layoutDisabled
+        ? 'bg-theme-surface text-theme-accent shadow-sm'
+        : `text-theme-text-muted ${layoutDisabled ? '' : 'hover:text-theme-text'}`
+    }`;
 
   // After the page has scrolled about 10 cm, the status bar and masthead slide up out of view and
   // only the tabs and toolbar stay pinned. A transform (not a height change) keeps the page from jumping.
@@ -323,37 +333,28 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center border border-theme-border rounded-md p-0.5 bg-theme-card">
             <button
               onClick={() => handleLayoutChange('newspaper')}
+              disabled={layoutDisabled}
               title="Newspaper Editorial Layout"
               aria-label="Newspaper Editorial Layout"
-              className={`p-1.5 rounded transition-colors ${
-                settings.layout === 'newspaper'
-                  ? 'bg-theme-surface text-theme-accent shadow-sm'
-                  : 'text-theme-text-muted hover:text-theme-text'
-              }`}
+              className={layoutButtonClass('newspaper')}
             >
               <Newspaper className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleLayoutChange('list-thumbnails')}
+              disabled={layoutDisabled}
               title="List + Thumbnails Layout"
               aria-label="List + Thumbnails Layout"
-              className={`p-1.5 rounded transition-colors ${
-                settings.layout === 'list-thumbnails'
-                  ? 'bg-theme-surface text-theme-accent shadow-sm'
-                  : 'text-theme-text-muted hover:text-theme-text'
-              }`}
+              className={layoutButtonClass('list-thumbnails')}
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleLayoutChange('list')}
+              disabled={layoutDisabled}
               title="Compact List Layout"
               aria-label="Compact List Layout"
-              className={`p-1.5 rounded transition-colors ${
-                settings.layout === 'list'
-                  ? 'bg-theme-surface text-theme-accent shadow-sm'
-                  : 'text-theme-text-muted hover:text-theme-text'
-              }`}
+              className={layoutButtonClass('list')}
             >
               <List className="w-4 h-4" />
             </button>

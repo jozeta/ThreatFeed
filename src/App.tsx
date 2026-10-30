@@ -170,8 +170,7 @@ export const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-grow pb-16 sm:pb-8">
         {(activeTab === 'newspaper' || activeTab === 'latest' || activeTab === 'unread') && (() => {
-          // Latest skips the editorial newspaper layout in favour of a chronological list
-          const layout = activeTab === 'latest' && settings.layout === 'newspaper' ? 'list-thumbnails' : settings.layout;
+          const layout = settings.layout;
           const viewProps = { articles: displayArticles, isLoading: isRefreshing, onOpenArticle: handleOpenArticle };
           return layout === 'newspaper' ? <NewspaperView {...viewProps} onSearch={handleSearch} />
             : layout === 'list-thumbnails' ? <ListThumbnailView {...viewProps} />

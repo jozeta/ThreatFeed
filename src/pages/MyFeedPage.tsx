@@ -7,6 +7,8 @@ import { AlertRow, useAlertFeed } from '../hooks/useAlertFeed';
 import { buildHash, useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { usePagedCount } from '../hooks/usePagedCount';
 import { ListArticle } from '../components/ArticleCard/ListArticle';
+import { NewspaperView } from '../components/Newspaper/NewspaperView';
+import { ListThumbnailView } from '../components/Layouts/ListThumbnailView';
 import { EmptyState } from '../components/Common/EmptyState';
 import { LoadMoreButton } from '../components/Common/LoadMoreButton';
 import { CvePanel } from './vulns/CvePanel';
@@ -103,6 +105,12 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
   }, [allRows]);
   const rows = ruleParam ? allRows.filter((r) => r.matches.some((m) => m.ruleId === ruleParam)) : allRows;
   const { visibleCount, hasMore, remaining, showMore } = usePagedCount(rows.length, PAGE_SIZE);
+  // News follows the header's layout buttons; the compact list keeps the per-row NEW tags and rule names
+  const newsLayout = sub === 'news' && rows.length > 0 ? settings.layout : 'list';
+  const layoutArticles = useMemo(
+    () => (newsLayout === 'list' ? [] : rows.map((r) => articleById.get(r.ref)!)),
+    [newsLayout, rows, articleById]
+  );
 
   const watched = settings.watchedCves;
   const toggleWatch = (cve: string) =>
@@ -178,6 +186,13 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
           message="Nothing matched yet"
           subtext="Matches from your alert rules show up here. Add or tune rules in Settings → Alert Rules."
         />
+      ) : newsLayout !== 'list' ? (
+        // The layout views bring their own page padding; cancel ours so the widths line up
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+          {newsLayout === 'newspaper'
+            ? <NewspaperView articles={layoutArticles} isLoading={false} onOpenArticle={onOpenArticle} />
+            : <ListThumbnailView articles={layoutArticles} isLoading={false} onOpenArticle={onOpenArticle} />}
+        </div>
       ) : (
         <div className="rounded-lg border border-theme-border bg-theme-card overflow-hidden">
           {rows.slice(0, visibleCount).map((row) => {
@@ -195,7 +210,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
           })}
         </div>
       )}
-      {hasMore && <LoadMoreButton remaining={remaining} onClick={showMore} />}
+      {hasMore && newsLayout === 'list' && <LoadMoreButton remaining={remaining} onClick={showMore} />}
 
       {openCve && (
         <CvePanel
