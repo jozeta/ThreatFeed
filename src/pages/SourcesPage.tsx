@@ -349,8 +349,8 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
 
       {/* Add / Edit Feed Modal */}
       {(isAddModalOpen || editingFeed) && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-theme-surface w-full max-w-lg rounded-xl shadow-2xl border border-theme-border p-6 relative">
+        <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+          <div className="modal-glass w-full max-w-lg rounded-xl p-6 relative">
             <button
               onClick={() => {
                 setIsAddModalOpen(false);

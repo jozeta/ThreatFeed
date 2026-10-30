@@ -157,13 +157,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex justify-center p-0 sm:p-4 md:p-6 animate-fadeIn">
+    <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex justify-center p-0 sm:p-4 md:p-6 animate-fadeIn">
       {/* Background click overlay */}
       <div className="fixed inset-0" onClick={onClose} />
 
       {/* Reader Modal Sheet */}
       <div
-        className="relative bg-theme-surface w-full max-w-4xl min-h-screen sm:min-h-0 sm:rounded-xl shadow-2xl border border-theme-border flex flex-col z-10 overflow-hidden my-auto"
+        className="relative modal-glass w-full max-w-4xl min-h-screen sm:min-h-0 sm:rounded-xl flex flex-col z-10 overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Control Bar */}

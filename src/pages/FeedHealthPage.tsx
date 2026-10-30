@@ -947,8 +947,8 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
 
       {/* FEED DEEP DEBUGGER MODAL */}
       {debugFeed && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-theme-surface border border-theme-border rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop animate-fade-in">
+          <div className="modal-glass rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
             {/* Modal Header */}
             <div className="p-5 border-b border-theme-border flex items-center justify-between bg-theme-card/60">
               <div className="flex items-center gap-2.5">

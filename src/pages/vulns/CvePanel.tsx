@@ -88,8 +88,8 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose} role="dialog" aria-modal="true" aria-label={cve}>
-      <div className="w-full max-w-xl h-full overflow-y-auto bg-theme-bg border-l border-theme-border p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={cve}>
+      <div className="w-full max-w-xl h-full overflow-y-auto modal-glass [--glass-base:var(--color-bg)] !border-y-0 !border-r-0 p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-mono text-2xl font-extrabold text-theme-text">{cve}</h2>

@@ -20,9 +20,9 @@ export const ClusterModal: React.FC<ClusterModalProps> = ({
   const allArticles = [cluster.primaryArticle, ...cluster.relatedArticles];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop animate-fadeIn">
       <div
-        className="bg-theme-card border border-theme-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden text-theme-text"
+        className="modal-glass [--glass-base:var(--color-card)] rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden text-theme-text"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
