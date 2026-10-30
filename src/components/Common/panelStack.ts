@@ -68,8 +68,13 @@ export function handleEscapeKey(e: KeyboardEvent, stack: PanelStack = panelStack
   e.stopPropagation();
 }
 
-// Capture phase on window: runs before any other keydown listener, so nothing underneath sees the key
-if (typeof window !== 'undefined') window.addEventListener('keydown', (e) => handleEscapeKey(e), true);
+// Capture phase on window: runs before any other keydown listener, so nothing underneath sees the key.
+// Removed again when Vite hot-swaps this module, so edits don't stack up listeners
+const onKeyDown = (e: KeyboardEvent) => handleEscapeKey(e);
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', onKeyDown, true);
+  import.meta.hot?.dispose(() => window.removeEventListener('keydown', onKeyDown, true));
+}
 
 /**
  * Registers a panel while `active`, closing through the latest `close`. Returns its position in the stack

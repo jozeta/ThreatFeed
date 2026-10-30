@@ -240,6 +240,10 @@ body {
   background: rgba(255, 255, 255, 0.6);
   border-color: rgba(0, 0, 0, 0.08);
 }
+/* A centred modal sits over the dim alone, so in light theme it needs nearly opaque white for its grey text */
+.light .glass-modal {
+  background: rgba(255, 255, 255, 0.88);
+}
 .dark .glass-panel,
 .dark .glass-modal {
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
@@ -263,11 +267,19 @@ body {
   }
 }
 
-.modal-backdrop,
+/* The modal's dim and blur live on a layer beside the modal, not on its parent: a parent with backdrop-filter
+   would become the modal's backdrop root, and the modal's own blur would see only a flat colour */
+.modal-backdrop::before,
 .panel-backdrop {
   background-color: rgb(4 5 7 / 0.72);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
+}
+.modal-backdrop::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
 }
 
 /* Side panel: slides in from the right (280 ms), then the backdrop fades in (220 ms from 160 ms).
@@ -300,12 +312,14 @@ body {
 }
 .panel-backdrop[data-clear] {
   background-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
-/* Centred modals fade and scale up. The backdrop fades its colour, not its opacity: opacity below 1 on the
-   modal's parent would cut the modal's blur off from the page */
-.modal-backdrop {
-  animation: dim-in 200ms ease-out both;
+/* Centred modals fade and scale up; the dim fades on its own layer (opacity on the modal's parent would cut
+   the modal's blur off from the page) */
+.modal-backdrop::before {
+  animation: backdrop-in 200ms ease-out both;
 }
 .glass-modal {
   animation: modal-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -327,22 +341,20 @@ body {
   from { opacity: 1; }
   to { opacity: 0; }
 }
-@keyframes dim-in {
-  from { background-color: transparent; }
-}
 @keyframes modal-in {
   from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: scale(1); }
 }
 
 /* Delays too, which the global .reduce-motion rule leaves in place */
-.reduce-motion :is(.side-panel, .panel-backdrop, .modal-backdrop, .glass-modal) {
+.reduce-motion :is(.side-panel, .panel-backdrop, .glass-modal),
+.reduce-motion .modal-backdrop::before {
   animation: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
   .side-panel,
   .panel-backdrop,
-  .modal-backdrop,
+  .modal-backdrop::before,
   .glass-modal {
     animation: none !important;
   }
@@ -362,7 +374,7 @@ body {
   }
 
   /* The frosted effects have nothing to blur on paper */
-  .modal-backdrop,
+  .modal-backdrop::before,
   .panel-backdrop,
   .glass-panel,
   .glass-modal {
