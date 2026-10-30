@@ -420,8 +420,9 @@ async function loadDailySources(previousIntel: RansomwareIntel | null, updates: 
 // ---------- Microsoft Patch Tuesday (MSRC CVRF; each month's document is ~30 MB) ----------
 
 /**
- * The latest three monthly releases. Older months, and the newest one between its daily refreshes, are
- * carried over from the published msrc.json (PREVIOUS_MSRC_URL), so most runs make one small request.
+ * The latest three monthly releases. Older months, and the newest one between its refreshes (see
+ * refreshPatchMonths), are carried over from the published msrc.json (PREVIOUS_MSRC_URL), so most runs make
+ * one small request.
  */
 async function loadMsrc(): Promise<MsrcData> {
   const label = 'Microsoft Patch Tuesday (MSRC)';

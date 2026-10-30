@@ -10,8 +10,12 @@ const MONTHLY_TITLE = /^\w+ \d{4} Security Updates$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const MSRC_API = 'https://api.msrc.microsoft.com/cvrf/v3.0';
 export const PATCH_MONTHS = 3;
+const HOUR_MS = 60 * 60 * 1000;
 const FRESH_RELEASE_MS = 3 * DAY_MS; // Microsoft revises a release most in its first days
+const FRESH_REFETCH_MS = 2 * HOUR_MS; // the newest document is ~30 MB: even then, refetch it at most this often
 const REVISION_REFETCH_MS = 7 * DAY_MS; // older months are revised too, but rarely in ways that matter here
+const NEWEST_RETRY_MS = 6 * HOUR_MS; // after a failed refetch of the newest month
+const OLDER_RETRY_MS = DAY_MS; // after a failed refetch of an older month
 
 /** The latest `count` monthly releases in the update list, newest first (out-of-band documents are skipped) */
 export function pickPatchMonths(list: any, count: number): { id: string; released: string; revised?: string }[] {
@@ -98,8 +102,25 @@ export function normalizeCvrf(doc: any): PatchMonth | null {
   return { id, title: text(doc.DocumentTitle) || id, released, cves };
 }
 
-const validCve = (c: any): c is PatchCve =>
+const validCve = (c: any): boolean =>
   Boolean(c) && typeof c.cve === 'string' && typeof c.title === 'string' && Array.isArray(c.products) && c.products.every((p: unknown) => typeof p === 'string');
+
+/** A valid entry with only the fields the UI renders, each of the right type: wrong ones are dropped */
+function decodeCve(c: any): PatchCve {
+  const kb = Array.isArray(c.kb) ? c.kb.filter((k: unknown) => typeof k === 'string') : [];
+  const cve: PatchCve = { cve: c.cve, title: c.title, products: c.products, exploited: c.exploited === true, publiclyDisclosed: c.publiclyDisclosed === true };
+  if (SEVERITIES.includes(c.severity)) cve.severity = c.severity;
+  if (typeof c.impact === 'string') cve.impact = c.impact;
+  if (typeof c.cvss === 'number' && Number.isFinite(c.cvss)) cve.cvss = c.cvss;
+  if (kb.length) cve.kb = kb;
+  return cve;
+}
+
+/** A month id → ISO time map, keeping string values only */
+function stringRecord(raw: any): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => typeof v === 'string')) as Record<string, string>;
+}
 
 /**
  * msrc.json as published, or null if it isn't. It comes over the network (the app's copy, and the previous
@@ -109,8 +130,8 @@ export function decodeMsrc(raw: any): MsrcData | null {
   if (!raw || !Array.isArray(raw.months)) return null;
   const months: PatchMonth[] = raw.months
     .filter((m: any) => m && typeof m.id === 'string' && Array.isArray(m.cves))
-    .map((m: any) => ({ id: m.id, title: typeof m.title === 'string' ? m.title : m.id, released: typeof m.released === 'string' ? m.released : '', cves: m.cves.filter(validCve) }));
-  return { generatedAt: raw.generatedAt, months, updates: raw.updates && typeof raw.updates === 'object' ? raw.updates : {} };
+    .map((m: any) => ({ id: m.id, title: typeof m.title === 'string' ? m.title : m.id, released: typeof m.released === 'string' ? m.released : '', cves: m.cves.filter(validCve).map(decodeCve) }));
+  return { generatedAt: raw.generatedAt, months, updates: stringRecord(raw.updates), attempts: stringRecord(raw.attempts) };
 }
 
 export interface PatchRefresh {
@@ -122,14 +143,16 @@ export interface PatchRefresh {
 }
 
 /**
- * The latest PATCH_MONTHS releases for the snapshot. The newest month is refetched every run for its first
- * three days and daily after that; older months come from the previous run's file and are refetched when
- * Microsoft has revised them since (CurrentReleaseDate), at most weekly. A failed fetch keeps the previous
- * copy, so a run never loses a month.
+ * The latest PATCH_MONTHS releases for the snapshot. In its first three days the newest month is refetched
+ * when Microsoft has revised it since the last fetch (CurrentReleaseDate), at most every two hours, and daily
+ * after that; older months come from the previous run's file and are refetched when revised since, at most
+ * weekly. A failed fetch keeps the previous copy, so a run never loses a month, and is retried no sooner than
+ * six hours later for the newest month and a day later for older ones (`attempts`).
  */
 export async function refreshPatchMonths(previous: MsrcData | null, getJson: (url: string) => Promise<any>, now = Date.now()): Promise<PatchRefresh> {
   const updates = { ...(previous?.updates ?? {}) };
-  const result: PatchRefresh = { data: { months: previous?.months ?? [], updates }, fetched: [], carried: [], failed: [] };
+  const attempts = { ...(previous?.attempts ?? {}) };
+  const result: PatchRefresh = { data: { months: previous?.months ?? [], updates, attempts }, fetched: [], carried: [], failed: [] };
   let picked: ReturnType<typeof pickPatchMonths>;
   try {
     picked = pickPatchMonths(await getJson(`${MSRC_API}/updates`), PATCH_MONTHS);
@@ -144,9 +167,11 @@ export async function refreshPatchMonths(previous: MsrcData | null, getJson: (ur
     const prev = previous?.months.find((m) => m.id === id);
     const lastFetched = Date.parse(updates[id] ?? '');
     const sinceFetch = now - lastFetched; // NaN when never fetched, which `!(… < …)` treats as due
-    const due = !prev || (i === 0
-      ? now - Date.parse(released) < FRESH_RELEASE_MS || !(sinceFetch < DAY_MS)
-      : Date.parse(revised ?? '') > (lastFetched || 0) && !(sinceFetch < REVISION_REFETCH_MS));
+    const revisedSince = Date.parse(revised ?? '') > (lastFetched || 0);
+    const retryWait = now - Date.parse(attempts[id] ?? '') < (i === 0 ? NEWEST_RETRY_MS : OLDER_RETRY_MS);
+    const due = !prev || (!retryWait && (i === 0
+      ? now - Date.parse(released) < FRESH_RELEASE_MS ? revisedSince && !(sinceFetch < FRESH_REFETCH_MS) : !(sinceFetch < DAY_MS)
+      : revisedSince && !(sinceFetch < REVISION_REFETCH_MS)));
     if (!due) {
       months.push(prev);
       result.carried.push(id);
@@ -157,13 +182,15 @@ export async function refreshPatchMonths(previous: MsrcData | null, getJson: (ur
       if (!month) throw new Error('unexpected document format');
       months.push(month);
       updates[id] = new Date(now).toISOString();
+      delete attempts[id];
       result.fetched.push(id);
     } catch (err) {
       result.failed.push({ id, error: err instanceof Error ? err.message : String(err) });
+      attempts[id] = new Date(now).toISOString();
       if (prev) months.push(prev);
     }
   }
-  for (const id of Object.keys(updates)) if (!months.some((m) => m.id === id)) delete updates[id];
-  result.data = { months, updates };
+  for (const map of [updates, attempts]) for (const id of Object.keys(map)) if (!months.some((m) => m.id === id)) delete map[id];
+  result.data = { months, updates, attempts };
   return result;
 }

@@ -307,6 +307,7 @@ export interface MsrcData {
   generatedAt?: string;
   months: PatchMonth[]; // newest first
   updates?: Record<string, string>; // when each month's document was last fetched, for the snapshot's carry-over
+  attempts?: Record<string, string>; // when a refetch of a month last failed, so the snapshot spaces its retries
 }
 
 /** A threat actor from MITRE ATT&CK (data/actors.json) */

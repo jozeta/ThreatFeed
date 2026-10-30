@@ -180,9 +180,43 @@ describe('refreshPatchMonths', () => {
     expect(later.data.months[0].cves).toHaveLength(2);
   });
 
-  it('refreshes the newest month every run in its first three days', async () => {
-    const r = await refreshPatchMonths(previous, fakeApi().getJson, Date.parse('2026-10-15T12:00:00Z'));
-    expect(r.fetched).toContain('2026-Oct');
+  it('refetches the newest month in its first three days only when revised, at most every two hours', async () => {
+    const at = (iso: string) => Date.parse(iso);
+    const fresh = (fetched: string, revised: string) => {
+      const l = { value: list.value.map((r) => (r.ID === '2026-Oct' ? { ...r, CurrentReleaseDate: revised } : r)) };
+      const prev: MsrcData = { ...previous, updates: { ...previous.updates, '2026-Oct': fetched, '2026-Sep': '2026-10-31T00:00:00Z' } };
+      return { prev, getJson: async (url: string) => (url.endsWith('/updates') ? l : docFor(url.split('/').pop()!)) };
+    };
+    // Not revised since the last fetch: carried, even though the release is a day old
+    let api = fresh('2026-10-14T06:00:00Z', '2026-10-13T07:00:00Z');
+    expect((await refreshPatchMonths(api.prev, api.getJson, at('2026-10-14T12:00:00Z'))).carried).toContain('2026-Oct');
+    // Revised, but fetched an hour ago: carried
+    api = fresh('2026-10-14T11:00:00Z', '2026-10-14T11:30:00Z');
+    expect((await refreshPatchMonths(api.prev, api.getJson, at('2026-10-14T12:00:00Z'))).carried).toContain('2026-Oct');
+    // Revised, fetched over two hours ago: refetched
+    api = fresh('2026-10-14T09:00:00Z', '2026-10-14T11:30:00Z');
+    expect((await refreshPatchMonths(api.prev, api.getJson, at('2026-10-14T12:00:00Z'))).fetched).toContain('2026-Oct');
+  });
+
+  it('spaces retries of a failed refetch: six hours for the newest month, a day for older ones', async () => {
+    const failing = fakeApi(['2026-Oct', '2026-Sep']);
+    const first = await refreshPatchMonths(previous, failing.getJson, Date.parse('2026-10-31T07:00:00Z'));
+    expect(first.failed.map((f) => f.id)).toEqual(['2026-Oct', '2026-Sep']);
+    expect(first.data.attempts).toEqual({ '2026-Oct': '2026-10-31T07:00:00.000Z', '2026-Sep': '2026-10-31T07:00:00.000Z' });
+    expect(first.data.updates).toEqual(previous.updates); // last successful fetches are kept as they were
+
+    const soon = await refreshPatchMonths(first.data, failing.getJson, Date.parse('2026-10-31T12:00:00Z'));
+    expect(soon.carried).toEqual(['2026-Oct', '2026-Sep', '2026-Aug']);
+    expect(soon.data.attempts).toEqual(first.data.attempts);
+
+    const sixHours = await refreshPatchMonths(first.data, fakeApi().getJson, Date.parse('2026-10-31T13:30:00Z'));
+    expect(sixHours.fetched).toEqual(['2026-Oct']);
+    expect(sixHours.carried).toContain('2026-Sep');
+    expect(sixHours.data.attempts).toEqual({ '2026-Sep': '2026-10-31T07:00:00.000Z' }); // a success clears the attempt
+
+    const nextDay = await refreshPatchMonths(sixHours.data, fakeApi().getJson, Date.parse('2026-11-01T07:30:00Z'));
+    expect(nextDay.fetched).toContain('2026-Sep');
+    expect(nextDay.data.attempts).toEqual({});
   });
 
   it('refetches a revised older month at most once a week', async () => {
@@ -219,5 +253,24 @@ describe('decodeMsrc', () => {
     expect(data.months).toHaveLength(1);
     expect(data.months[0].cves.map((c) => c.cve)).toEqual(['CVE-2026-1']);
     expect(decodeMsrc({})).toBeNull();
+  });
+
+  it('drops or normalizes optional fields of the wrong type', () => {
+    const data = decodeMsrc({ months: [{ id: '2026-Oct', title: 'October', released: '', cves: [
+      { cve: 'CVE-2026-1', title: 'ok', products: [], kb: ['KB1'], severity: 'Critical', impact: 'Spoofing', cvss: 7.5, exploited: true, publiclyDisclosed: false },
+      { cve: 'CVE-2026-2', title: 'bad', products: [], kb: 'KB1', severity: 'Urgent', impact: 5, cvss: 'high', exploited: 'yes', publiclyDisclosed: 1 },
+      { cve: 'CVE-2026-3', title: 'mixed kb', products: [], kb: ['KB2', 3], cvss: Infinity },
+    ] }] })!;
+    const [ok, bad, mixed] = data.months[0].cves;
+    expect(ok).toEqual({ cve: 'CVE-2026-1', title: 'ok', products: [], kb: ['KB1'], severity: 'Critical', impact: 'Spoofing', cvss: 7.5, exploited: true, publiclyDisclosed: false });
+    expect(bad).toEqual({ cve: 'CVE-2026-2', title: 'bad', products: [], exploited: false, publiclyDisclosed: false });
+    expect(mixed).toEqual({ cve: 'CVE-2026-3', title: 'mixed kb', products: [], kb: ['KB2'], exploited: false, publiclyDisclosed: false });
+  });
+
+  it('keeps the update and attempt maps when they are string records', () => {
+    const data = decodeMsrc({ months: [], updates: { '2026-Oct': '2026-10-30T06:00:00Z', bad: 3 }, attempts: { '2026-Sep': '2026-10-30T06:00:00Z' } })!;
+    expect(data.updates).toEqual({ '2026-Oct': '2026-10-30T06:00:00Z' });
+    expect(data.attempts).toEqual({ '2026-Sep': '2026-10-30T06:00:00Z' });
+    expect(decodeMsrc({ months: [], updates: 'x', attempts: [1] })).toMatchObject({ updates: {}, attempts: {} });
   });
 });
