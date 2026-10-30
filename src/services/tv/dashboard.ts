@@ -129,7 +129,7 @@ export function vulnDashboard(v: VulnData | null, msrc: MsrcData | null, stats: 
   return {
     critical7d: figure(crit, now, notableOldest, stats),
     kev7d: figure(kevs, now, kevOldest, stats),
-    exploits7d: figure(expl, now, minDay([notableOldest, kevOldest]), stats),
+    exploits7d: figure(expl, now, notableOldest, stats),
     patchTuesday,
     exploitedNow,
     weekly,

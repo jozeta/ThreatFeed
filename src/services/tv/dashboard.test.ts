@@ -54,6 +54,16 @@ describe('vulnDashboard', () => {
     expect(r.weekly[12]).toMatchObject({ critical: 1, kev: 1 });
     expect(r.critical7d.value).toBe(1);
   });
+  it('hides the exploits delta when notable is shallow even with a deep KEV catalog', () => {
+    const v = {
+      kev: [{ cve: 'CVE-1', vendor: 'A', product: 'B', dateAdded: '2022-01-05' }, { cve: 'CVE-3', vendor: 'A', product: 'B', dateAdded: '2026-10-29' }],
+      notable: [{ id: 'CVE-2', published: '2026-10-28T00:00:00Z', score: 9.8, severity: 'CRITICAL' }],
+      exploits: { 'CVE-2': { pocs: 1 }, 'CVE-3': { pocs: 1 } },
+    } as unknown as VulnData;
+    const r = vulnDashboard(v, null, stats({}), now);
+    expect(r.exploits7d.value).toBe(2);
+    expect(r.exploits7d.delta).toBeUndefined();
+  });
   it('accepts null', () => {
     const r = vulnDashboard(null, null, null, now);
     expect(r.critical7d.value).toBe(0);
