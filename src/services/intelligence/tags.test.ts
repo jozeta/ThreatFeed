@@ -48,6 +48,15 @@ describe('tagMatches', () => {
     expect(tagMatches('#ransomware', articles, vulns).articles.map((a) => a.id)).toEqual(['a2', 'a1', 'a3']);
   });
 
+  it('leaves out leak-site victim posts, which the Ransomware page already lists', () => {
+    const withPosts = [
+      ...articles,
+      article('leak1', '2026-10-30T08:00:00Z', { tags: ['Ransomware'], sourceId: 'ransomware-live', title: 'Shiba has just published a new victim : Acme' }),
+      article('leak2', '2026-10-30T09:00:00Z', { tags: ['Ransomware'], title: 'Qilin has just published a new victim : Example Corp' }),
+    ];
+    expect(tagMatches('Ransomware', withPosts, vulns).articles.map((a) => a.id)).toEqual(['a2', 'a1', 'a3']);
+  });
+
   it('matches by threat topic, so a publisher keyword finds articles with its normalized tag and back', () => {
     expect(tagMatches('Malware', articles, vulns).articles.map((a) => a.id)).toEqual(['a4', 'a5']);
     expect(tagMatches('trojan', articles, vulns).articles.map((a) => a.id)).toEqual(['a4', 'a5']);

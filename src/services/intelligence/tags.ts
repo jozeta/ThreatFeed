@@ -2,6 +2,7 @@ import { Article, CveRecord, CvssSeverity, KevEntry, VulnData } from '../../type
 import { containsTerm } from '../../utils/textMatch';
 import { threatTopic } from '../rss/tagNormalizer';
 import { severityFromScore } from './vulns';
+import { isLeakSitePost } from './incidents';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -46,6 +47,7 @@ const nvdVuln = (c: CveRecord): TagVuln => ({
  * carry a tag of the same threat topic ("Trojan" is Malware). Vulnerabilities mention it as a whole word in
  * their name, description, weakness or products; a CWE tag lists every CVE with that weakness, and the
  * articles about those CVEs. "Ransomware" also finds KEV entries CISA marks as used by ransomware.
+ * Leak-site victim posts are left out: they aren't coverage, and would crowd the list.
  */
 export function tagMatches(tag: string, articles: Article[], vulns: VulnData | null): TagMatches {
   const t = cleanTag(tag);
@@ -70,6 +72,8 @@ export function tagMatches(tag: string, articles: Article[], vulns: VulnData | n
   const isTag = (label: string) => label.toLowerCase() === lower || (topic !== undefined && threatTopic(label) === topic);
   const cweCves = cwe ? new Set(matchedVulns.map((v) => v.cve)) : undefined;
   const matchedArticles = articles
+    // Leak-site victim posts aren't reporting, and the Ransomware page lists them already
+    .filter((a) => !isLeakSitePost(a))
     .filter((a) => [...a.tags, ...a.categories, ...(a.customTags ?? [])].some(isTag) || Boolean(cweCves && a.cves?.some((c) => cweCves.has(c))))
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 

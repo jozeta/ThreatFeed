@@ -378,9 +378,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 <span>By <strong className="text-theme-text font-medium">{article.author}</strong></span>
               </>
             )}
-            <span className="ml-auto px-2 py-0.5 rounded bg-theme-card text-[11px] font-semibold text-theme-text-muted">
-              {article.categories[0] || 'Security Report'}
-            </span>
+            {article.categories[0] ? (
+              <TagChip tag={article.categories[0]} className="ml-auto px-2 py-0.5 rounded bg-theme-card text-[11px] font-semibold text-theme-text-muted hover:text-theme-accent">
+                {article.categories[0]}
+              </TagChip>
+            ) : (
+              <span className="ml-auto px-2 py-0.5 rounded bg-theme-card text-[11px] font-semibold text-theme-text-muted">Security Report</span>
+            )}
           </div>
 
           {/* Watchlist Alert Banner */}

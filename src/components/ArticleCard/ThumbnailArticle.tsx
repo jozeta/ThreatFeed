@@ -116,9 +116,13 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
                 {article.sourceName}
               </span>
               <span className="text-theme-border font-bold">·</span>
-              <span className="font-mono text-[11px] text-theme-text-muted truncate">
-                {article.categories[0] || 'Security'}
-              </span>
+              {article.categories[0] ? (
+                <TagChip tag={article.categories[0]} className="font-mono text-[11px] text-theme-text-muted hover:text-theme-accent truncate">
+                  {article.categories[0]}
+                </TagChip>
+              ) : (
+                <span className="font-mono text-[11px] text-theme-text-muted truncate">Security</span>
+              )}
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {!article.read && (

@@ -82,9 +82,15 @@ interface TagPanelProps {
 export const TagPanel: React.FC<TagPanelProps> = ({ tag, articles, vulns, onOpenArticle, onOpenCve, onClose }) => {
   const name = cleanTag(tag);
   const matches = useMemo(() => tagMatches(name, articles, vulns), [name, articles, vulns]);
-  const daily = useMemo(() => dailyCounts(matches.articles, DAYS), [matches.articles]);
-  const now = Date.now();
-  const lastWeek = matches.articles.filter((a) => now - Date.parse(a.publishedAt) < 7 * DAY_MS).length;
+  // One clock reading per match, so the chart, its dates and the 7-day count agree and re-renders stay cheap
+  const { now, daily, lastWeek } = useMemo(() => {
+    const at = Date.now();
+    return {
+      now: at,
+      daily: dailyCounts(matches.articles, DAYS, at),
+      lastWeek: matches.articles.filter((a) => at - Date.parse(a.publishedAt) < 7 * DAY_MS).length,
+    };
+  }, [matches.articles]);
   const kevCount = matches.vulns.filter((v) => v.kev).length;
   const cweName = matches.cwe ? vulns?.cweNames?.[matches.cwe] : undefined;
   // A CWE named by its id shows its name below; named by its name, its id
