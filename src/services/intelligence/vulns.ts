@@ -223,7 +223,7 @@ function fromTuple(t: unknown): CveRecord | null {
 
 export function encodeNvdCache(cache: NvdCache): unknown {
   return {
-    version: 2,
+    version: 3,
     fetchedAt: cache.fetchedAt,
     records: cache.records.map(r => {
       const t = toTuple(r, (r.score ?? 0) >= 9, (r.score ?? 0) >= 9);
@@ -251,7 +251,7 @@ export function decodeWatchable(raw: unknown): CveRecord[] {
 
 /** Parses a cache fetched over the network; anything malformed (or an older format) means a full fetch */
 export function decodeNvdCache(raw: any): NvdCache | null {
-  if (!raw || raw.version !== 2 || isNaN(Date.parse(raw.fetchedAt)) || !Array.isArray(raw.records) || !Array.isArray(raw.kev)) return null;
+  if (!raw || raw.version !== 3 || isNaN(Date.parse(raw.fetchedAt)) || !Array.isArray(raw.records) || !Array.isArray(raw.kev)) return null;
   const records = raw.records.map(fromTuple).filter((r: CveRecord | null): r is CveRecord => r !== null);
   const kev: Record<string, CveRecord> = {};
   for (const t of raw.kev) {

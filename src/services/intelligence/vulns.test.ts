@@ -122,7 +122,8 @@ describe('NVD cache', () => {
   it('rejects malformed caches and the old format', () => {
     expect(decodeNvdCache(null)).toBeNull();
     expect(decodeNvdCache({ version: 1, fetchedAt: '2026-10-29', records: [], kevScores: {} })).toBeNull();
-    expect(decodeNvdCache({ version: 2, fetchedAt: 'nope', records: [], kev: [] })).toBeNull();
+    expect(decodeNvdCache({ version: 3, fetchedAt: 'nope', records: [], kev: [] })).toBeNull();
+    expect(decodeNvdCache({ version: 2, fetchedAt: '2026-10-20T00:00:00.000Z', records: [], kev: [] })).toBeNull();
   });
 
   it('applies updates and drops CVEs that left the window', () => {
