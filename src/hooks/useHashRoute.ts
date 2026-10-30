@@ -105,12 +105,12 @@ export function panelParam(key: PanelParam, raw: string | null): string {
 
 /**
  * What a panel's history entry knows, so closing it can go Back instead of adding to the history: the panel it
- * opened, the hash it was opened from, and how many such entries in a row lead back to a hash without them
+ * opened, the hash it was opened from (without that panel's key), and how many such entries in a row lead back
+ * to a hash without them
  */
 interface PanelEntryState { panel: PanelParam; from: string; depth: number }
 
 const isPanelParam = (key: string): key is PanelParam => (PANEL_PARAMS as readonly string[]).includes(key);
-const currentHash = () => { const r = parseHash(window.location.hash); return buildHash(r.page, r.sub, r.params); };
 function hashWithout(keys: readonly string[]) {
   const route = parseHash(window.location.hash);
   for (const key of keys) route.params.delete(key);
@@ -165,7 +165,8 @@ export function openPanel(key: PanelParam, value: string) {
   opens = { ...opens, [key]: (opens[key] ?? 0) + 1 };
   openListeners.forEach((l) => l());
   if (current.params.get(key) === value) return go(hash, true);
-  const state: PanelEntryState = { panel: key, from: currentHash(), depth: panelDepth() + 1 };
+  // `from` leaves out this key, so one that showed something else still closes Back to it
+  const state: PanelEntryState = { panel: key, from: hashWithout([key]), depth: panelDepth() + 1 };
   go(hash, false, state);
 }
 

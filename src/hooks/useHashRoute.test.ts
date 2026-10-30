@@ -141,6 +141,29 @@ describe('opening and closing panels', () => {
     expect(go).not.toHaveBeenCalled();
   });
 
+  it('a panel that shows something else under the same key closes Back to what it showed before', async () => {
+    openPanel('actor', 'G0007');
+    openPanel('actor', 'G0016'); // e.g. malware's "used by" in a panel stacked on the first actor's
+    expect(hash()).toBe('#/latest?actor=G0016');
+    let popped = pops(1);
+    closePanel('actor');
+    await popped;
+    expect(hash()).toBe('#/latest?actor=G0007');
+    popped = pops(1);
+    closeAllPanels();
+    await popped;
+    expect(hash()).toBe('#/latest');
+  });
+
+  it('closing them all after a same-key swap goes back to before the first', async () => {
+    openPanel('vendor', 'Fortinet');
+    openPanel('vendor', 'Cisco');
+    const popped = pops(1);
+    closeAllPanels();
+    await popped;
+    expect(hash()).toBe('#/latest');
+  });
+
   it('opening a panel that is already open raises it in place, with no new entry', () => {
     openPanel('vendor', 'Fortinet');
     openPanel('cve', 'CVE-2026-1234');
