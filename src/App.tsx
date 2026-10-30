@@ -14,6 +14,7 @@ import { KeyboardShortcutsModal } from './components/Common/KeyboardShortcutsMod
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
+import { AlertMonitor } from './components/AlertMonitor';
 import { CveWatchMonitor } from './components/CveWatchMonitor';
 import { useHashRoute } from './hooks/useHashRoute';
 
@@ -138,6 +139,7 @@ export const App: React.FC = () => {
       </div>
 
       <CveWatchMonitor />
+      <AlertMonitor />
 
       {/* Screen Masthead, Navigation & Controls Header */}
       <Header

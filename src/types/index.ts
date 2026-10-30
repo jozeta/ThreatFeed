@@ -342,6 +342,7 @@ export interface UserSettings {
   watchlistKeywords: string[];
   watchlistDefaultsVersion?: number; // which default keyword set the user has received
   dataSource: 'snapshot' | 'live'; // snapshot: load the server-built snapshot, live-fetch only feeds it doesn't cover
+  /** @deprecated read once by migrateAlertRules */
   watchlistNotifications: boolean; // desktop notification when new articles match the watchlist
   stackKeywords: string[]; // products/vendors the user runs; matching articles get a "Relevant to you" boost
   mutedKeywords: string[]; // articles mentioning these are hidden everywhere (except bookmarks)

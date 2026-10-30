@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
-import { buildWatchState, CveChange, diffCveWatch, fetchEpssScores, loadWatchStore, saveWatchStore } from '../services/intelligence/cveWatch';
-import { notifyCveChanges } from '../services/notifications';
+import { buildWatchState, fetchEpssScores, loadWatchStore, saveWatchStore } from '../services/intelligence/cveWatch';
 
 /**
  * Checks watched CVEs after every refresh: newly listed in KEV, a jump in EPSS, or new articles.
- * Changes trigger one desktop notification (when watchlist alerts are on) and stay highlighted on the
- * Vulns page's Watching tab until marked as seen. Renders nothing.
+ * Changes stay highlighted on the Vulns page's Watching tab until marked as seen (notifying is the alert
+ * rules' job, see AlertMonitor). Renders nothing.
  */
 export function CveWatchMonitor(): null {
   const { articles, cveIntel, vulns, ensureVulns, isRefreshing } = useFeeds();
@@ -30,10 +29,8 @@ export function CveWatchMonitor(): null {
       if (cancelled) return;
       const { articles: list, cveIntel: intel, vulns: data } = latest.current;
       const store = await loadWatchStore();
-      const changes: CveChange[] = [];
       for (const cve of watched) {
         const now = buildWatchState(cve, data, intel, list, epss);
-        changes.push(...diffCveWatch(cve, store.notified[cve], now));
         store.notified[cve] = now;
         store.seen[cve] ??= now;
       }
@@ -41,10 +38,9 @@ export function CveWatchMonitor(): null {
       for (const cve of Object.keys(store.seen)) if (!watched.includes(cve)) delete store.seen[cve];
       if (cancelled) return;
       await saveWatchStore(store);
-      if (settings.watchlistNotifications) notifyCveChanges(changes);
     })();
     return () => { cancelled = true; };
-  }, [watchedKey, isRefreshing, vulns, settings.watchlistNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedKey, isRefreshing, vulns]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }

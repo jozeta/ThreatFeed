@@ -17,7 +17,6 @@ import {
   saveStoredValue
 } from '../services/storage/indexeddb';
 import { loadRansomwareIntel, loadSnapshot, loadVulnData } from '../services/snapshot';
-import { notifyWatchlistMatches } from '../services/notifications';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
@@ -290,7 +289,6 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Work out the DB changes from the ref snapshot: title/date-based dedup and the age cutoff
       // don't depend on read state, so it agrees with the state update below.
       const before = articlesRef.current;
-      const knownIds = new Set(before.map(a => a.id));
       const mergedSnapshot = mergeFetchedArticles(before, newItems, maxAgeDays);
       const after = new Set(mergedSnapshot.map(a => a.id));
       // Progressive merges can run several times before React re-renders; keep the ref current for the next one
@@ -300,13 +298,6 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await saveArticlesToDB(newItems.filter(a => after.has(a.id)));
       // Delete articles the merge pruned (expired), so they don't come back on reload
       await deleteArticlesFromDB(before.filter(a => !after.has(a.id)).map(a => a.id));
-
-      // Desktop alert for genuinely new, recent articles that hit the watchlist (not on a first-ever load)
-      if (settingsRef.current.watchlistNotifications && knownIds.size > 0) {
-        const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-        const fresh = mergedSnapshot.filter(a => !knownIds.has(a.id) && new Date(a.publishedAt).getTime() >= dayAgo);
-        notifyWatchlistMatches(fresh, settingsRef.current.watchlistKeywords);
-      }
     };
 
     const applyCveIntel = async (intel: Record<string, CveIntel>) => {
