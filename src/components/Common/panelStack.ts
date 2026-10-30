@@ -39,6 +39,14 @@ export function createPanelStack() {
     /** Index from the bottom, or -1 once removed */
     position: (entry: PanelEntry) => entries.indexOf(entry),
     size: () => entries.length,
+    /**
+     * Whether a side panel dims what is under it: the lowest one dims the page, and the lowest one over the reader
+     * dims the reader; one stacked on another keeps a clear backdrop. False once removed
+     */
+    dims: (entry: PanelEntry) => {
+      const i = entries.indexOf(entry);
+      return i === 0 || (i > 0 && entry.level > READER_LEVEL && entries[i - 1].level <= READER_LEVEL);
+    },
     /** Takes the top entry off and closes it; false when nothing is open */
     escape(): boolean {
       const top = entries[entries.length - 1];
@@ -80,11 +88,7 @@ if (typeof window !== 'undefined') {
   import.meta.hot?.dispose(() => window.removeEventListener('keydown', onKeyDown, true));
 }
 
-/**
- * Registers a panel while `active`, closing through the latest `close`. Returns its position in the stack
- * (-1 when not registered), which side panels turn into their z-index.
- */
-export function usePanelLayer(active: boolean, close: () => void, level = 0): number {
+function usePanelEntry(active: boolean, close: () => void, level: number): PanelEntry | null {
   const closeRef = useRef(close);
   closeRef.current = close;
   const [entry, setEntry] = useState<PanelEntry | null>(null);
@@ -94,5 +98,22 @@ export function usePanelLayer(active: boolean, close: () => void, level = 0): nu
     setEntry(e);
     return () => { panelStack.remove(e); setEntry(null); };
   }, [active, level]);
+  return entry;
+}
+
+/**
+ * Registers a panel while `active`, closing through the latest `close`. Returns its position in the stack
+ * (-1 when not registered), which side panels turn into their z-index.
+ */
+export function usePanelLayer(active: boolean, close: () => void, level = 0): number {
+  const entry = usePanelEntry(active, close, level);
   return useSyncExternalStore(panelStack.subscribe, () => (entry ? panelStack.position(entry) : -1));
+}
+
+/** usePanelLayer for a side panel: its position, and whether its backdrop dims what is under it (dims) */
+export function useSidePanelLayer(active: boolean, close: () => void, level = 0): [number, boolean] {
+  const entry = usePanelEntry(active, close, level);
+  const position = useSyncExternalStore(panelStack.subscribe, () => (entry ? panelStack.position(entry) : -1));
+  const dims = useSyncExternalStore(panelStack.subscribe, () => (entry ? panelStack.dims(entry) : false));
+  return [position, dims];
 }

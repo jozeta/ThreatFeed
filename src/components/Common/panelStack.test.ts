@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPanelStack, handleEscapeKey, shortcutsBlocked } from './panelStack';
+import { createPanelStack, handleEscapeKey, READER_LEVEL, shortcutsBlocked } from './panelStack';
 
 const key = (k: string, target: EventTarget | null = document.body) => {
   const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
@@ -95,5 +95,20 @@ describe('global shortcuts', () => {
     expect(shortcutsBlocked(false, stack)).toBe(true);
     stack.remove(panel);
     expect(shortcutsBlocked(false, stack)).toBe(false);
+  });
+});
+
+describe('dimming', () => {
+  it('the lowest panel dims the page, and the lowest one over the reader dims the reader', () => {
+    const stack = createPanelStack();
+    const vendor = stack.push(() => {}, 0);
+    const cve = stack.push(() => {}, 1);
+    const reader = stack.push(() => {}, READER_LEVEL);
+    const group = stack.push(() => {}, READER_LEVEL + 3);
+    const actor = stack.push(() => {}, READER_LEVEL + 4);
+    expect([vendor, cve, reader, group, actor].map(stack.dims)).toEqual([true, false, false, true, false]);
+    stack.remove(group);
+    expect(stack.dims(actor)).toBe(true);
+    expect(stack.dims(group)).toBe(false);
   });
 });

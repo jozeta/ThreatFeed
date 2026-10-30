@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
-import { READER_LEVEL, usePanelLayer } from './panelStack';
+import { READER_LEVEL, useSidePanelLayer } from './panelStack';
 
 // Close: the backdrop fades out (140 ms), then the panel slides out (220 ms); keep in step with index.css
 const EXIT_MS = 360;
@@ -71,9 +71,10 @@ export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, titl
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Kept through the exit, when the panel has already left the stack
-  const position = usePanelLayer(shown && !closing, requestClose, level);
+  const [position, dims] = useSidePanelLayer(shown && !closing, requestClose, level);
   const lastPosition = useRef(0);
-  if (position >= 0) lastPosition.current = position;
+  const lastDims = useRef(true);
+  if (position >= 0) { lastPosition.current = position; lastDims.current = dims; }
   // Panels opened from the reader go over it (z-70), still under the shortcuts modal (z-80)
   const z = (level > READER_LEVEL ? 71 : 60) + Math.min(lastPosition.current, 8);
 
@@ -91,8 +92,9 @@ export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, titl
   return (
     <CloseContext.Provider value={requestClose}>
       <div className="fixed inset-0" style={{ zIndex: z, '--panel-w': WIDTHS[width] } as React.CSSProperties}>
-        {/* Only the lowest panel dims the page; one stacked on it keeps a clear backdrop that still closes it */}
-        <div className="panel-backdrop" data-state={state} data-clear={lastPosition.current > 0 || undefined} onClick={requestClose} aria-hidden="true" />
+        {/* Only the lowest panel dims the page, and the lowest over the reader dims the reader; one stacked on
+            another keeps a clear backdrop that still closes it */}
+        <div className="panel-backdrop" data-state={state} data-clear={!lastDims.current || undefined} onClick={requestClose} aria-hidden="true" />
         <div
           ref={panelRef}
           tabIndex={-1}
