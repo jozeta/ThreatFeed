@@ -32,7 +32,7 @@ const KINDS: { id: TrendKind | 'all'; label: string }[] = [
 const PERIOD_TEXT: Record<TrendPeriod, { now: string; before: string }> = {
   week: { now: 'this week', before: 'the week before' },
   month: { now: 'in the last 30 days', before: 'the 30 days before' },
-  year: { now: 'in the last year', before: 'the year before' },
+  year: { now: 'in the last 52 weeks', before: 'the 52 weeks before' },
 };
 
 const chipClass = (active: boolean) =>
@@ -59,7 +59,7 @@ const Change: React.FC<{ row: TrendRow }> = ({ row }) => {
 
 /**
  * What the news has been talking about: CVEs, ransomware groups, threat actors, products and vendors ranked
- * by articles over the last week, month or year, from the 400-day history the snapshot keeps (data/trends.json).
+ * by articles over the last week, month or year, from the two-year history the snapshot keeps (data/trends.json).
  * The week also counts this browser's own feeds and articles newer than the snapshot.
  */
 export const TrendsPage: React.FC<{ onOpenArticle: (article: Article) => void; onSearch: (query: string) => void }> = ({ onOpenArticle, onSearch }) => {
@@ -80,19 +80,25 @@ export const TrendsPage: React.FC<{ onOpenArticle: (article: Article) => void; o
     return map;
   }, [incidents]);
 
-  const days = useMemo(() => {
-    if (period !== 'week') return history?.days ?? {};
-    // Vendors as the history has them: the KEV catalog itself is in vulns.json, which this page doesn't need
-    const vendors = [...new Set(Object.values(history?.days ?? {}).flatMap((d) => Object.keys(d)).filter((k) => k.startsWith('vendor:')).map((k) => k.slice(7)))];
-    const vocab = trendsVocab((incidents?.victims ?? []).map((v) => v.group), vendors);
-    return weekTrendDays(history, articles, vocab, new Set(feeds.filter((f) => f.isCustom).map((f) => f.id)));
-  }, [period, history, articles, feeds, incidents]);
+  // The week's vocabulary: vendors as the history has them (the KEV catalog itself is in vulns.json, which this
+  // page doesn't need), so it is only rebuilt when the history or the leak-site groups change
+  const weekVocab = useMemo(() => {
+    const vendors = new Set<string>();
+    for (const counts of Object.values(history?.days ?? {})) for (const k of Object.keys(counts)) if (k.startsWith('vendor:')) vendors.add(k.slice(7));
+    return trendsVocab((incidents?.victims ?? []).map((v) => v.group), [...vendors]);
+  }, [history, incidents]);
+  const customSources = useMemo(() => new Set(feeds.filter((f) => f.isCustom).map((f) => f.id)), [feeds]);
 
-  const rows = useMemo(() => rankTrends(days, period, kind), [days, period, kind]);
+  const view = useMemo(
+    () => (period === 'week' ? { days: weekTrendDays(history, articles, weekVocab, customSources) } : { days: history?.days ?? {}, weeks: history?.weeks }),
+    [period, history, articles, weekVocab, customSources]
+  );
+
+  const rows = useMemo(() => rankTrends(view, period, kind), [view, period, kind]);
   const rising = useMemo(() => risers(rows, RISERS), [rows]);
 
   // Like the adaptive activity chart: say how much history there is while it covers less than the period
-  const since = historyStart(days);
+  const since = historyStart(view);
   const coveredDays = since ? Math.floor(Date.now() / DAY_MS) - Math.floor(Date.parse(`${since}T00:00:00Z`) / DAY_MS) + 1 : 0;
   const periodDays = PERIOD_DAYS[period];
 

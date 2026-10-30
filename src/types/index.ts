@@ -347,7 +347,8 @@ export type TrendDays = Record<string, Record<string, number>>;
 
 export interface TrendsData {
   generatedAt?: string;
-  days: TrendDays;
+  days: TrendDays; // the last 60 days
+  weeks?: TrendDays; // older days summed per Monday-to-Sunday week (keyed by the Monday), two years back
 }
 
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';

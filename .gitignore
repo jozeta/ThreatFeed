@@ -32,6 +32,7 @@ public/data/ransomware.json
 public/data/msrc.json
 public/data/actors.json
 public/data/trends.json
+.cache/
 
 # Brainstorming companion mockups
 .superpowers/

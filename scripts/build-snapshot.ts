@@ -2,7 +2,7 @@
  * Builds public/data/snapshot.json: every enabled default feed fetched server-side (no CORS, no
  * proxy), parsed with the app's own parser, plus CVE intelligence (CISA KEV, FIRST EPSS, NVD, GitHub
  * advisories, Microsoft Patch Tuesday), incident data (Ransomware.live, Have I Been Pwned), threat actor and
- * malware profiles (MITRE ATT&CK, Malpedia) and a 400-day history of what the news mentions (trends).
+ * malware profiles (MITRE ATT&CK, Malpedia) and a two-year history of what the news mentions (trends).
  *
  * Runs in the deploy workflow on a schedule, so the published site always carries a recent
  * snapshot and the browser only needs live fetching for feeds the user added themselves.
@@ -28,7 +28,7 @@ const {
 } = await import('../src/services/intelligence/enrichment');
 const { refreshPatchMonths, decodeMsrc } = await import('../src/services/intelligence/patchTuesday');
 const { refreshActors, decodeActors, encodeActors } = await import('../src/services/intelligence/actors');
-const { countEntitiesByDay, mergeTrendDays, trendsVocab, decodeTrends, TREND_RECOUNT_DAYS, TREND_KEEP_DAYS } = await import('../src/services/intelligence/trends');
+const { countEntitiesByDay, mergeTrends, pickPreviousTrends, trendsVocab, decodeTrends, TREND_RECOUNT_DAYS } = await import('../src/services/intelligence/trends');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
@@ -56,7 +56,7 @@ const NVD_CACHE_OUT = resolve(root, 'public/data/nvd-cache.json'); // read back 
 const RANSOMWARE_OUT = resolve(root, 'public/data/ransomware.json'); // group intel, public reports, payments: Ransomware page only
 const MSRC_OUT = resolve(root, 'public/data/msrc.json'); // Patch Tuesday releases: the Vulnerabilities page's Patch Tuesday tab only
 const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and malware profiles: the Actors page and trending chips
-const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // daily mention counts per entity, 400 days: the Trends page only
+const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // mention counts per entity (daily, then weekly), two years: the Trends page only
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
 // The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
 const PREVIOUS_BASE = process.env.PREVIOUS_SNAPSHOT_URL?.replace(/snapshot\.json$/, '');
@@ -463,8 +463,8 @@ async function loadPreviousActors(): Promise<ActorsData | null> {
 // ---------- Trends (daily mention counts, accumulated across runs) ----------
 
 /**
- * The published trends.json (PREVIOUS_TRENDS_URL). It is the only copy of the history, so a failed read is
- * retried; a 404 means there is none yet. `error` is set when it couldn't be read and the history restarts.
+ * The published trends.json (PREVIOUS_TRENDS_URL). A failed read is retried; a 404 means there is none yet.
+ * `error` is set when it couldn't be read, so the run doesn't overwrite a history it couldn't see.
  */
 async function loadPreviousTrends(): Promise<{ data: TrendsData | null; error?: string }> {
   if (!process.env.PREVIOUS_TRENDS_URL) return { data: null };
@@ -481,6 +481,16 @@ async function loadPreviousTrends(): Promise<{ data: TrendsData | null; error?: 
     await new Promise(r => setTimeout(r, 5000));
   }
   return { data: null, error };
+}
+
+/** The workflow's cached copy of the last run's trends.json (PREVIOUS_TRENDS_FILE), a second copy of the history */
+function loadCachedTrends(): TrendsData | null {
+  if (!process.env.PREVIOUS_TRENDS_FILE) return null;
+  try {
+    return decodeTrends(JSON.parse(readFileSync(process.env.PREVIOUS_TRENDS_FILE, 'utf8')));
+  } catch {
+    return null; // no cache yet, or a broken one
+  }
 }
 
 // ---------- Feeds ----------
@@ -677,22 +687,26 @@ report({
   detail: [actorsRefresh.built.length && `built ${actorsRefresh.built.join(', ')}`, actorsRefresh.carried.length && `carried over ${actorsRefresh.carried.join(', ')}`].filter(Boolean).join('; ') || 'no ATT&CK data',
 });
 
-// Trends: the last few days recounted from this run's articles, merged into the carried-over history
-const previousTrends = await previousTrendsPromise;
+// Trends: the last few days recounted from this run's articles, merged into the carried-over history.
+// When the history exists but neither copy could be read, nothing is written (the workflow then restores it)
+const publishedTrends = await previousTrendsPromise;
+const trendsBase = pickPreviousTrends(loadCachedTrends(), publishedTrends);
 const trendsNow = Date.now();
-const trendDays = mergeTrendDays(
-  previousTrends.data,
+const trends = mergeTrends(
+  trendsBase.base,
   countEntitiesByDay(articles, trendsVocab(victims.map(v => v.group), kevEntries.map(k => k.vendor)), TREND_RECOUNT_DAYS, trendsNow),
   trendsNow,
 );
-const trendDayKeys = Object.keys(trendDays);
+const trendDayKeys = Object.keys(trends.days);
+const trendsSince = Object.keys(trends.weeks)[0] ?? trendDayKeys[0];
 report({
   id: 'trends',
   label: 'Trends history',
-  status: previousTrends.error ? 'failed' : 'ok',
-  count: trendDayKeys.length,
-  detail: previousTrends.error ? `previous history unreadable (${previousTrends.error}), restarted`
-    : previousTrends.data ? `${trendDayKeys.length} days since ${trendDayKeys[0]}` : 'no previous history, started',
+  status: trendsBase.write ? 'ok' : 'failed',
+  count: trendDayKeys.length + Object.keys(trends.weeks).length,
+  detail: !trendsBase.write ? `previous history unreadable (${publishedTrends.error}), kept previous`
+    : trendsBase.base ? `since ${trendsSince}, from the ${trendsBase.source === 'cache' ? 'Action cache' : 'published file'}${publishedTrends.error ? ` (published file: ${publishedTrends.error})` : ''}`
+    : 'no previous history, started',
 });
 
 // Which groups exploit which CVE, for the Vulnerabilities page
@@ -715,8 +729,8 @@ const msrcJson = JSON.stringify({ version: 1, generatedAt, ...msrc });
 writeFileSync(MSRC_OUT, msrcJson);
 const actorsJson = JSON.stringify({ version: 1, ...encodeActors({ ...actors, generatedAt }) });
 writeFileSync(ACTORS_OUT, actorsJson);
-const trendsJson = JSON.stringify({ version: 1, generatedAt, days: trendDays });
-writeFileSync(TRENDS_OUT, trendsJson);
+const trendsJson = trendsBase.write ? JSON.stringify({ version: 1, generatedAt, ...trends }) : '';
+if (trendsBase.write) writeFileSync(TRENDS_OUT, trendsJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
@@ -726,6 +740,8 @@ console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filte
 console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Patch Tuesday: ${msrc.months.map(m => `${m.id} ${m.cves.length} CVEs (${m.cves.filter(c => c.exploited).length} exploited)`).join(', ') || 'no data'}, ${mb(msrcJson)}`);
 console.log(`Actors: ${actors.actors.length} threat actors (${actors.actors.filter(a => a.country).length} with a country), ${actors.malware.length} malware and tools (${actors.malware.filter(m => m.malpediaUrl).length} in Malpedia, ${actors.malware.filter(m => !m.attackId).length} Malpedia-only from the news), ${(actorsJson.length / 1024).toFixed(0)} KB${actorsJson.length > 400 * 1024 ? ' (over the 400 KB budget)' : ''}`);
-console.log(`Trends: ${trendDayKeys.length} of ${TREND_KEEP_DAYS} days since ${trendDayKeys[0]}, ${Object.values(trendDays).reduce((n, d) => n + Object.keys(d).length, 0)} day counts, ${(trendsJson.length / 1024).toFixed(0)} KB${trendsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`);
+console.log(trendsBase.write
+  ? `Trends: ${trendDayKeys.length} days and ${Object.keys(trends.weeks).length} weeks since ${trendsSince}, ${(trendsJson.length / 1024).toFixed(0)} KB${trendsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
+  : `Trends: not written, the previous history couldn't be read (${publishedTrends.error})`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

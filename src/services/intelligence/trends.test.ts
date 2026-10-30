@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countEntitiesByDay, decodeTrends, historyStart, mergeTrendDays, rankTrends, risers, trendsVocab, TrendVocab, weekTrendDays } from './trends';
+import { countEntitiesByDay, decodeTrends, historyStart, mergeTrends, pickPreviousTrends, rankTrends, risers, trendsVocab, TrendVocab, weekTrendDays } from './trends';
 import { article } from '../../test/fixtures';
 
 const NOW = Date.parse('2026-10-30T12:00:00Z');
@@ -37,29 +37,67 @@ describe('countEntitiesByDay', () => {
   });
 });
 
-describe('mergeTrendDays', () => {
-  it('keeps older days, takes the larger count per entity on recounted days and keeps 400 days', () => {
-    const merged = mergeTrendDays(
-      { days: { '2025-01-01': { 'cve:CVE-1': 1 }, '2026-08-01': { 'cve:CVE-1': 1, 'cve:CVE-3': 2 }, '2026-10-01': { 'actor:Lazarus': 3, 'cve:CVE-1': 1 }, '2026-10-29': { 'actor:Lazarus': 5, 'vendor:Arm': 1 } } },
+describe('mergeTrends', () => {
+  it('keeps older days, takes the larger count per entity on recounted days and rolls days past 60 into weeks', () => {
+    const merged = mergeTrends(
+      {
+        days: {
+          '2024-11-01': { 'cve:CVE-9': 1, 'vendor:Arm': 1 }, // 728 days ago: still kept, as its week
+          '2026-08-27': { 'cve:CVE-1': 1, 'cve:CVE-3': 1 }, // a Thursday 64 days ago: into the week of Monday 08-24
+          '2026-08-31': { 'actor:Lazarus': 2, 'cve:CVE-4': 1 }, // 60 days ago, a Monday: its week isn't complete yet
+          '2026-09-01': { 'actor:Lazarus': 1 }, // 59 days ago: stays a day
+          '2026-10-29': { 'actor:Lazarus': 5, 'vendor:Arm': 1 },
+        },
+        weeks: { '2026-08-24': { 'cve:CVE-1': 2 }, '2024-10-21': { 'cve:CVE-1': 7 } }, // the second ended over 730 days ago
+      },
       { '2026-10-29': { 'actor:Lazarus': 2, 'cve:CVE-2': 1 }, '2026-10-30': { 'cve:CVE-2': 4 } },
       NOW,
     );
     expect(merged).toEqual({
-      '2026-08-01': { 'cve:CVE-3': 2 }, // single mentions go after 60 days
-      '2026-10-01': { 'actor:Lazarus': 3, 'cve:CVE-1': 1 },
-      // Articles that rotated out of the snapshot since the last run still count
-      '2026-10-29': { 'actor:Lazarus': 5, 'vendor:Arm': 1, 'cve:CVE-2': 1 },
-      '2026-10-30': { 'cve:CVE-2': 4 },
+      days: {
+        '2026-09-01': { 'actor:Lazarus': 1 },
+        // Articles that rotated out of the snapshot since the last run still count
+        '2026-10-29': { 'actor:Lazarus': 5, 'vendor:Arm': 1, 'cve:CVE-2': 1 },
+        '2026-10-30': { 'cve:CVE-2': 4 },
+      },
+      weeks: {
+        // In a complete week, a CVE named once is dropped (most of the file); everything else stays exact
+        '2024-10-28': { 'vendor:Arm': 1 },
+        '2026-08-24': { 'cve:CVE-1': 3 },
+        '2026-08-31': { 'actor:Lazarus': 2, 'cve:CVE-4': 1 },
+      },
     });
+  });
+});
+
+describe('pickPreviousTrends', () => {
+  const older = { generatedAt: '2026-10-30T10:00:00Z', days: {} };
+  const newer = { generatedAt: '2026-10-30T10:30:00Z', days: {} };
+
+  it('builds on the newer of the cached and the published history', () => {
+    expect(pickPreviousTrends(newer, { data: older })).toEqual({ base: newer, write: true, source: 'cache' });
+    expect(pickPreviousTrends(older, { data: newer })).toEqual({ base: newer, write: true, source: 'published' });
+    expect(pickPreviousTrends(null, { data: newer })).toEqual({ base: newer, write: true, source: 'published' });
+  });
+
+  it('falls back to the cache when the published history can\'t be read', () => {
+    expect(pickPreviousTrends(older, { data: null, error: 'HTTP 503' })).toEqual({ base: older, write: true, source: 'cache' });
+  });
+
+  it('writes nothing when no history could be read, unless there has never been one (404)', () => {
+    expect(pickPreviousTrends(null, { data: null, error: 'HTTP 503' })).toEqual({ base: null, write: false, source: 'none' });
+    expect(pickPreviousTrends(null, { data: null })).toEqual({ base: null, write: true, source: 'none' });
   });
 });
 
 describe('rankTrends', () => {
   const history = {
-    '2026-10-30': { 'actor:Lazarus': 2, 'vendor:Fortinet': 1 },
-    '2026-10-27': { 'actor:Lazarus': 1, 'cve:CVE-2026-1': 4 },
-    '2026-10-20': { 'actor:Lazarus': 1, 'vendor:Fortinet': 5 },
-    '2026-10-01': { 'vendor:Fortinet': 2 },
+    days: {
+      '2026-10-30': { 'actor:Lazarus': 2, 'vendor:Fortinet': 1 },
+      '2026-10-27': { 'actor:Lazarus': 1, 'cve:CVE-2026-1': 4 },
+      '2026-10-20': { 'actor:Lazarus': 1, 'vendor:Fortinet': 5 },
+      '2026-10-01': { 'vendor:Fortinet': 2 },
+    },
   };
 
   it('sums the period, compares it with the one before and gives a daily series', () => {
@@ -76,16 +114,27 @@ describe('rankTrends', () => {
     expect(rows[0].series).toHaveLength(30);
   });
 
-  it('buckets the year by week, ending today', () => {
+  it('buckets the year by whole Monday-to-Sunday weeks, the last one this week', () => {
     const [row] = rankTrends(history, 'year', 'vendor', NOW);
-    expect(row.series).toHaveLength(53);
+    expect(row.series).toHaveLength(52);
     expect(row.series.slice(-5)).toEqual([2, 0, 0, 5, 1]);
+  });
+
+  it('compares the year with the 52 weeks before it, from days and weekly sums', () => {
+    const [row] = rankTrends({
+      days: { '2026-10-30': { 'vendor:Fortinet': 1 } },
+      weeks: { '2026-01-05': { 'vendor:Fortinet': 4 }, '2025-10-27': { 'vendor:Fortinet': 3 }, '2024-11-04': { 'vendor:Fortinet': 1 } },
+    }, 'year', 'vendor', NOW);
+    expect(row).toMatchObject({ count: 5, previous: 4, change: 1 });
+    expect(row.series[9]).toBe(4);
+    expect(row.series[51]).toBe(1);
   });
 
   it('picks the biggest risers that have a previous period to compare with', () => {
     const rows = rankTrends(history, 'week', 'all', NOW);
     expect(risers(rows, 5).map(r => r.name)).toEqual(['CVE-2026-1', 'Lazarus']);
     expect(historyStart(history)).toBe('2026-10-01');
+    expect(historyStart({ days: {}, weeks: { '2025-01-06': {} } })).toBe('2025-01-06');
   });
 });
 
@@ -123,8 +172,8 @@ describe('trendsVocab', () => {
 
 describe('decodeTrends', () => {
   it('drops malformed days and counts', () => {
-    expect(decodeTrends({ version: 1, generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2, 'bad': 1, 'actor:X': -1, 'actor:Y': 'a' }, 'nope': {}, '2026-10-29': null } }))
-      .toEqual({ generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } } });
+    expect(decodeTrends({ version: 1, generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2, 'bad': 1, 'actor:X': -1, 'actor:Y': 'a' }, 'nope': {}, '2026-10-29': null }, weeks: { '2026-10-26': { 'cve:CVE-1': 3 }, 'x': {} } }))
+      .toEqual({ generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } }, weeks: { '2026-10-26': { 'cve:CVE-1': 3 } } });
     expect(decodeTrends(null)).toBeNull();
     expect(decodeTrends({ days: [] })).toBeNull();
   });

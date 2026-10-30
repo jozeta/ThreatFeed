@@ -29,6 +29,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # A second copy of the trends history (the published trends.json is the first), for runs that can't read it
+      - uses: actions/cache/restore@v4
+        with:
+          path: .cache/trends.json
+          key: trends-${{ github.run_id }}
+          restore-keys: trends-
       # Fetch every default feed server-side plus CISA KEV / EPSS data into public/data/snapshot.json.
       # A failed snapshot shouldn't block a deploy: the app falls back to live fetching without it.
       - run: npm run snapshot
@@ -42,12 +48,43 @@ jobs:
           PREVIOUS_MSRC_URL: https://jozeta.github.io/ThreatFeed/data/msrc.json
           # Carries actor and malware profiles over between the daily ATT&CK and Malpedia refreshes
           PREVIOUS_ACTORS_URL: https://jozeta.github.io/ThreatFeed/data/actors.json
-          # The trends history accumulates here: each run recounts the last three days and keeps 400
+          # The trends history accumulates here: each run recounts the last three days and keeps two years.
+          # The script builds on the newer of the two copies and writes nothing if it can read neither
           PREVIOUS_TRENDS_URL: https://jozeta.github.io/ThreatFeed/data/trends.json
+          PREVIOUS_TRENDS_FILE: .cache/trends.json
           # Optional (repo secret): a free NVD API key allows 10x the request rate. Empty is fine.
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           # Raises the GitHub Advisory Database API limit from 60 to 1000+ requests an hour (read-only use)
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The trends history exists only in the published site and the cache, and a deploy replaces the whole site.
+      # If the snapshot didn't write trends.json, put the published (or cached) copy back; if neither is there
+      # and the site isn't simply without one yet (404), stop before deploying so the old site keeps serving.
+      - name: Keep the trends history
+        run: |
+          f=public/data/trends.json
+          valid() { [ -s "$1" ] && node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(!d||typeof d.days!=='object')process.exit(1)" "$1" 2>/dev/null; }
+          if valid "$f"; then exit 0; fi
+          mkdir -p public/data
+          code=000
+          for i in 1 2 3; do
+            code=$(curl -sS -L -o "$f.tmp" -w '%{http_code}' --max-time 60 https://jozeta.github.io/ThreatFeed/data/trends.json) || true
+            if [ "$code" = 200 ] && valid "$f.tmp"; then mv "$f.tmp" "$f"; echo "Restored the published trends.json"; exit 0; fi
+            [ "$code" = 404 ] && break
+            sleep 15
+          done
+          rm -f "$f.tmp"
+          if valid .cache/trends.json; then cp .cache/trends.json "$f"; echo "Restored trends.json from the Action cache"; exit 0; fi
+          if [ "$code" = 404 ]; then echo "No trends.json published yet"; exit 0; fi
+          echo "::error::trends.json is missing and the published copy couldn't be fetched (HTTP $code); not deploying, so the history isn't lost"
+          exit 1
+      - name: Copy the trends history for the cache
+        if: hashFiles('public/data/trends.json') != ''
+        run: mkdir -p .cache && cp public/data/trends.json .cache/trends.json
+      - uses: actions/cache/save@v4
+        if: hashFiles('public/data/trends.json') != ''
+        with:
+          path: .cache/trends.json
+          key: trends-${{ github.run_id }}-${{ github.run_attempt }}
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
