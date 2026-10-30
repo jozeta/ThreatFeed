@@ -83,7 +83,7 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
     ...(nvd?.assigner ? [['Assigned by', nvd.assigner] as [string, React.ReactNode]] : []),
   ];
 
-  // Level 2: above the vendor panel it can be opened from, also when both come from one link
+  // Stacked by where ?cve= comes in the URL (PanelLevel): on top of the panel it was opened from
   return (
     <SidePanel onClose={onClose} title={cve}>
       <div className="flex items-start justify-between gap-4">

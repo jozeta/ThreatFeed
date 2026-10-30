@@ -10,7 +10,7 @@ import { extractIOCs } from '../../services/intelligence/iocExtractor';
 import { iocLookupLinks } from '../../services/intelligence/iocLinks';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { sanitizeHtml } from '../../services/rss/sanitizer';
-import { READER_LEVEL, usePanelLayer } from '../Common/panelStack';
+import { panelStack, READER_LEVEL, usePanelLayer } from '../Common/panelStack';
 import { EntityText, useLinkedHtml } from '../EntityText';
 import {
   X,
@@ -105,10 +105,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     markViewed(article.id);
   }, [article.id, markViewed]);
 
-  // Escape goes through the panel stack (the reader sits above every side panel); the other keys are its own
-  usePanelLayer(true, onClose, READER_LEVEL);
+  // Escape goes through the panel stack (the reader sits above the side panels below it); the other keys are
+  // its own, and only while it is the top entry: a panel opened from the article, or the shortcuts modal, sits
+  // over it then, and the keys mustn't act on the hidden article
+  const position = useRef(-1);
+  position.current = usePanelLayer(true, onClose, READER_LEVEL);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (position.current !== panelStack.size() - 1) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }

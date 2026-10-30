@@ -31,7 +31,7 @@ const weekStart = (day: number) => day - ((day + 3) % 7);
 // KEV vendors whose names are everyday words: they would count every "progress" and "quest"
 export const AMBIGUOUS_VENDORS = new Set([
   'progress', 'arm', 'nice', 'daemon', 'checkbox', 'quest', 'meta', 'git', 'sudo', 'perl', 'looking glass', 'nx', 'vite',
-  'prettier', 'plex', 'ietf', 'isc', 'pear', 'gnu', 'rails', 'elastic', 'widget factory', 'npm package', 'lg', 'php', 'ami',
+  'prettier', 'plex', 'ietf', 'isc', 'pear', 'gnu', 'rails', 'elastic', 'widget factory', 'npm package', 'lg', 'php', 'ami', 'versa',
 ]);
 
 // Feed categories of general tech and consumer news: Apple fan sites would otherwise make Apple the top vendor

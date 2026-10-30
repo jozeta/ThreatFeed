@@ -1,4 +1,5 @@
 import { EntityKind, EntityMatcher, EntityRef, findEntities } from '../services/intelligence/entityLinks';
+import { THREAT_CONTEXT } from '../services/intelligence/actors';
 
 /**
  * Entity links in HTML the app didn't write (the reader's sanitized article). Only text nodes are touched: each
@@ -25,7 +26,8 @@ function entitySpan(text: string, entity: EntityRef): HTMLSpanElement {
 
 /** Wraps the names in the container's text in link spans; returns how many. Running it again links only new ones */
 export function linkifyHtmlTextNodes(container: HTMLElement, matcher: EntityMatcher): number {
-  const context = container.textContent ?? '';
+  // Whether the article is about threats, looked up once rather than for every text node
+  const threat = THREAT_CONTEXT.test(container.textContent ?? '');
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => (node.parentElement?.closest(SKIP) && container.contains(node.parentElement.closest(SKIP)) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
   });
@@ -34,7 +36,7 @@ export function linkifyHtmlTextNodes(container: HTMLElement, matcher: EntityMatc
   let count = 0;
   for (const node of nodes) {
     const text = node.data;
-    const matches = findEntities(text, matcher, context);
+    const matches = findEntities(text, matcher, threat);
     if (!matches.length) continue;
     const fragment = document.createDocumentFragment();
     let at = 0;

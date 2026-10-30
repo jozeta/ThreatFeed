@@ -5,7 +5,8 @@ import { AMBIGUOUS_TERMS, countable, distinctive, THREAT_AFTER, THREAT_BEFORE, T
  * Vendors, ransomware groups, threat actors, malware and CVEs named in text, for linking them to their panels.
  * The rules follow actorMentions, so a name links where it would count as a mention: a plain one-word name
  * ("Lazarus", "Akira") needs a capital letter and a threat word somewhere in the text, an everyday word
- * ("Play", "Payload") a threat word right next to it. Vendors and CVE ids link wherever they appear.
+ * ("Play", "Payload") a threat word right next to it. Vendors link wherever they appear, a one-word name with
+ * its capital ("Oracle", not "padding oracle"); CVE ids in any case.
  */
 
 export type EntityKind = 'vendor' | 'group' | 'actor' | 'malware' | 'cve';
@@ -37,6 +38,7 @@ interface Term {
   rank: number;
   plain: boolean; // one word without digits, hyphens or inner capitals: needs a capital and a threat word
   everyday: boolean; // needs a threat word right next to it
+  capital: boolean; // needs a capital letter: plain names, and one-word vendors that write theirs with one
 }
 
 export interface EntityMatcher {
@@ -62,6 +64,7 @@ export function buildEntityMatcher(entities: EntitiesData | null): EntityMatcher
       rank: RANK[kind],
       plain,
       everyday: plain && (AMBIGUOUS_TERMS.has(key) || EVERYDAY_NAMES.has(key)),
+      capital: plain || (kind === 'vendor' && !/\s/.test(term.trim()) && /^\p{Lu}/u.test(term.trim())),
     }]);
   };
   for (const v of entities?.vendors ?? []) add('vendor', v, v, false);
@@ -79,9 +82,10 @@ const nextToThreat = (text: string, start: number, end: number) => {
 
 /**
  * Every name in the text, not overlapping: where two overlap the longer wins, and a tie goes by RANK. `context`
- * is more text a threat word may be in (a card's title, for its summary).
+ * is more text a threat word may be in (a card's title, for its summary), or whether it has one, when the caller
+ * has already looked (linkifyHtmlTextNodes, once for a whole article rather than per text node).
  */
-export function findEntities(text: string, matcher: EntityMatcher, context?: string): EntityMatch[] {
+export function findEntities(text: string, matcher: EntityMatcher, context?: string | boolean): EntityMatch[] {
   const found: (EntityMatch & { rank: number })[] = [];
   for (const m of text.matchAll(CVE)) found.push({ start: m.index!, end: m.index! + m[0].length, entity: { kind: 'cve', id: m[0].toUpperCase() }, rank: 0 });
   let threat: boolean | undefined;
@@ -92,8 +96,8 @@ export function findEntities(text: string, matcher: EntityMatcher, context?: str
       const m = t.re.exec(text);
       if (!m) continue;
       const end = start + m[0].length;
-      if (t.plain && !/\p{Lu}/u.test(text[start])) continue;
-      if (t.everyday ? !nextToThreat(text, start, end) : t.plain && !(threat ??= THREAT_CONTEXT.test(text) || Boolean(context && THREAT_CONTEXT.test(context)))) continue;
+      if (t.capital && !/\p{Lu}/u.test(text[start])) continue;
+      if (t.everyday ? !nextToThreat(text, start, end) : t.plain && !(threat ??= context === true || THREAT_CONTEXT.test(text) || (typeof context === 'string' && THREAT_CONTEXT.test(context)))) continue;
       found.push({ start, end, entity: t.entity, rank: t.rank });
     }
   }
@@ -104,7 +108,7 @@ export function findEntities(text: string, matcher: EntityMatcher, context?: str
 }
 
 /** The text in order, as plain and linked segments */
-export function linkify(text: string, matcher: EntityMatcher, context?: string): Segment[] {
+export function linkify(text: string, matcher: EntityMatcher, context?: string | boolean): Segment[] {
   const segments: Segment[] = [];
   let at = 0;
   for (const m of findEntities(text, matcher, context)) {

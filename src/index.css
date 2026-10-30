@@ -229,7 +229,12 @@ body {
   text-decoration: underline;
   text-decoration-color: currentColor;
   text-underline-offset: 3px;
-  outline: none;
+}
+/* Keyboard focus also gets a faint ring in the text's colour, so it shows where the underline alone is easy to miss */
+.entity-link:focus-visible {
+  outline: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ─────────────────────────────────────────────────────────────

@@ -26,18 +26,34 @@ const ENTITIES: EntitiesData = {
 };
 const matcher = buildEntityMatcher(ENTITIES);
 /** Only the linked segments, as "text→kind:id" */
-const links = (text: string, context?: string) => linkify(text, matcher, context).filter(s => s.entity).map(s => `${s.text}→${s.entity!.kind}:${s.entity!.id}`);
+const links = (text: string, context?: string | boolean) => linkify(text, matcher, context).filter(s => s.entity).map(s => `${s.text}→${s.entity!.kind}:${s.entity!.id}`);
 
 describe('linkify', () => {
   it('returns the whole text, split around the links', () => {
-    const text = 'Fortinet patched it. Then fortinet, again (Fortinet).';
+    const text = 'Fortinet patched it. Then FORTINET, again (Fortinet).';
     const segments = linkify(text, matcher);
     expect(segments.map(s => s.text).join('')).toBe(text);
     expect(segments.filter(s => s.entity)).toEqual<Segment[]>([
       { text: 'Fortinet', entity: { kind: 'vendor', id: 'Fortinet' } },
-      { text: 'fortinet', entity: { kind: 'vendor', id: 'Fortinet' } },
+      { text: 'FORTINET', entity: { kind: 'vendor', id: 'Fortinet' } },
       { text: 'Fortinet', entity: { kind: 'vendor', id: 'Fortinet' } },
     ]);
+  });
+
+  it('links a one-word vendor only with a capital, as it is a name and not the word', () => {
+    const oracle = buildEntityMatcher({ vendors: ['Oracle', 'Apple', 'Palo Alto Networks', 'n8n'], groups: [], actors: [], malware: [] });
+    const vendors = (text: string) => linkify(text, oracle).filter(s => s.entity).map(s => s.text);
+    expect(vendors('a padding oracle attack on an apple')).toEqual([]);
+    expect(vendors('Oracle and Apple patched')).toEqual(['Oracle', 'Apple']);
+    // Names of several words, and names the vendor itself writes in lower case, link in any case
+    expect(vendors('palo alto networks and n8n')).toEqual(['palo alto networks', 'n8n']);
+    expect(vendors('CVE-2026-12345 in lower case: cve-2026-12345')).toEqual(['CVE-2026-12345', 'cve-2026-12345']);
+  });
+
+  it('takes a threat word already found in the wider context as given', () => {
+    expect(links('Lazarus stole funds', true)).toEqual(['Lazarus→actor:G0032']);
+    expect(links('Lazarus stole funds', false)).toEqual([]);
+    expect(links('Lazarus hackers stole funds', false)).toEqual(['Lazarus→actor:G0032']);
   });
 
   it('matches whole words only', () => {

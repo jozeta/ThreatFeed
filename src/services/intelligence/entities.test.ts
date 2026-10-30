@@ -13,7 +13,7 @@ describe('buildEntities', () => {
   };
 
   it('keeps canonical KEV vendors once each, without the everyday-word ones', () => {
-    const e = buildEntities({ kevVendors: ['Fortinet', 'fortinet', 'Microsoft Corporation', 'Microsoft', 'Progress', 'Arm', 'Cisco '], groups: [], victimGroups: [], actors: null });
+    const e = buildEntities({ kevVendors: ['Fortinet', 'fortinet', 'Microsoft Corporation', 'Microsoft', 'Progress', 'Arm', 'Versa', 'Cisco '], groups: [], victimGroups: [], actors: null });
     expect(e.vendors).toEqual(['Cisco', 'Fortinet', 'Microsoft']);
   });
 
