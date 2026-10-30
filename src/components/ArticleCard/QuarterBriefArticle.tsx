@@ -29,7 +29,7 @@ export const QuarterBriefArticle: React.FC<QuarterBriefArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`lift group cursor-pointer flex flex-col h-full p-4 rounded-lg bg-theme-surface border border-theme-border hover:border-theme-accent/50 transition-all duration-200 ${
+      className={`lift group cursor-pointer flex flex-col h-full p-4 rounded-lg bg-theme-surface border border-theme-border hover:border-theme-accent/50 ${
         article.read ? 'opacity-85' : 'opacity-100 shadow-sm'
       }`}
     >

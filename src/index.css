@@ -474,7 +474,8 @@ button.tag-chip {
 }
 .lift,
 .lift-flat {
-  transition-property: transform, color, background-color, border-color;
+  /* The cards' own transitions too (read cards fade to opacity-85, hover borders and backgrounds), in place of transition-all */
+  transition-property: transform, color, background-color, border-color, opacity;
   transition-duration: 180ms;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
