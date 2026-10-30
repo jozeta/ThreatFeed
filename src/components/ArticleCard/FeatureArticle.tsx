@@ -38,7 +38,7 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`lift group cursor-pointer flex transition-all duration-200 ${
+      className={`lift-flat group cursor-pointer flex transition-all duration-200 ${
         showBorder ? 'border-b border-theme-border pb-5 mb-5' : ''
       } ${
         orientation === 'horizontal' ? 'flex-col sm:flex-row gap-4' : 'flex-col'

@@ -31,7 +31,7 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
     return (
       <article
         onClick={onOpen}
-        className={`lift group cursor-pointer flex flex-row gap-3 py-3 transition-all duration-200 ${
+        className={`lift-flat group cursor-pointer flex flex-row gap-3 py-3 transition-all duration-200 ${
           showBorder ? 'border-b border-theme-border/60' : ''
         } ${article.read ? 'opacity-85' : 'opacity-100'}`}
       >

@@ -18,10 +18,23 @@ describe('countUpAt', () => {
 describe('parseCountable', () => {
   it('takes numbers and text that is just a number', () => {
     expect(parseCountable(42)).toEqual({ prefix: '', n: 42, decimals: 0, suffix: '' });
-    expect(parseCountable(7.25)).toEqual({ prefix: '', n: 7.25, decimals: 1, suffix: '' });
+    expect(parseCountable(7.25)).toEqual({ prefix: '', n: 7.25, decimals: 2, suffix: '' });
+    expect(parseCountable(7.5)).toEqual({ prefix: '', n: 7.5, decimals: 1, suffix: '' });
     expect(parseCountable('7.5')).toEqual({ prefix: '', n: 7.5, decimals: 1, suffix: '' });
     expect(parseCountable('#3')).toEqual({ prefix: '#', n: 3, decimals: 0, suffix: '' });
     expect(parseCountable('42%')).toEqual({ prefix: '', n: 42, decimals: 0, suffix: '%' });
+  });
+
+  it('lands on the same text the value would show', () => {
+    for (const v of [42, 7.25, 7.5, 0.125, '7.50', '#3', '42%']) {
+      const p = parseCountable(v)!;
+      expect(`${p.prefix}${p.n.toFixed(p.decimals)}${p.suffix}`).toBe(String(v));
+    }
+  });
+
+  it('leaves values it could not show exactly as they are', () => {
+    expect(parseCountable(1 / 3)).toBeNull();
+    expect(parseCountable('0.12345')).toBeNull();
   });
 
   it('leaves everything else alone', () => {

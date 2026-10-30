@@ -9,15 +9,21 @@ export function countUpAt(target: number, elapsed: number, duration = COUNT_UP_M
   return target * (1 - (1 - t) ** 3);
 }
 
-/** A stat value that can count up: a number, or text that is just one ("7.5", "#3", "42%"); anything else isn't */
+const MAX_DECIMALS = 3;
+
+/**
+ * A stat value that can count up: a number, or text that is just one ("7.5", "#3", "42%"); anything else isn't.
+ * The decimals come from the value's own text, so the count lands on exactly what the value would show; one
+ * with more than three (1/3) shows as it is.
+ */
 export function parseCountable(value: unknown): { prefix: string; n: number; decimals: number; suffix: string } | null {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < 0) return null;
-    return { prefix: '', n: value, decimals: Number.isInteger(value) ? 0 : 1, suffix: '' };
+    return parseCountable(String(value));
   }
   if (typeof value !== 'string') return null;
   const m = /^(#?)(\d+)(?:\.(\d+))?(%?)$/.exec(value);
-  if (!m) return null;
+  if (!m || (m[3]?.length ?? 0) > MAX_DECIMALS) return null;
   return { prefix: m[1], n: Number(`${m[2]}${m[3] ? `.${m[3]}` : ''}`), decimals: m[3]?.length ?? 0, suffix: m[4] };
 }
 

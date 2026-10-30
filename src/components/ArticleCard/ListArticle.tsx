@@ -31,7 +31,7 @@ export const ListArticle: React.FC<ListArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`lift group cursor-pointer flex items-center justify-between gap-3 px-4 py-3 border-b border-theme-border/60 hover:bg-theme-surface/80 transition-colors ${
+      className={`lift-flat group cursor-pointer flex items-center justify-between gap-3 px-4 py-3 border-b border-theme-border/60 hover:bg-theme-surface/80 transition-colors ${
         article.read ? 'opacity-80' : 'opacity-100 font-medium'
       }`}
     >

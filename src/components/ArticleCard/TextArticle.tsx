@@ -30,7 +30,7 @@ export const TextArticle: React.FC<TextArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`lift group cursor-pointer flex flex-col transition-all duration-200 ${
+      className={`lift-flat group cursor-pointer flex flex-col transition-all duration-200 ${
         showDivider ? 'border-b border-theme-border/70 pb-4 mb-4' : 'pb-2'
       } ${article.read ? 'opacity-80' : 'opacity-100'} ${className}`}
     >

@@ -458,7 +458,9 @@ button.tag-chip {
 /* ─────────────────────────────────────────────────────────────
    MICRO-ANIMATIONS
    Transform and opacity only, 120–200 ms, all off under reduced motion (the rules at the end of the block).
-   .lift      cards and list rows rise a pixel on hover; the stronger shadow is a layer whose opacity fades in
+   .lift      bordered cards and panel rows rise a pixel on hover; the stronger shadow is a layer whose opacity
+              fades in. Hover only where there is a pointer that hovers, so a tap doesn't leave it raised
+   .lift-flat borderless newspaper cards rise the same pixel, without the shadow (it would outline a square box)
    .press     buttons and chips settle to 0.97 while pressed
    .fade-up   one element fades up into place; .stagger does that to its children, 40 ms apart (6 at most).
               A side panel staggers its sections after its slide-in
@@ -470,7 +472,8 @@ button.tag-chip {
 :where(.lift) {
   position: relative;
 }
-.lift {
+.lift,
+.lift-flat {
   transition-property: transform, color, background-color, border-color;
   transition-duration: 180ms;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
@@ -488,11 +491,14 @@ button.tag-chip {
 .light .lift::after {
   box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.22);
 }
-.lift:hover {
-  transform: translateY(-1px);
-}
-.lift:hover::after {
-  opacity: 1;
+@media (hover: hover) {
+  .lift:hover,
+  .lift-flat:hover {
+    transform: translateY(-1px);
+  }
+  .lift:hover::after {
+    opacity: 1;
+  }
 }
 
 .press {
@@ -574,11 +580,11 @@ button.tag-chip {
 .reduce-motion :is(.fade-up, .stagger > *, .badge-pop, .chart-grow) {
   animation: none !important;
 }
-.reduce-motion :is(.lift, .press, .tab-ink),
+.reduce-motion :is(.lift, .lift-flat, .press, .tab-ink),
 .reduce-motion .lift::after {
   transition: none !important;
 }
-.reduce-motion :is(.lift:hover, .press:active) {
+.reduce-motion :is(.lift:hover, .lift-flat:hover, .press:active) {
   transform: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -589,12 +595,14 @@ button.tag-chip {
     animation: none !important;
   }
   .lift,
+  .lift-flat,
   .lift::after,
   .press,
   .tab-ink {
     transition: none !important;
   }
   .lift:hover,
+  .lift-flat:hover,
   .press:active {
     transform: none !important;
   }
