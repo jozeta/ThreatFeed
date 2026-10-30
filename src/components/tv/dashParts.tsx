@@ -33,8 +33,9 @@ function useFit(total: number): [React.RefObject<HTMLDivElement>, number] {
     if (!el) return;
     const measure = () => {
       const row = el.firstElementChild as HTMLElement | null;
-      if (!row || !row.offsetHeight) return setCount(total);
-      setCount(Math.min(total, Math.max(1, Math.floor(el.clientHeight / row.offsetHeight))));
+      const rowH = row?.getBoundingClientRect().height ?? 0;
+      if (!rowH) return setCount(total);
+      setCount(Math.min(total, Math.max(1, Math.floor((el.getBoundingClientRect().height + 0.5) / rowH))));
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -117,15 +118,16 @@ export function HBarList({ label, data, color, format, span = 2 }: {
   );
 }
 
-const nonZero = (xs: number[]) => xs.filter(x => x > 0).length;
+/** A chart needs at least 2 points (weeks or days) where any series is above zero */
+export const chartReady = (points: number[][]) => points.filter(p => p.some(v => v > 0)).length >= 2;
 
 export function WeeklyBarsLine({ label, weekly, span = 2, tall = false }: {
   label: string; weekly: { week: string; critical: number; kev: number }[]; span?: 1 | 2 | 4; tall?: boolean;
 }) {
-  const ready = nonZero(weekly.map(w => w.critical)) + nonZero(weekly.map(w => w.kev)) >= 2 && weekly.length >= 2;
+  const ready = chartReady(weekly.map(w => [w.critical, w.kev]));
   const W = 200, H = 80, n = weekly.length;
   const max = Math.max(1, ...weekly.map(w => Math.max(w.critical, w.kev)));
-  const slot = W / n;
+  const slot = n ? W / n : W;
   const x = (i: number) => slot * i + slot / 2;
   const y = (v: number) => H - 2 - (v / max) * (H - 6);
   return (
@@ -148,7 +150,7 @@ export function WeeklyBarsLine({ label, weekly, span = 2, tall = false }: {
 export function DailyArea({ label, daily, color, span = 2 }: {
   label: string; daily: { day: string; count: number }[]; color: string; span?: 1 | 2 | 4;
 }) {
-  const ready = nonZero(daily.map(d => d.count)) >= 2;
+  const ready = chartReady(daily.map(d => [d.count]));
   const W = 200, H = 60, n = daily.length;
   const max = Math.max(1, ...daily.map(d => d.count));
   const pts = daily.map((d, i) => [n > 1 ? (W * i) / (n - 1) : 0, H - 2 - (d.count / max) * (H - 6)] as [number, number]);
