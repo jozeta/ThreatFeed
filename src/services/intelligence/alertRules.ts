@@ -213,12 +213,16 @@ export function resolveRoot(rule: AlertRule, s: RuleLists): AlertRule['root'] {
   }
 }
 
-/** Deep copy; `watched` conditions are frozen into the current CVE list */
+/**
+ * Deep copy; each `watched` condition becomes "watched AND cve is any of <current list>", so the copy stays
+ * event-driven but limited to the CVEs watched now. Watch events only exist for CVEs on the live watched list,
+ * so the copy covers CVEs that are in both: unstarring one later also stops the copy from following it.
+ */
 function freeze(node: unknown, watchedCves: string[]): unknown {
   if (Array.isArray(node)) return node.map(n => freeze(n, watchedCves));
   if (node && typeof node === 'object') {
     const obj = node as Record<string, unknown>;
-    if (obj.field === 'watched') return { field: 'cve', values: [...watchedCves] };
+    if (obj.field === 'watched') return { op: 'all', items: [{ field: 'watched' }, { field: 'cve', values: [...watchedCves] }] };
     return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, freeze(v, watchedCves)]));
   }
   return node;

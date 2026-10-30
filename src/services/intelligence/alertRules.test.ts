@@ -201,7 +201,10 @@ describe('built-in rules', () => {
     expect(watched.id).toBe('new1');
     expect(watched.name).toBe('Watched CVEs (copy)');
     expect(watched.notify).toBe(false);
-    expect(watched.root.items).toContainEqual({ field: 'cve', values: ['CVE-2026-1'] });
+    // Stays event-driven, limited to the CVEs watched at duplication time
+    expect(watched.root).toEqual({
+      op: 'any', items: [{ op: 'all', items: [{ field: 'watched' }, { field: 'cve', values: ['CVE-2026-1'] }] }],
+    });
     const copy = duplicateRule(byId(rules, 'stack-vulns'), s, now, 'new2');
     stack.push('Cisco');
     expect(copy.root).toEqual({ op: 'any', items: [{ field: 'vendor', values: ['Fortinet'] }] });

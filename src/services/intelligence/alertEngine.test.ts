@@ -4,7 +4,7 @@ import {
 } from './alertEngine';
 import { AlertRule, Article, ConditionGroup, KevEntry, NewsCondition, VulnCondition, VulnData } from '../../types';
 import { article } from '../../test/fixtures';
-import { createBuiltInRules } from './alertRules';
+import { createBuiltInRules, duplicateRule } from './alertRules';
 
 const NOW = new Date('2026-10-30T12:00:00Z');
 const HOUR = 3_600_000;
@@ -244,6 +244,19 @@ describe('runAlertCheck', () => {
       const { store } = runAlertCheck(input({ rules: [r], vulns: vulnData([]) }, s), base);
       const both = vulnData([kev(CVE, 'Acme', 'Router', { cvss: 9.1 }), kev(LOW, 'Acme', 'Printer', { cvss: 5 })]);
       const next = runAlertCheck(input({ rules: [r], vulns: both, now: later(HOUR) }, s), store);
+      expect(ids(next.notify)).toEqual([`${CVE}#kev`]);
+    });
+
+    it('a duplicate of Watched CVEs plus CVSS ≥ 8 fires on a KEV listing of a listed CVE', () => {
+      const OTHER = 'CVE-2026-8000';
+      const copy = duplicateRule(watched, { watchlistKeywords: [], stackKeywords: [], watchedCves: [CVE] }, NOW, 'copy');
+      const r: AlertRule = { ...copy, notify: true, root: vulnsRoot(copy.root as ConditionGroup<VulnCondition>, { field: 'cvss', min: 8 }) };
+      // OTHER is starred after duplicating: the frozen copy does not follow it
+      const s = { watchedCves: [CVE, OTHER] };
+      const base = { ...emptyAlertStore(NOW), watch: { [CVE]: { kev: false, articleIds: [] }, [OTHER]: { kev: false, articleIds: [] } } };
+      const { store } = runAlertCheck(input({ rules: [r], vulns: vulnData([]) }, s), base);
+      const listed = vulnData([kev(CVE, 'Acme', 'Router', { cvss: 9 }), kev(OTHER, 'Acme', 'Switch', { cvss: 9 })]);
+      const next = runAlertCheck(input({ rules: [r], vulns: listed, now: later(HOUR) }, s), store);
       expect(ids(next.notify)).toEqual([`${CVE}#kev`]);
     });
   });
