@@ -58,14 +58,14 @@ function go(hash: string, replace: boolean, state: unknown = null) {
 }
 
 /** Sets (or, with an empty value, removes) query parameters of the current route, from outside a component */
-export function setHashParams(changes: Record<string, string>, push = false) {
+export function setHashParams(changes: Record<string, string>, push = false, state: unknown = null) {
   const current = parseHash(window.location.hash);
   const params = new URLSearchParams(current.params);
   for (const [key, value] of Object.entries(changes)) {
     if (value) params.set(key, value);
     else params.delete(key);
   }
-  go(buildHash(current.page, current.sub, params), !push);
+  go(buildHash(current.page, current.sub, params), !push, state);
 }
 
 // The detail panels' parameters, which App opens over any page

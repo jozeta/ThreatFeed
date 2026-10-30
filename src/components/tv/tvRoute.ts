@@ -1,6 +1,8 @@
 import { ActiveNavTab } from '../../types';
 import { closeAllPanels, PANEL_PARAMS, parseHash, setHashParams } from '../../hooks/useHashRoute';
 
+const TV_MARK = 'tvEntry';
+
 export type TvKind = 'tv' | 'dash';
 
 const AVAILABLE: Partial<Record<ActiveNavTab, TvKind[]>> = {
@@ -22,7 +24,11 @@ export function tvFromParams(page: ActiveNavTab, params: URLSearchParams): TvKin
 
 /** Enters a mode with a history entry (Back leaves it), closing any panels, and asks for full screen where allowed */
 export function enterTv(kind: TvKind): void {
-  const push = () => setHashParams({ [kind]: '1' }, true);
+  // The pushed entry is marked, so exitTv can tell it from one reached by a shared link or a reload-less edit
+  const push = () => {
+    const prev = window.history.state;
+    setHashParams({ [kind]: '1' }, true, { ...(prev && typeof prev === 'object' ? prev : {}), [TV_MARK]: true });
+  };
   if (PANEL_PARAMS.some((key) => parseHash(window.location.hash).params.has(key))) {
     // Closing panels may go Back, which lands later: add the entry once the hash has settled
     const done = () => { cleanup(); push(); };
@@ -42,9 +48,11 @@ export function enterTv(kind: TvKind): void {
   } catch { /* no fullscreen here (iOS, kiosk) */ }
 }
 
-/** Leaves the mode in place (no history entry) and full screen if active */
+/** Leaves the mode: back over the entry enterTv pushed (so Back doesn't land on a duplicate), else in place. Also leaves full screen */
 export function exitTv(): void {
-  setHashParams({ tv: '', dash: '' });
+  const state = window.history.state;
+  if (state && typeof state === 'object' && (state as Record<string, unknown>)[TV_MARK] === true) window.history.back();
+  else setHashParams({ tv: '', dash: '' });
   leaveFullscreen();
 }
 

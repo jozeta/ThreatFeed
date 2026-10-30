@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { leaveFullscreen, tvAvailable, tvFromParams } from './tvRoute';
+import { enterTv, exitTv, leaveFullscreen, tvAvailable, tvFromParams } from './tvRoute';
 
 describe('tvRoute', () => {
   it('lists the modes each page offers', () => {
@@ -32,5 +32,28 @@ describe('leaveFullscreen', () => {
     expect(() => leaveFullscreen()).not.toThrow();
     expect(exit).toHaveBeenCalledTimes(1);
     await Promise.resolve();
+  });
+});
+
+describe('enterTv / exitTv history', () => {
+  const settle = () => new Promise(r => setTimeout(r, 30));
+  it('exit goes back over the pushed entry, leaving no duplicate', async () => {
+    window.history.replaceState(null, '', '/#/latest');
+    const before = window.history.length;
+    enterTv('tv');
+    expect(window.location.hash).toContain('tv=1');
+    expect(window.history.length).toBe(before + 1);
+    exitTv();
+    await settle();
+    expect(window.location.hash).toBe('#/latest');
+    expect(window.history.length).toBe(before + 1); // back() doesn't add an entry
+  });
+  it('exit replaces in place when the entry was not pushed by enterTv', () => {
+    window.history.replaceState(null, '', '/#/latest?tv=1');
+    const back = vi.spyOn(window.history, 'back');
+    exitTv();
+    expect(back).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#/latest');
+    back.mockRestore();
   });
 });
