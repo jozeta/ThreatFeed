@@ -13,10 +13,10 @@ const CHECK_INTERVAL_MS = 5 * 60_000; // sends matches held by the gap once it e
  * one combined desktop notification; the rest is recorded for My Feed. Renders nothing.
  */
 export function AlertMonitor(): null {
-  const { feeds, articles, cveIntel, vulns, ensureVulns, isRefreshing } = useFeeds();
+  const { feeds, articles, cveIntel, vulns, ensureVulns, isRefreshing, initialSyncDone } = useFeeds();
   const { settings } = useSettings();
-  const latest = useRef({ feeds, articles, cveIntel, vulns, settings });
-  latest.current = { feeds, articles, cveIntel, vulns, settings };
+  const latest = useRef({ feeds, articles, cveIntel, vulns, settings, initialSyncDone });
+  latest.current = { feeds, articles, cveIntel, vulns, settings, initialSyncDone };
   const running = useRef(false);
   const rerun = useRef(false);
   const needsVulns = settings.alertRules.some(r => r.enabled && r.kind === 'vulns');
@@ -26,11 +26,14 @@ export function AlertMonitor(): null {
   }, [needsVulns, ensureVulns]);
 
   const check = async () => {
+    // Before the stored data and first refresh have landed, articles/vulns are partial and would mis-baseline
+    if (!latest.current.initialSyncDone) return;
     if (running.current) { rerun.current = true; return; }
     running.current = true;
     try {
-      const { feeds: feedList, articles: list, cveIntel: intel, vulns: data, settings: s } = latest.current;
-      const epss = s.watchedCves.length > 0 ? await fetchEpssScores(s.watchedCves) : new Map<string, number>();
+      const watched = latest.current.settings.watchedCves;
+      const epss = watched.length > 0 ? await fetchEpssScores(watched) : new Map<string, number>();
+      const { feeds: feedList, articles: list, cveIntel: intel, vulns: data, settings: s } = latest.current; // read after the await
       const store = await loadAlertStore();
       const categories = new Map(feedList.map(f => [f.id, f.category]));
       const result = runAlertCheck({
@@ -46,6 +49,8 @@ export function AlertMonitor(): null {
       }, store);
       await saveAlertStore(result.store);
       notifyAlertMatches(result.notify);
+    } catch (err) {
+      console.warn('Alert check failed:', err);
     } finally {
       running.current = false;
       if (rerun.current) { rerun.current = false; void check(); }
@@ -56,9 +61,9 @@ export function AlertMonitor(): null {
 
   // After a refresh settles, and whenever the rules or lists they read change
   useEffect(() => {
-    if (isRefreshing) return;
+    if (isRefreshing || !initialSyncDone) return;
     void checkRef.current();
-  }, [isRefreshing, vulns, settings.alertRules, settings.watchlistKeywords, settings.stackKeywords, settings.watchedCves, settings.alertGapHours]);
+  }, [isRefreshing, initialSyncDone, vulns, settings.alertRules, settings.watchlistKeywords, settings.stackKeywords, settings.watchedCves, settings.alertGapHours]);
 
   useEffect(() => {
     const timer = window.setInterval(() => void checkRef.current(), CHECK_INTERVAL_MS);

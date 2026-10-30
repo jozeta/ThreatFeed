@@ -60,6 +60,7 @@ interface FeedContextType {
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
+  initialSyncDone: boolean; // stored data is loaded and the first refresh (if any) has settled
   refreshProgress: RefreshProgress;
   lastUpdated: Date | null;
   isOffline: boolean;
@@ -90,6 +91,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [articles, setArticles] = useState<Article[]>([]);
   const [feedHealth, setFeedHealth] = useState<Record<string, FeedHealth>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState<RefreshProgress>({ completed: 0, total: 0 });
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -243,12 +245,19 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 4. Initial fetch if device is online to ingest latest dispatches
       if (navigator.onLine && storedFeeds.length > 0) {
         const initialFeeds = storedFeeds;
-        setTimeout(() => {
-          refreshFeedsInternal(initialFeeds, undefined, { useSnapshot: true, skipBackedOff: true });
+        setTimeout(async () => {
+          try {
+            await refreshFeedsInternal(initialFeeds, undefined, { useSnapshot: true, skipBackedOff: true });
+          } finally {
+            setInitialSyncDone(true);
+          }
         }, 300);
+      } else {
+        setInitialSyncDone(true);
       }
     } catch (err) {
       console.error('Initialization error:', err);
+      setInitialSyncDone(true);
     }
   }, []);
 
@@ -667,6 +676,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     articles,
     feedHealth,
     isRefreshing,
+    initialSyncDone,
     refreshProgress,
     lastUpdated,
     isOffline,
@@ -688,7 +698,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, articles, feedHealth, isRefreshing, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,
