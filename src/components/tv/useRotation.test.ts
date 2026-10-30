@@ -10,9 +10,9 @@ type Result = ReturnType<typeof useRotation<number>>;
 let result: Result;
 let root: Root;
 
-function mount(build: () => number[], interval = 1000) {
+function mount(build: () => number[], interval = 1000, signature?: () => number) {
   function Harness() {
-    result = useRotation(build, interval);
+    result = useRotation(build, interval, { signature: signature?.(), setKey: s => String(s) });
     return null;
   }
   root = createRoot(document.createElement('div'));
@@ -74,5 +74,37 @@ describe('useRotation', () => {
     advance(1000);
     expect(result).toMatchObject({ index: 0, phase: 'in', cycle: 1 });
     expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('picks up late data at once while nothing has been shown yet', () => {
+    let data: number[] = [];
+    let sig = 0;
+    function Harness() {
+      result = useRotation(() => data, 1000, { signature: sig });
+      return null;
+    }
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    expect(result.sets).toEqual([]);
+    data = [1, 2];
+    sig = 1;
+    act(() => root.render(createElement(Harness)));
+    expect(result.sets).toEqual([1, 2]);
+    expect(result.index).toBe(0);
+  });
+
+  it('keeps a single unchanged set mounted, and fades a changed one out and in', () => {
+    let data = [1];
+    mount(() => data);
+    const c = result.cycle;
+    advance(1000);
+    expect(result.phase).toBe('in');
+    expect(result.sets).toEqual([1]);
+    data = [2];
+    advance(1000);
+    expect(result.phase).toBe('out');
+    advance(600);
+    expect(result).toMatchObject({ sets: [2], phase: 'in' });
+    expect(result.cycle).toBeGreaterThan(c);
   });
 });

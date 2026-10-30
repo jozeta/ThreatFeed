@@ -17,13 +17,19 @@ describe('tilesForFront', () => {
     const tiles = tilesForFront(
       [
         article('fresh', { title: 'Fresh story about widgets', publishedAt: ago(2) }),
-        article('old', { title: 'Old story about gadgets', publishedAt: ago(25) }),
+        article('old', { title: 'Old story about gadgets', publishedAt: ago(24 * 8) }),
         article('leak', { title: 'Akira has just published a new victim', publishedAt: ago(1) }),
       ],
       [],
       NOW
     );
     expect(tiles.map(t => t.id)).toEqual(['fresh']);
+  });
+
+  it('widens to 72h, then 7 days, while fewer than 5 stories are fresh', () => {
+    const mk = (id: string, h: number) => article(id, { title: `Distinct headline number ${id} about topic ${id}x`, publishedAt: ago(h) });
+    expect(tilesForFront([mk('a', 2), mk('b', 30), mk('c', 100)], [], NOW).map(t => t.id).sort()).toEqual(['a', 'b', 'c']);
+    expect(tilesForFront([mk('a', 2), mk('b', 30), mk('c', 100), mk('d', 200)], [], NOW).map(t => t.id).sort()).toEqual(['a', 'b', 'c']);
   });
 
   it('ranks critical above info of the same age', () => {

@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { TvTile, TvTone } from '../../services/tv/tiles';
 
 export const TONE_COLOR: Record<TvTone, string> = {
@@ -25,6 +26,22 @@ interface Props {
 
 export default function TvTileCard({ tile, index, now }: Props) {
   const big = tile.col * tile.row > 1;
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+  // Show only whole lines: as many as the height left allows, or none when fewer than two fit
+  useLayoutEffect(() => {
+    const el = summaryRef.current;
+    if (!el) return;
+    const fit = () => {
+      const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+      const lines = lineHeight > 0 ? Math.floor((el.clientHeight + 0.5) / lineHeight) : 0;
+      el.style.webkitLineClamp = String(Math.max(lines, 1));
+      el.style.visibility = lines >= 2 ? 'visible' : 'hidden';
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const age = shortAge(tile.time, now);
   return (
     <article
@@ -38,7 +55,7 @@ export default function TvTileCard({ tile, index, now }: Props) {
         {age && ` · ${age}`}
       </div>
       <h2 className="tv-tile-headline">{tile.headline}</h2>
-      {tile.summary && <p className="tv-tile-summary">{tile.summary}</p>}
+      {tile.summary && <p ref={summaryRef} className="tv-tile-summary">{tile.summary}</p>}
     </article>
   );
 }

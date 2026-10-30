@@ -709,7 +709,7 @@ button.tag-chip {
 }
 .tv-tile-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0.8vmin; }
 .tv-tile-meta {
-  font-size: clamp(0.9rem, 1.3vw, 1.8rem);
+  font-size: clamp(0.9rem, 1.3vw, 3.5rem);
   color: #8b95a3;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -721,22 +721,29 @@ button.tag-chip {
   margin: 0;
   font-weight: 700;
   line-height: 1.15;
-  font-size: clamp(1.2rem, 2.2vw, 3rem);
+  font-size: clamp(1.2rem, 2.2vw, 6rem);
   color: #f2f5f8;
   overflow-wrap: anywhere;
-}
-.tv-tile[data-big='1'] .tv-tile-headline { font-size: clamp(1.5rem, 2.8vw, 3.8rem); }
-.tv-tile-summary {
-  margin: 0;
-  font-size: clamp(1rem, 1.5vw, 2rem);
-  line-height: 1.3;
-  color: #aab3bf;
+  flex: none;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   overflow: hidden;
 }
-.tv-tile[data-big='1'] .tv-tile-summary { -webkit-line-clamp: 6; }
+.tv-tile[data-big='1'] .tv-tile-headline { font-size: clamp(1.5rem, 2.8vw, 7.5rem); -webkit-line-clamp: 5; }
+.tv-tile-summary {
+  margin: 0;
+  font-size: clamp(1rem, 1.5vw, 4rem);
+  line-height: 1.3;
+  color: #aab3bf;
+  flex: 1 1 0;
+  min-height: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4; /* TvTileCard sets the exact whole-line count from the height left */
+  overflow: hidden;
+}
+.tv-tile-meta { flex: none; }
 
 @keyframes tv-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tv-slide-in { from { opacity: 0; transform: translateX(-6vw); } to { opacity: 1; transform: none; } }

@@ -73,6 +73,8 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const revealMs = (set: TvSet) => OUT_MS + 80 * set.tiles.length;
   const { sets, index, phase, cycle } = useRotation(build, intervalMs, {
     outMs: settings.tvTransition === 'reveal' && !reduced ? revealMs : undefined,
+    signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
+    setKey: s => s.tiles.map(t => t.id).join(','),
   });
 
   const set = sets[index];
@@ -81,7 +83,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
 
   return (
     <div
-      key={`${cycle}-${index}`}
+      key={`${index}|${set.tiles.map(t => t.id).join(',')}`}
       className="tv-set"
       data-phase={phase}
       data-transition={reduced ? 'reduced' : settings.tvTransition}

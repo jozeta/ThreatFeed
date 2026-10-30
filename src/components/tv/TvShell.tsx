@@ -16,6 +16,14 @@ export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavT
   // However the mode ends (Back, a hash edit, another page), the browser leaves full screen with it
   useEffect(() => leaveFullscreen, []);
 
+  // The page behind never scrolls (Space, PageDown, scrollbars)
+  useEffect(() => {
+    const el = document.documentElement;
+    const previous = el.style.overflow;
+    el.style.overflow = 'hidden';
+    return () => { el.style.overflow = previous; };
+  }, []);
+
   // Leaving full screen (Esc, the browser's own control) leaves the mode, but only if we got into it
   const enteredFullscreen = useRef(false);
   useEffect(() => {

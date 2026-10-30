@@ -60,9 +60,14 @@ function storyTile(a: Article, weight: number): TvTile {
   };
 }
 
-/** Last-24h front page: clustered, leak-site posts removed, most important first */
+/** Front page: the last 24h, widened to 72h and then 7 days while fewer than 5 stories qualify; clustered, leak-site posts removed, most important first */
 export function tilesForFront(articles: Article[], stackKeywords: string[], now: number, max = 30): TvTile[] {
-  const recent = articles.filter(a => !isLeakSitePost(a) && now - timeOf(a.publishedAt) <= 24 * HOUR_MS);
+  const notLeak = articles.filter(a => !isLeakSitePost(a));
+  let recent: Article[] = [];
+  for (const hours of [24, 72, 168]) {
+    recent = notLeak.filter(a => now - timeOf(a.publishedAt) <= hours * HOUR_MS);
+    if (clusterArticles(recent).length >= 5) break;
+  }
   return clusterArticles(recent)
     .map(c => c.primaryArticle)
     .map(a => ({ a, importance: calculateImportance(a, stackKeywords), time: timeOf(a.publishedAt) }))
