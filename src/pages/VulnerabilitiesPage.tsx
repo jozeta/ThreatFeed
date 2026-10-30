@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
-import { useVulns } from '../hooks/useVulns';
+import { useMsrc, useVulns } from '../hooks/useVulns';
 import { useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { formatRelativeTime } from '../utils/date';
 import { KevTab } from './vulns/KevTab';
@@ -12,11 +12,18 @@ import { OpenSourceTab } from './vulns/OpenSourceTab';
 import { VulnNewsTab } from './vulns/VulnNewsTab';
 import { CvePanel } from './vulns/CvePanel';
 import { WatchingTab } from './vulns/WatchingTab';
+import { PatchTuesdayTab } from './vulns/PatchTuesdayTab';
 import { articlesByCve } from './vulns/shared';
-import { ShieldAlert, Flame, FilePlus2, Gauge, Package, Newspaper, Star } from 'lucide-react';
+import { ShieldAlert, Flame, FilePlus2, Gauge, Package, Newspaper, Star, CalendarCheck } from 'lucide-react';
 
-const TABS = ['kev', 'new', 'epss', 'oss', 'news', 'watching'] as const;
+const TABS = ['kev', 'new', 'patch', 'epss', 'oss', 'news', 'watching'] as const;
 type Tab = (typeof TABS)[number];
+
+/** Loads data/msrc.json only once the Patch Tuesday tab is opened */
+const PatchTuesdayView: React.FC<{ stackKeywords: string[]; onOpenCve: (cve: string) => void; noData: React.ReactNode }> = ({ stackKeywords, onOpenCve, noData }) => {
+  const msrc = useMsrc();
+  return msrc?.months.length ? <PatchTuesdayTab months={msrc.months} stackKeywords={stackKeywords} onOpenCve={onOpenCve} /> : <>{noData}</>;
+};
 
 export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
   const { articles, feeds, cveIntel } = useFeeds();
@@ -46,6 +53,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
   const tabs: { id: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
     { id: 'kev', label: 'Known exploited (KEV)', icon: <Flame className="w-4 h-4" />, count: kev.length },
     { id: 'new', label: 'New CVEs', icon: <FilePlus2 className="w-4 h-4" />, count: vulns?.nvd?.total },
+    { id: 'patch', label: 'Patch Tuesday', icon: <CalendarCheck className="w-4 h-4" /> },
     { id: 'epss', label: 'Exploit prediction', icon: <Gauge className="w-4 h-4" /> },
     { id: 'oss', label: 'Open source', icon: <Package className="w-4 h-4" />, count: vulns?.advisories.length },
     { id: 'news', label: 'Vulnerability news', icon: <Newspaper className="w-4 h-4" /> },
@@ -64,7 +72,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
           <span>Vulnerabilities & KEV</span>
         </h1>
         <p className="font-serif text-sm text-theme-text-muted mt-1">
-          What attackers are exploiting (CISA KEV), what is likely next (EPSS), what was just disclosed (NVD, GitHub) and how the news is covering it.
+          What attackers are exploiting (CISA KEV), what is likely next (EPSS), what was just disclosed (NVD, GitHub), what Microsoft patched (Patch Tuesday) and how the news is covering it.
           {vulns && <span className="font-mono text-[11px]"> · data updated {formatRelativeTime(vulns.updatedAt)}</span>}
         </p>
       </div>
@@ -89,6 +97,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
 
       {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} stackKeywords={settings.stackKeywords} onOpenCve={setOpenCve} /> : noData('The CISA KEV catalog'))}
       {tab === 'new' && (vulns?.nvd ? <NewCvesTab stats={vulns.nvd} notable={vulns.notable} kevIds={kevIds} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} onOpenCve={setOpenCve} /> : noData('NVD data'))}
+      {tab === 'patch' && <PatchTuesdayView stackKeywords={settings.stackKeywords} onOpenCve={setOpenCve} noData={noData('Patch Tuesday data')} />}
       {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} exploits={vulns.exploits ?? {}} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
       {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={setOpenCve} /> : noData('GitHub advisory data'))}
       {tab === 'news' && <VulnNewsTab articles={articles} feeds={feeds} kevIds={kevIds} onOpenArticle={onOpenArticle} />}

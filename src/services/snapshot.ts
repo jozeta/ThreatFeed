@@ -1,4 +1,4 @@
-import { Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, RansomwareIntel, VulnData } from '../types';
+import { Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
 import { decodeWatchable } from './intelligence/vulns';
 
 export interface FeedSnapshot {
@@ -58,6 +58,19 @@ export async function loadRansomwareIntel(): Promise<RansomwareIntel | null> {
     const data = await res.json();
     if (!data || typeof data.groups !== 'object' || !Array.isArray(data.attacks)) return null;
     return data as RansomwareIntel;
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/msrc.json (the latest Patch Tuesday releases) for the Vulnerabilities page's Patch Tuesday tab */
+export async function loadMsrc(): Promise<MsrcData | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/msrc.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data.months)) return null;
+    return { generatedAt: data.generatedAt, months: data.months.filter((m: any) => m && typeof m.id === 'string' && Array.isArray(m.cves)) };
   } catch {
     return null;
   }

@@ -283,6 +283,32 @@ export interface RansomwareIntel {
   sourceUpdates?: Record<string, string>; // when slow-changing sources were last refreshed
 }
 
+/** One Patch Tuesday release from Microsoft's CVRF API (data/msrc.json) */
+export interface PatchCve {
+  cve: string;
+  title: string;
+  severity?: 'Critical' | 'Important' | 'Moderate' | 'Low'; // highest across the affected products
+  impact?: string; // e.g. 'Remote Code Execution'
+  cvss?: number; // highest base score across the affected products
+  exploited: boolean; // "Exploited:Yes" in Microsoft's exploitability assessment
+  publiclyDisclosed: boolean;
+  products: string[]; // affected product names, max 5
+  kb?: string[]; // e.g. KB5126836
+}
+
+export interface PatchMonth {
+  id: string; // e.g. 2026-Oct
+  title: string; // e.g. October 2026 Security Updates
+  released: string;
+  cves: PatchCve[];
+}
+
+export interface MsrcData {
+  generatedAt?: string;
+  months: PatchMonth[]; // newest first
+  updates?: Record<string, string>; // when each month's document was last fetched, for the snapshot's carry-over
+}
+
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
 export interface ExtractedIOC {

@@ -36,8 +36,8 @@ export const EpssValue: React.FC<{ epss?: number }> = ({ epss }) =>
     </span>
   );
 
-export const StatCards: React.FC<{ stats: { label: string; value: React.ReactNode; note?: string }[] }> = ({ stats }) => (
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+export const StatCards: React.FC<{ stats: { label: string; value: React.ReactNode; note?: string }[]; columns?: string }> = ({ stats, columns = 'md:grid-cols-4' }) => (
+  <div className={`grid grid-cols-2 ${columns} gap-4`}>
     {stats.map((s) => (
       <div key={s.label} className="p-4 rounded-lg bg-theme-surface border border-theme-border">
         <span className="font-mono text-xs text-theme-text-muted uppercase">{s.label}</span>

@@ -1,7 +1,7 @@
 /**
  * Builds public/data/snapshot.json: every enabled default feed fetched server-side (no CORS, no
  * proxy), parsed with the app's own parser, plus CVE intelligence (CISA KEV, FIRST EPSS, NVD, GitHub
- * advisories) and incident data (Ransomware.live, Have I Been Pwned).
+ * advisories, Microsoft Patch Tuesday) and incident data (Ransomware.live, Have I Been Pwned).
  *
  * Runs in the deploy workflow on a schedule, so the published site always carries a recent
  * snapshot and the browser only needs live fetching for feeds the user added themselves.
@@ -25,6 +25,7 @@ const {
   parseMetasploit, parseNuclei, parsePocIndex, exploitInfo, normalizeGroupDetail, cvesInTtps, normalizePublicAttack,
   cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor, malpediaProfiles, stopRansomwareAdvisories,
 } = await import('../src/services/intelligence/enrichment');
+const { refreshPatchMonths, decodeMsrc } = await import('../src/services/intelligence/patchTuesday');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
@@ -41,12 +42,14 @@ type RansomwareIntel = import('../src/types').RansomwareIntel;
 type GroupIntel = import('../src/types').GroupIntel;
 type PublicAttack = import('../src/types').PublicAttack;
 type ExploitInfo = import('../src/types').ExploitInfo;
+type MsrcData = import('../src/types').MsrcData;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
 const VULNS_OUT = resolve(root, 'public/data/vulns.json'); // loaded by the app only when a vulnerability view needs it
 const NVD_CACHE_OUT = resolve(root, 'public/data/nvd-cache.json'); // read back by the next run, never by the app
 const RANSOMWARE_OUT = resolve(root, 'public/data/ransomware.json'); // group intel, public reports, payments: Ransomware page only
+const MSRC_OUT = resolve(root, 'public/data/msrc.json'); // Patch Tuesday releases: the Vulnerabilities page's Patch Tuesday tab only
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
 // The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
 const PREVIOUS_BASE = process.env.PREVIOUS_SNAPSHOT_URL?.replace(/snapshot\.json$/, '');
@@ -406,6 +409,37 @@ async function loadDailySources(previousIntel: RansomwareIntel | null, updates: 
   return { attackBundle, payments, malpedia };
 }
 
+// ---------- Microsoft Patch Tuesday (MSRC CVRF; each month's document is ~30 MB) ----------
+
+/**
+ * The latest three monthly releases. Older months, and the newest one between its daily refreshes, are
+ * carried over from the published msrc.json (PREVIOUS_MSRC_URL), so most runs make one small request.
+ */
+async function loadMsrc(): Promise<MsrcData> {
+  const label = 'Microsoft Patch Tuesday (MSRC)';
+  let previous: MsrcData | null = null;
+  if (process.env.PREVIOUS_MSRC_URL) {
+    try {
+      previous = decodeMsrc(await getJson(process.env.PREVIOUS_MSRC_URL, 60000));
+    } catch {
+      // No previous file (first run, or the site is down): every month is fetched
+    }
+  }
+  const r = await refreshPatchMonths(previous, url => getJson(url, 120000));
+  const count = r.data.months.reduce((n, m) => n + m.cves.length, 0);
+  if (r.listError) {
+    report({ id: 'msrc', label, status: previous?.months.length ? 'cached' : 'failed', count, detail: `update list: ${r.listError.slice(0, 150)}` });
+  } else {
+    const detail = [
+      r.fetched.length && `fetched ${r.fetched.join(', ')}`,
+      r.carried.length && `carried over ${r.carried.join(', ')}`,
+      ...r.failed.map(f => `${f.id} failed: ${f.error.slice(0, 80)}`),
+    ].filter(Boolean).join('; ');
+    report({ id: 'msrc', label, status: r.failed.length ? (r.data.months.length ? 'cached' : 'failed') : r.fetched.length ? 'ok' : 'cached', count, detail });
+  }
+  return r.data;
+}
+
 // ---------- Feeds ----------
 
 async function fetchFeeds() {
@@ -435,6 +469,7 @@ const previousIntel: RansomwareIntel | null = previousIntelRaw && typeof previou
 // Everything slow starts now and runs while the feeds download
 const rlPromise = loadRansomwareLive(previousIntel);
 const exploitsPromise = loadExploitSources();
+const msrcPromise = loadMsrc();
 const dailyPromise = rlPromise.then(rl => loadDailySources(previousIntel, rl.updates));
 const kevEntries = await loadKev();
 const vulnSourcesPromise = Promise.all([loadNvdData(new Set(kevEntries.map(k => k.cve))), loadAdvisories(), loadEpssTop()]);
@@ -599,6 +634,9 @@ const vulnsJson = JSON.stringify({ version: 1, generatedAt, ...vulns });
 writeFileSync(VULNS_OUT, vulnsJson);
 const ransomwareJson = JSON.stringify({ version: 1, generatedAt, ...ransomwareIntel });
 writeFileSync(RANSOMWARE_OUT, ransomwareJson);
+const msrc = await msrcPromise;
+const msrcJson = JSON.stringify({ version: 1, generatedAt, ...msrc });
+writeFileSync(MSRC_OUT, msrcJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
@@ -606,5 +644,6 @@ const mb = (s: string) => `${(s.length / 1e6).toFixed(2)} MB`;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${mb(json)}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${watchable.length} CVSS 7–8.9 (${mb(JSON.stringify(vulns.watchable))}), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
 console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
+console.log(`Patch Tuesday: ${msrc.months.map(m => `${m.id} ${m.cves.length} CVEs (${m.cves.filter(c => c.exploited).length} exploited)`).join(', ') || 'no data'}, ${mb(msrcJson)}`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

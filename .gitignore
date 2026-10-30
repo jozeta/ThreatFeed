@@ -29,6 +29,7 @@ public/data/snapshot.json
 public/data/vulns.json
 public/data/nvd-cache.json
 public/data/ransomware.json
+public/data/msrc.json
 
 # Brainstorming companion mockups
 .superpowers/

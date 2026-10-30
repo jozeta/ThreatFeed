@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, RansomwareIntel, VulnData } from '../types';
+import { Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -16,7 +16,7 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadRansomwareIntel, loadSnapshot, loadVulnData } from '../services/snapshot';
+import { loadMsrc, loadRansomwareIntel, loadSnapshot, loadVulnData } from '../services/snapshot';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
@@ -57,6 +57,8 @@ interface FeedContextType {
   dataSources: DataSourceStatus[]; // how each external source fared in the snapshot run
   ransomwareIntel: RansomwareIntel | null; // group profiles, ATT&CK, linked CVEs, public reports, payments
   ensureRansomwareIntel: () => Promise<void>; // like ensureVulns, for data/ransomware.json
+  msrc: MsrcData | null; // the latest Patch Tuesday releases (MSRC CVRF)
+  ensureMsrc: () => Promise<void>; // like ensureVulns, for data/msrc.json; use the useMsrc hook
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -102,6 +104,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [vulns, setVulns] = useState<VulnData | null>(null);
   const [dataSources, setDataSources] = useState<DataSourceStatus[]>([]);
   const [ransomwareIntel, setRansomwareIntel] = useState<RansomwareIntel | null>(null);
+  const [msrc, setMsrc] = useState<MsrcData | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -236,6 +239,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setVulns(prev => prev ?? storedVulns);
       setDataSources((await getStoredValue<DataSourceStatus[]>('dataSources')) || []);
       setRansomwareIntel(await getStoredValue<RansomwareIntel>('ransomwareIntel'));
+      const storedMsrc = await getStoredValue<MsrcData>('msrc');
+      setMsrc(prev => prev ?? storedMsrc);
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -664,6 +669,24 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return intelRequest.current;
   }, []);
 
+  const msrcRef = useRef<MsrcData | null>(null);
+  msrcRef.current = msrc;
+  const msrcRequest = useRef<Promise<void> | null>(null);
+  const ensureMsrc = useCallback(() => {
+    const current = msrcRef.current;
+    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve();
+    if (!msrcRequest.current) {
+      msrcRequest.current = loadMsrc()
+        .then(async (data) => {
+          if (!data) return;
+          setMsrc(data);
+          await saveStoredValue('msrc', data);
+        })
+        .finally(() => { msrcRequest.current = null; });
+    }
+    return msrcRequest.current;
+  }, []);
+
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
   const value = useMemo<FeedContextType>(() => ({
     feeds,
@@ -675,6 +698,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dataSources,
     ransomwareIntel,
     ensureRansomwareIntel,
+    msrc,
+    ensureMsrc,
     articles,
     feedHealth,
     isRefreshing,
@@ -700,7 +725,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

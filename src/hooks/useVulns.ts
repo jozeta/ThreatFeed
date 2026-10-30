@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useFeeds } from '../context/FeedContext';
-import { RansomwareIntel, VulnData } from '../types';
+import { MsrcData, RansomwareIntel, VulnData } from '../types';
 
 /**
  * Vulnerability data for views that need it. The first use loads data/vulns.json (about 160 KB
@@ -21,4 +21,13 @@ export function useRansomwareIntel(): RansomwareIntel | null {
     void ensureRansomwareIntel();
   }, [ensureRansomwareIntel, snapshotGeneratedAt]);
   return ransomwareIntel;
+}
+
+/** The latest Patch Tuesday releases (data/msrc.json), loaded on first use */
+export function useMsrc(): MsrcData | null {
+  const { msrc, ensureMsrc, snapshotGeneratedAt } = useFeeds();
+  useEffect(() => {
+    void ensureMsrc();
+  }, [ensureMsrc, snapshotGeneratedAt]);
+  return msrc;
 }
