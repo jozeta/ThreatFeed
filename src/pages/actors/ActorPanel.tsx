@@ -4,6 +4,7 @@ import { Mentions } from '../../services/intelligence/actors';
 import { countryFlag, countryName } from '../../utils/countries';
 import { SectionTitle } from '../incidents/shared';
 import { EntityText } from '../../components/EntityText';
+import { MentionsSection } from '../../components/charts/MentionsArea';
 import { Aliases, chipLink, Coverage, CvesAlongside, ExternalLinks, MentionTrend, ProfilePanel } from './shared';
 import { ExternalLink } from 'lucide-react';
 
@@ -13,6 +14,7 @@ interface ActorPanelProps {
   actor: ActorProfile;
   data: ActorsData;
   mentions?: Mentions;
+  weekly?: { week: string; count: number }[]; // news mentions per week, from the trends history
   onOpenMalware: (id: string) => void;
   onOpenCve: (cve: string) => void;
   onOpenArticle: (article: Article) => void;
@@ -20,7 +22,7 @@ interface ActorPanelProps {
 }
 
 /** One threat actor: who it is, how it operates (ATT&CK), its tools, and what the feeds say about it */
-export const ActorPanel: React.FC<ActorPanelProps> = ({ actor, data, mentions, onOpenMalware, onOpenCve, onOpenArticle, onClose }) => {
+export const ActorPanel: React.FC<ActorPanelProps> = ({ actor, data, mentions, weekly = [], onOpenMalware, onOpenCve, onOpenArticle, onClose }) => {
   const malwareByAttackId = useMemo(() => new Map(data.malware.filter((m) => m.attackId).map((m) => [m.attackId!, m])), [data]);
   const articles = mentions?.articles ?? [];
 
@@ -75,6 +77,8 @@ export const ActorPanel: React.FC<ActorPanelProps> = ({ actor, data, mentions, o
           </div>
         </div>
       )}
+
+      <MentionsSection series={weekly} name={actor.name} />
 
       <CvesAlongside articles={articles} onOpenCve={onOpenCve} />
       <Coverage articles={articles} onOpenArticle={onOpenArticle} />

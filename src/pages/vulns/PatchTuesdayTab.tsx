@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useHashParam } from '../../hooks/useHashRoute';
+import { setHashParams, useHashParam } from '../../hooks/useHashRoute';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { PatchCve, PatchMonth } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
@@ -7,6 +7,8 @@ import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { VendorButton } from '../../components/VendorLink';
 import { EntityText } from '../../components/EntityText';
 import { TagChip } from '../../components/TagChip';
+import { SeverityMatrix } from '../../components/charts/SeverityMatrix';
+import { severityImpactMatrix } from '../../services/intelligence/patchTuesday';
 import { chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { CveButton, SEVERITY_TEXT, StatCards } from './shared';
 import { ExternalLink, Search } from 'lucide-react';
@@ -80,6 +82,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
   const month = months.find((m) => m.id === monthParam) ?? months[0];
   const [query, setQuery] = useHashParam('q');
   const [impact, setImpact] = useHashParam('impact');
+  const [severity, setSeverity] = useHashParam('sev');
   const [flagsParam, setFlagsParam] = useHashParam('only');
   const flags = new Set(flagsParam.split(',').filter(Boolean));
   const toggleFlag = (flag: string) => {
@@ -92,6 +95,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
   const cves = month.cves;
   const stackHits = useMemo(() => new Set(stackKeywords.length ? cves.filter((c) => inStack(c, stackKeywords)).map((c) => c.cve) : []), [cves, stackKeywords]);
   const impacts = useMemo(() => countBy(cves, (c) => c.impact), [cves]);
+  const matrix = useMemo(() => severityImpactMatrix(cves, 6), [cves]);
   // Zero-days and publicly disclosed CVEs, the ones to patch first
   const flagged = useMemo(() => cves.filter((c) => c.exploited || c.publiclyDisclosed).sort((a, b) => Number(b.exploited) - Number(a.exploited)), [cves]);
 
@@ -100,6 +104,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
     return cves
       .filter((c) =>
         (!impact || c.impact === impact) &&
+        (!severity || c.severity === severity) &&
         (!flags.has('exploited') || c.exploited || c.publiclyDisclosed) &&
         (!flags.has('critical') || c.severity === 'Critical') &&
         (!flags.has('stack') || stackHits.has(c.cve)) &&
@@ -110,7 +115,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
         Number(b.exploited) - Number(a.exploited) || Number(b.publiclyDisclosed) - Number(a.publiclyDisclosed) ||
         (SEVERITY_RANK[b.severity ?? ''] ?? 0) - (SEVERITY_RANK[a.severity ?? ''] ?? 0) || (b.cvss ?? 0) - (a.cvss ?? 0) || a.cve.localeCompare(b.cve)
       );
-  }, [cves, impact, flagsParam, stackHits, query]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cves, impact, severity, flagsParam, stackHits, query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { visibleCount, hasMore, remaining, showMore } = usePagedCount(filtered.length, 100);
   const critical = cves.filter((c) => c.severity === 'Critical').length;
@@ -167,10 +172,17 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
       )}
 
       {impacts.length > 0 && (
-        <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
-          <SectionTitle>CVEs by impact</SectionTitle>
-          <ImpactChart rows={impacts} active={impact} onSelect={(i) => setImpact(impact === i ? '' : i)} />
-          <p className="mt-2 text-[10px] font-mono text-theme-text-muted">Click a bar to filter the list; click it again to clear.</p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
+            <SectionTitle>CVEs by impact</SectionTitle>
+            <ImpactChart rows={impacts} active={impact} onSelect={(i) => setImpact(impact === i ? '' : i)} />
+            <p className="mt-2 text-[10px] font-mono text-theme-text-muted">Click a bar to filter the list; click it again to clear.</p>
+          </div>
+          <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
+            <SectionTitle>Severity × impact</SectionTitle>
+            <SeverityMatrix matrix={matrix} severity={severity} impact={impact} onSelect={(s, i) => setHashParams({ sev: s, impact: i })} />
+            <p className="mt-2 text-[10px] font-mono text-theme-text-muted">Microsoft's severity rating against the {matrix.impacts.length} most common impacts. Click a cell, row or column to filter.</p>
+          </div>
         </div>
       )}
 
@@ -184,6 +196,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
         {stackKeywords.length > 0 && (
           <button onClick={() => toggleFlag('stack')} className={chipClass(flags.has('stack'))} title="Title or affected products match your stack keywords">Your stack ({stackHits.size})</button>
         )}
+        {severity && <button onClick={() => setSeverity('')} className={chipClass(true)}>{severity} ×</button>}
         {impact && <button onClick={() => setImpact('')} className={chipClass(true)}>{impact} ×</button>}
         <span className="text-xs font-mono text-theme-text-muted">{filtered.length} CVEs</span>
       </div>

@@ -2,16 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Article, MsrcData, VulnData } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
-import { useMsrc, useVulns } from '../hooks/useVulns';
+import { useMsrc, useTrends, useVulns } from '../hooks/useVulns';
 import { goToPage, openPanel, setHashParams } from '../hooks/useHashRoute';
 import { canonicalVendor, fetchWikiSummary, vendorSummary, VendorSummary, WikiSummary } from '../services/intelligence/vendor';
 import { severityFromScore } from '../services/intelligence/vulns';
+import { weeklySeries } from '../services/intelligence/trends';
 import { formatRelativeTime } from '../utils/date';
 import { SectionTitle } from '../pages/incidents/shared';
 import { StackedBars } from '../pages/vulns/StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from '../pages/vulns/shared';
 import { PanelCloseButton, SidePanel } from './Common/SidePanel';
 import { EntityText } from './EntityText';
+import { SeverityScatter } from './charts/SeverityScatter';
+import { MentionsSection } from './charts/MentionsArea';
 import { ExternalLink, Skull, Layers, EyeOff, Building2 } from 'lucide-react';
 
 const NEWS_SHOWN = 10;
@@ -84,6 +87,7 @@ const WikiIntro: React.FC<{ vendor: string }> = ({ vendor }) => {
 
 interface VendorPanelProps {
   summary: VendorSummary;
+  mentions?: { week: string; count: number }[]; // news mentions per week, from the trends history
   inStack: boolean;
   hidden: boolean;
   onToggleStack: () => void;
@@ -96,7 +100,7 @@ interface VendorPanelProps {
 }
 
 /** One vendor at a glance: what Wikipedia says, its KEV history, new CVEs, news and advisories. */
-export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, inStack, hidden, onToggleStack, onToggleHidden, onOpenCve, onOpenProduct, onOpenArticle, onClose, loading }) => {
+export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, mentions = [], inStack, hidden, onToggleStack, onToggleHidden, onOpenCve, onOpenProduct, onOpenArticle, onClose, loading }) => {
   return (
     <SidePanel onClose={onClose} title={s.name}>
       <div className="flex items-start justify-between gap-4">
@@ -129,6 +133,11 @@ export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, inStack, h
             { label: 'New CVEs', value: s.newCves.length, note: 'CVSS ≥ 7, last 14 days' },
             { label: 'Public exploits', value: s.exploitsPublic, note: 'Metasploit, Nuclei, PoCs' },
           ]} />
+
+          <div>
+            <SectionTitle>Severity over time (24 months)</SectionTitle>
+            <SeverityScatter points={s.points} onOpenCve={onOpenCve} />
+          </div>
 
           {s.patchTuesday && (
             <div>
@@ -221,6 +230,8 @@ export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, inStack, h
         </>
       )}
 
+      <MentionsSection series={mentions} name={s.name} />
+
       <div>
         <SectionTitle>Latest news ({s.newsMentions.length})</SectionTitle>
         {s.newsMentions.length
@@ -262,6 +273,9 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
   const { articles } = useFeeds();
   const { settings, updateSettings } = useSettings();
   const summary = useMemo(() => vendorSummary(vendor, vulns, articles, msrc), [vendor, vulns, articles, msrc]);
+  const trends = useTrends();
+  // The history counts vendors under the KEV catalog's spelling
+  const mentions = useMemo(() => weeklySeries(trends, [`vendor:${summary.name}`, `vendor:${summary.kevVendor ?? summary.name}`]), [trends, summary.name, summary.kevVendor]);
 
   const close = () => setHashParams({ vendor: '' });
 
@@ -274,6 +288,7 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
   return (
     <VendorPanel
       summary={summary}
+      mentions={mentions}
       loading={!vulns}
       inStack={inStack}
       hidden={hidden}

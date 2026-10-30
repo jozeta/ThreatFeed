@@ -9,7 +9,7 @@ const ACTORS = {
   actors: [{ id: 'G0007', name: 'APT28', aliases: [], description: '', techniques: [], software: [], url: 'https://attack.mitre.org/groups/G0007/' }],
   malware: [],
 };
-vi.mock('../hooks/useVulns', () => ({ useVulns: () => null, useMsrc: () => null, useActors: () => ACTORS, useRansomwareIntel: () => null }));
+vi.mock('../hooks/useVulns', () => ({ useVulns: () => null, useMsrc: () => null, useActors: () => ACTORS, useRansomwareIntel: () => null, useTrends: () => null }));
 // The vendor panel's Wikipedia lead names a group, for following a link from one panel to another
 const WIKI = { title: 'Fortinet', extract: 'Fortinet devices are a favourite target of the Akira ransomware gang.', url: 'https://en.wikipedia.org/wiki/Fortinet' };
 vi.mock('../services/intelligence/vendor', async (orig) => ({ ...(await orig<typeof import('../services/intelligence/vendor')>()), fetchWikiSummary: () => Promise.resolve(WIKI) }));

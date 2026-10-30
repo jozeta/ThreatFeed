@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { decodeMsrc, normalizeCvrf, pickPatchMonths, refreshPatchMonths } from './patchTuesday';
-import { MsrcData } from '../../types';
+import { decodeMsrc, normalizeCvrf, pickPatchMonths, refreshPatchMonths, severityImpactMatrix } from './patchTuesday';
+import { MsrcData, PatchCve } from '../../types';
 
 // Hand-trimmed from the real 2026-Oct CVRF document (api.msrc.microsoft.com/cvrf/v3.0/cvrf/2026-Oct)
 const doc = {
@@ -272,5 +272,33 @@ describe('decodeMsrc', () => {
     expect(data.updates).toEqual({ '2026-Oct': '2026-10-30T06:00:00Z' });
     expect(data.attempts).toEqual({ '2026-Sep': '2026-10-30T06:00:00Z' });
     expect(decodeMsrc({ months: [], updates: 'x', attempts: [1] })).toMatchObject({ updates: {}, attempts: {} });
+  });
+});
+
+describe('severityImpactMatrix', () => {
+  const c = (cve: string, severity: PatchCve['severity'], impact?: string): PatchCve => ({ cve, title: cve, severity, impact, exploited: false, publiclyDisclosed: false, products: [] });
+  const cves = [
+    c('1', 'Critical', 'Remote Code Execution'), c('2', 'Important', 'Remote Code Execution'), c('3', 'Important', 'Remote Code Execution'),
+    c('4', 'Important', 'Elevation of Privilege'), c('5', 'Important', 'Elevation of Privilege'), c('6', 'Moderate', 'Spoofing'),
+    c('7', 'Low', 'Tampering'), c('8', undefined, 'Spoofing'), c('9', 'Critical'),
+  ];
+
+  it('counts CVEs per Microsoft severity (all four rows) and the most common impact types', () => {
+    const m = severityImpactMatrix(cves, 3);
+    expect(m.severities).toEqual(['Critical', 'Important', 'Moderate', 'Low']);
+    // Spoofing (two) beats Tampering (one) to the last column
+    expect(m.impacts).toEqual(['Remote Code Execution', 'Elevation of Privilege', 'Spoofing']);
+    expect(m.counts).toEqual([
+      [1, 0, 0],
+      [2, 2, 0],
+      [0, 0, 1],
+      [0, 0, 0],
+    ]);
+    expect(m.max).toBe(2);
+  });
+
+  it('breaks ties between impact types by name and copes with an empty release', () => {
+    expect(severityImpactMatrix([c('1', 'Low', 'Tampering'), c('2', 'Low', 'Spoofing')], 6).impacts).toEqual(['Spoofing', 'Tampering']);
+    expect(severityImpactMatrix([], 6)).toEqual({ severities: ['Critical', 'Important', 'Moderate', 'Low'], impacts: [], counts: [[], [], [], []], max: 0 });
   });
 });

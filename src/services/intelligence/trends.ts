@@ -141,6 +141,31 @@ export function pickPreviousTrends(
   return { base: null, write: !published.error, source: 'none' };
 }
 
+/**
+ * Mentions of one entity per Monday-to-Sunday week, oldest first and ending with the current week: the daily
+ * history summed into its weeks, plus the weekly history. The series starts where the history does (at most
+ * `weeks` back), so a new history gives a short one. Keys ignore case; with several keys for one entity (a
+ * name and its aliases) a day or week counts the largest, since one article can match more than one of them.
+ */
+export function weeklySeries(trends: TrendsData | null, keys: string | string[], weeks = 26, now = Date.now()): { week: string; count: number }[] {
+  const wanted = new Set((Array.isArray(keys) ? keys : [keys]).map(k => k.toLowerCase()));
+  const countOf = (counts: Record<string, number>) => {
+    let best = 0;
+    for (const [key, n] of Object.entries(counts)) if (n > best && wanted.has(key.toLowerCase())) best = n;
+    return best;
+  };
+  const sums = new Map<number, number>();
+  const add = (week: number, n: number) => sums.set(week, (sums.get(week) ?? 0) + n);
+  for (const [key, counts] of Object.entries(trends?.days ?? {})) add(weekStart(dayNumberOf(key)), countOf(counts));
+  for (const [key, counts] of Object.entries(trends?.weeks ?? {})) add(weekStart(dayNumberOf(key)), countOf(counts));
+  if (!sums.size) return [];
+  const last = weekStart(dayNumber(now));
+  const first = Math.max(Math.min(...sums.keys()), last - (weeks - 1) * 7);
+  const series: { week: string; count: number }[] = [];
+  for (let w = first; w <= last; w += 7) series.push({ week: dayKeyOf(w), count: sums.get(w) ?? 0 });
+  return series;
+}
+
 /** Validates trends.json (the app's load and the snapshot's carry-over): malformed days and counts are dropped */
 export function decodeTrends(raw: any): TrendsData | null {
   const isMap = (x: any) => Boolean(x) && typeof x === 'object' && !Array.isArray(x);

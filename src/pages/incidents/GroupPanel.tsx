@@ -10,6 +10,7 @@ import { activityChange, groupActivity } from '../../services/intelligence/group
 import { StackedBars } from '../vulns/StackedBars';
 import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
 import { EntityText } from '../../components/EntityText';
+import { MentionsSection } from '../../components/charts/MentionsArea';
 import { ExternalLink } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -20,12 +21,13 @@ interface GroupPanelProps {
   profile?: RansomwareGroupProfile;
   intel?: GroupIntel; // techniques, tools, ATT&CK, CVEs, payments (data/ransomware.json)
   articles: Article[];
+  weekly?: { week: string; count: number }[]; // news mentions per week, from the trends history
   onOpenArticle: (article: Article) => void;
   onClose: () => void;
 }
 
 /** Everything known about one ransomware group: profile, activity, victims, and coverage in the feeds. */
-export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile, intel, articles, onOpenArticle, onClose }) => {
+export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile, intel, articles, weekly = [], onOpenArticle, onClose }) => {
   const mine = useMemo(() => victims.filter((v) => v.group.toLowerCase() === group.toLowerCase()), [victims, group]);
   const name = groupDisplayName(profile?.name || group);
   const lastWeek = mine.filter((v) => Date.now() - new Date(v.discoveredAt).getTime() < 7 * DAY_MS).length;
@@ -115,6 +117,8 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile,
       </div>
 
       <GroupIntelSection intel={intel} />
+
+      <MentionsSection series={weekly} name={name} className="text-rose-500" />
 
       <div>
         <SectionTitle>In the news ({news.length})</SectionTitle>

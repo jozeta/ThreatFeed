@@ -194,3 +194,19 @@ export async function refreshPatchMonths(previous: MsrcData | null, getJson: (ur
   result.data = { months, updates, attempts };
   return result;
 }
+
+export interface SeverityImpactMatrix {
+  severities: typeof SEVERITIES[number][]; // rows, Critical first
+  impacts: string[]; // columns, the most common impact types first
+  counts: number[][]; // counts[row][column]
+  max: number;
+}
+
+/** A release's CVEs per Microsoft severity and impact type, for the Patch Tuesday heatmap; other impacts are left out */
+export function severityImpactMatrix(cves: PatchCve[], columns = 6): SeverityImpactMatrix {
+  const totals = new Map<string, number>();
+  for (const c of cves) if (c.impact) totals.set(c.impact, (totals.get(c.impact) ?? 0) + 1);
+  const impacts = [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, columns).map(([impact]) => impact);
+  const counts = SEVERITIES.map((severity) => impacts.map((impact) => cves.filter((c) => c.severity === severity && c.impact === impact).length));
+  return { severities: [...SEVERITIES], impacts, counts, max: Math.max(0, ...counts.flat()) };
+}

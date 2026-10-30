@@ -133,7 +133,33 @@ describe('vendorSummary', () => {
 
   it('copes with no data at all', () => {
     const empty = vendorSummary('Nobody', null, [], undefined, NOW);
-    expect(empty).toMatchObject({ kevTotal: 0, avgCvss: undefined, maxCvss: undefined, newCves: [], newsMentions: [] });
+    expect(empty).toMatchObject({ kevTotal: 0, avgCvss: undefined, maxCvss: undefined, newCves: [], newsMentions: [], points: [] });
+  });
+
+  it('plots KEV entries on the day they were added and other CVEs on the day they were published, oldest first', () => {
+    expect(s.points.map((p) => [p.cve, p.date])).toEqual([
+      ['CVE-2025-0003', '2025-01-10'],
+      ['CVE-2026-1002', '2026-09-01'], // older than the 14-day list, still within the plot's two years
+      ['CVE-2026-0002', '2026-09-15'],
+      ['CVE-2026-0004', '2026-10-20'],
+      ['CVE-2026-0001', '2026-10-25'],
+      ['CVE-2026-1004', '2026-10-27'],
+      ['CVE-2026-1001', '2026-10-28'],
+    ]);
+    expect(s.points.find((p) => p.cve === 'CVE-2026-0001')).toEqual({ cve: 'CVE-2026-0001', date: '2026-10-25', cvss: 9.8, kev: true, ransomware: true, epss: undefined, product: 'FortiOS' });
+    expect(s.points.find((p) => p.cve === 'CVE-2025-0003')).toMatchObject({ cvss: undefined, kev: true, ransomware: false });
+    expect(s.points.find((p) => p.cve === 'CVE-2026-1004')).toEqual({ cve: 'CVE-2026-1004', date: '2026-10-27', cvss: 8.1, kev: false, ransomware: false, epss: undefined, product: 'fortinet fortiweb' });
+  });
+
+  it('leaves points older than two years out, and CVEs already in KEV appear once', () => {
+    const data = {
+      ...vulns,
+      kev: [kev('CVE-2024-0001', 'Fortinet', '2024-10-29', { cvss: 9 }), kev('CVE-2024-0002', 'Fortinet', '2024-11-02', { cvss: 6.1, epss: 0.42 })],
+      notable: [cve('CVE-2024-0002', '2024-10-01T00:00:00Z', ['Fortinet FortiOS']), cve('CVE-2024-0003', '2024-10-15T00:00:00Z', ['Fortinet FortiOS'])],
+      watchable: [],
+    } as VulnData;
+    const points = vendorSummary('Fortinet', data, [], undefined, NOW).points;
+    expect(points).toEqual([{ cve: 'CVE-2024-0002', date: '2024-11-02', cvss: 6.1, kev: true, ransomware: false, epss: 0.42, product: 'FortiOS' }]);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countEntitiesByDay, decodeTrends, mergeTrends, pickPreviousTrends, trendsVocab, TrendVocab } from './trends';
+import { countEntitiesByDay, decodeTrends, mergeTrends, pickPreviousTrends, trendsVocab, TrendVocab, weeklySeries } from './trends';
 import { article } from '../../test/fixtures';
 
 const NOW = Date.parse('2026-10-30T12:00:00Z');
@@ -113,5 +113,50 @@ describe('decodeTrends', () => {
   it('reads files written before the weekly rollup (no weeks) as having none', () => {
     expect(decodeTrends({ version: 1, generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } } }))
       .toEqual({ generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } }, weeks: {} });
+  });
+});
+
+describe('weeklySeries', () => {
+  // NOW is Friday 2026-10-30: its week starts Monday 2026-10-26
+  const trends = {
+    days: {
+      '2026-10-30': { 'vendor:Fortinet': 2, 'vendor:Cisco': 5 },
+      '2026-10-26': { 'vendor:Fortinet': 1 },
+      '2026-10-25': { 'vendor:Fortinet': 4 }, // a Sunday: the week before
+      '2026-10-13': {},
+    },
+    weeks: {
+      '2026-09-28': { 'vendor:Fortinet': 7 },
+      '2026-08-31': { 'vendor:Cisco': 1 },
+    },
+  };
+
+  it('sums days into Monday weeks, merges the weekly history and fills empty weeks, oldest first', () => {
+    expect(weeklySeries(trends, 'vendor:Fortinet', 26, NOW)).toEqual([
+      { week: '2026-08-31', count: 0 },
+      { week: '2026-09-07', count: 0 },
+      { week: '2026-09-14', count: 0 },
+      { week: '2026-09-21', count: 0 },
+      { week: '2026-09-28', count: 7 },
+      { week: '2026-10-05', count: 0 },
+      { week: '2026-10-12', count: 0 },
+      { week: '2026-10-19', count: 4 },
+      { week: '2026-10-26', count: 3 },
+    ]);
+  });
+
+  it('keeps the last `weeks` weeks only', () => {
+    expect(weeklySeries(trends, 'vendor:Fortinet', 2, NOW)).toEqual([{ week: '2026-10-19', count: 4 }, { week: '2026-10-26', count: 3 }]);
+  });
+
+  it('ignores case and takes the larger count when several keys name the same entity', () => {
+    const series = weeklySeries(trends, ['VENDOR:fortinet', 'vendor:Cisco'], 2, NOW);
+    expect(series).toEqual([{ week: '2026-10-19', count: 4 }, { week: '2026-10-26', count: 6 }]);
+  });
+
+  it('starts at the history, so a short history gives a short series', () => {
+    expect(weeklySeries({ days: { '2026-10-27': { 'actor:Lazarus': 1 } } }, 'actor:Lazarus', 26, NOW)).toEqual([{ week: '2026-10-26', count: 1 }]);
+    expect(weeklySeries(null, 'actor:Lazarus', 26, NOW)).toEqual([]);
+    expect(weeklySeries({ days: {} }, 'actor:Lazarus', 26, NOW)).toEqual([]);
   });
 });

@@ -5,6 +5,18 @@ import { CVSS_BANDS, CvssBandId, cvssBand, kevPerMonth } from './vulns';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NEW_CVE_DAYS = 14;
+export const PLOT_MONTHS = 24;
+
+/** One CVE on the vendor's severity-over-time plot */
+export interface VendorPoint {
+  cve: string;
+  date: string; // YYYY-MM-DD: when KEV added it, or when NVD published it
+  cvss?: number;
+  kev: boolean;
+  ransomware: boolean;
+  epss?: number;
+  product: string;
+}
 
 // Legal names (NVD, Wikipedia, press releases) for vendors the KEV catalog spells the short way
 const ALIASES: Record<string, string> = { 'microsoft corporation': 'Microsoft', 'apple inc.': 'Apple', 'google llc': 'Google' };
@@ -32,6 +44,7 @@ export interface VendorSummary {
   newsMentions: Article[]; // newest first, advisory feeds left out
   advisoryFeedArticles: Article[]; // from feeds named after the vendor (e.g. Fortinet PSIRT), newest first
   patchTuesday?: { id: string; title: string; released: string; total: number; critical: number; exploited: number; disclosed: number; rce: number };
+  points: VendorPoint[]; // the last PLOT_MONTHS months of KEV entries and critical/high CVEs, oldest first
 }
 
 const SEPARATOR = /[\s_-]/;
@@ -89,9 +102,19 @@ export function vendorSummary(rawName: string, vulns: VulnData | null, articles:
 
   const since = new Date(now.getTime() - NEW_CVE_DAYS * DAY_MS).toISOString();
   const kevIds = new Set(kev.map((k) => k.cve));
-  const newCves = [...(vulns?.notable ?? []), ...(vulns?.watchable ?? [])]
-    .filter((c) => c.published >= since && !kevIds.has(c.id) && productsMatch(c.products))
+  const vendorCves = [...(vulns?.notable ?? []), ...(vulns?.watchable ?? [])]
+    .filter((c) => !kevIds.has(c.id) && productsMatch(c.products))
     .sort((a, b) => b.published.localeCompare(a.published));
+  const newCves = vendorCves.filter((c) => c.published >= since);
+
+  // KEV entries on the day they were added (when they became a known threat), other CVEs on their publication day
+  const plotFrom = new Date(now);
+  plotFrom.setUTCMonth(plotFrom.getUTCMonth() - PLOT_MONTHS);
+  const plotSince = plotFrom.toISOString().slice(0, 10);
+  const points: VendorPoint[] = [
+    ...kev.map((k) => ({ cve: k.cve, date: k.dateAdded, cvss: k.cvss, kev: true, ransomware: k.ransomware, epss: k.epss, product: k.product })),
+    ...vendorCves.map((c) => ({ cve: c.id, date: c.published.slice(0, 10), cvss: c.score, kev: false, ransomware: false, epss: c.epss, product: c.products?.[0] ?? '' })),
+  ].filter((p) => p.date >= plotSince).sort((a, b) => a.date.localeCompare(b.date) || a.cve.localeCompare(b.cve));
   const exploits = vulns?.exploits ?? {};
 
   const isAdvisoryFeed = (a: Article) => containsTerm(`${a.sourceName} ${a.sourceId}`, name);
@@ -128,6 +151,7 @@ export function vendorSummary(rawName: string, vulns: VulnData | null, articles:
       disclosed: count((c) => c.publiclyDisclosed),
       rce: count((c) => c.impact === 'Remote Code Execution'),
     },
+    points,
   };
 }
 
