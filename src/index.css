@@ -677,3 +677,9 @@ button.tag-chip {
     padding-bottom: 1rem !important;
   }
 }
+
+/* TV and Dashboard modes: always dark, independent of the theme */
+.tv-root {
+  background: #07090c;
+  color: #e7ebf0;
+}

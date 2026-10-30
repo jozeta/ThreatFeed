@@ -82,6 +82,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   maxArticlesPerFeed: 25,
   maxArticleAgeDays: 30,
   autoRefreshFeedCooldownHours: 1,
+  tvIntervalMinutes: 2,
+  tvTransition: 'reveal',
   watchlistKeywords: DEFAULT_WATCHLIST_KEYWORDS,
   watchlistDefaultsVersion: WATCHLIST_DEFAULTS_VERSION,
   dataSource: 'snapshot',
@@ -132,6 +134,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           maxArticlesPerFeed: typeof saved.maxArticlesPerFeed === 'number' ? saved.maxArticlesPerFeed : 25,
           maxArticleAgeDays: typeof saved.maxArticleAgeDays === 'number' ? saved.maxArticleAgeDays : 30,
           autoRefreshFeedCooldownHours: typeof saved.autoRefreshFeedCooldownHours === 'number' ? saved.autoRefreshFeedCooldownHours : DEFAULT_SETTINGS.autoRefreshFeedCooldownHours,
+          tvIntervalMinutes: typeof saved.tvIntervalMinutes === 'number' && Number.isFinite(saved.tvIntervalMinutes)
+            ? Math.min(30, Math.max(1, Math.round(saved.tvIntervalMinutes))) : DEFAULT_SETTINGS.tvIntervalMinutes,
+          tvTransition: saved.tvTransition === 'fade' || saved.tvTransition === 'slide' || saved.tvTransition === 'reveal' ? saved.tvTransition : DEFAULT_SETTINGS.tvTransition,
           watchlistKeywords: Array.isArray(saved.watchlistKeywords)
             ? upgradeWatchlistKeywords(saved.watchlistKeywords, saved.watchlistDefaultsVersion ?? 1)
             : DEFAULT_WATCHLIST_KEYWORDS,

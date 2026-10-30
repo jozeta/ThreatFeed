@@ -20,12 +20,15 @@ import {
   Settings as SettingsIcon,
   Radio,
   Activity,
-  Star
+  Star,
+  Tv,
+  LayoutDashboard
 } from 'lucide-react';
 import { LayoutMode, ActiveNavTab } from '../../types';
 import { NavigationTabs } from '../Navigation/NavigationTabs';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import { layoutLocked } from '../../utils/layout';
+import { enterTv, tvAvailable } from '../tv/tvRoute';
 
 // Roughly 10 cm of scrolling on a typical screen (96 CSS px per inch)
 const COLLAPSE_AFTER_PX = 380;
@@ -359,6 +362,20 @@ export const Header: React.FC<HeaderProps> = ({
               <List className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Full-screen modes, where the page offers them */}
+          {(['tv', 'dash'] as const).filter((kind) => tvAvailable(route.page).includes(kind)).map((kind) => (
+            <button
+              key={kind}
+              onClick={() => enterTv(kind)}
+              title={kind === 'tv' ? 'TV mode' : 'Dashboard'}
+              aria-label={kind === 'tv' ? 'TV mode' : 'Dashboard'}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text text-xs font-mono transition-colors flex items-center gap-1"
+            >
+              {kind === 'tv' ? <Tv className="w-4 h-4" /> : <LayoutDashboard className="w-4 h-4" />}
+              <span className="hidden xl:inline">{kind === 'tv' ? 'TV' : 'Dashboard'}</span>
+            </button>
+          ))}
 
           <div className="w-[1px] h-5 bg-theme-border mx-1 hidden sm:block" />
 

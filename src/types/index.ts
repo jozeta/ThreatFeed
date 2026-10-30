@@ -435,6 +435,8 @@ export interface UserSettings {
   reducedMotion: boolean;
   maxArticlesPerFeed: number; // default: 25 (0 = unlimited)
   maxArticleAgeDays: number; // default: 30 (0 = unlimited)
+  tvIntervalMinutes: number; // TV mode: how long each set stays up (1–30, default 2)
+  tvTransition: TvTransition; // TV mode: how a set gives way to the next
   autoRefreshFeedCooldownHours: number; // default: 4 (hours: 0, 2, 4, 6, 12, 24)
   watchlistKeywords: string[];
   watchlistDefaultsVersion?: number; // which default keyword set the user has received
@@ -468,6 +470,8 @@ export interface FilterState {
   dateRange: 'all' | 'today' | 'week' | 'month';
   sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity' | 'relevance';
 }
+
+export type TvTransition = 'fade' | 'slide' | 'reveal';
 
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 
