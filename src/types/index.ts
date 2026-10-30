@@ -342,6 +342,14 @@ export interface ActorsData {
   updates?: Record<string, string>; // when actors and malware were last built, for the snapshot's carry-over
 }
 
+/** Per UTC day (YYYY-MM-DD): articles mentioning each entity, keyed `${kind}:${name}` (data/trends.json) */
+export type TrendDays = Record<string, Record<string, number>>;
+
+export interface TrendsData {
+  generatedAt?: string;
+  days: TrendDays;
+}
+
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
 export interface ExtractedIOC {
@@ -431,7 +439,7 @@ export interface FilterState {
   sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity' | 'relevance';
 }
 
-export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'actors' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
+export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'trends' | 'feed' | 'ransomware' | 'actors' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 
 export type AlertRuleKind = 'news' | 'vulns';
 export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves';

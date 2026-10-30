@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useFeeds } from '../context/FeedContext';
-import { ActorsData, MsrcData, RansomwareIntel, VulnData } from '../types';
+import { ActorsData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
 
 /**
  * Vulnerability data for views that need it. The first use loads data/vulns.json (about 160 KB
@@ -39,4 +39,13 @@ export function useActors(): ActorsData | null {
     void ensureActors();
   }, [ensureActors, snapshotGeneratedAt]);
   return actors;
+}
+
+/** The trends history (data/trends.json), loaded on first use */
+export function useTrends(): TrendsData | null {
+  const { trends, ensureTrends, snapshotGeneratedAt } = useFeeds();
+  useEffect(() => {
+    void ensureTrends();
+  }, [ensureTrends, snapshotGeneratedAt]);
+  return trends;
 }

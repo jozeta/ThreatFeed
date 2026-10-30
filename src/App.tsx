@@ -24,6 +24,7 @@ const FeedHealthPage = lazy(() => import('./pages/FeedHealthPage').then((m) => (
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then((m) => ({ default: m.BookmarksPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const BriefingPage = lazy(() => import('./pages/BriefingPage').then((m) => ({ default: m.BriefingPage })));
+const TrendsPage = lazy(() => import('./pages/TrendsPage').then((m) => ({ default: m.TrendsPage })));
 const MyFeedPage = lazy(() => import('./pages/MyFeedPage').then((m) => ({ default: m.MyFeedPage })));
 const RansomwarePage = lazy(() => import('./pages/RansomwarePage').then((m) => ({ default: m.RansomwarePage })));
 const ActorsPage = lazy(() => import('./pages/ActorsPage').then((m) => ({ default: m.ActorsPage })));
@@ -183,6 +184,7 @@ export const App: React.FC = () => {
             <BriefingPage onOpenArticle={handleOpenArticle} onSearch={handleSearch} />
           )}
 
+          {activeTab === 'trends' && <TrendsPage onOpenArticle={handleOpenArticle} onSearch={handleSearch} />}
           {activeTab === 'feed' && <MyFeedPage onOpenArticle={handleOpenArticle} />}
           {activeTab === 'ransomware' && <RansomwarePage onOpenArticle={handleOpenArticle} />}
           {activeTab === 'actors' && <ActorsPage onOpenArticle={handleOpenArticle} />}

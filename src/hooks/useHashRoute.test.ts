@@ -23,6 +23,13 @@ describe('hash routes', () => {
     expect(buildHash('bookmarks')).toBe('#/saved');
   });
 
+  it('routes the Trends page with its period, kind and open CVE panel', () => {
+    const route = parseHash('#/trends?period=year&kind=vendor&cve=CVE-2026-1');
+    expect(route.page).toBe('trends');
+    expect(route.params.get('period')).toBe('year');
+    expect(buildHash('trends', '', new URLSearchParams({ kind: 'cve' }))).toBe('#/trends?kind=cve');
+  });
+
   it('routes the Actors page with its malware sub-tab and open panel', () => {
     const route = parseHash('#/actors/malware?malware=cobalt-strike');
     expect(route.page).toBe('actors');

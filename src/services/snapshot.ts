@@ -1,7 +1,8 @@
-import { ActorsData, Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
 import { decodeWatchable } from './intelligence/vulns';
 import { decodeMsrc } from './intelligence/patchTuesday';
 import { decodeActors } from './intelligence/actors';
+import { decodeTrends } from './intelligence/trends';
 
 export interface FeedSnapshot {
   generatedAt: string;
@@ -86,6 +87,18 @@ export async function loadActors(): Promise<ActorsData | null> {
     // Malformed entries are dropped, so the page and panels can't throw on them
     const data = decodeActors(await res.json());
     return data && { generatedAt: data.generatedAt, actors: data.actors, malware: data.malware };
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/trends.json (daily mention counts, up to 400 days) for the Trends page */
+export async function loadTrends(): Promise<TrendsData | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/trends.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    // Malformed days and counts are dropped, so the page can't throw on them
+    return decodeTrends(await res.json());
   } catch {
     return null;
   }

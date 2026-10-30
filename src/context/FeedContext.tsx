@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { ActorsData, Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -16,7 +16,7 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadActors, loadMsrc, loadRansomwareIntel, loadSnapshot, loadVulnData } from '../services/snapshot';
+import { loadActors, loadMsrc, loadRansomwareIntel, loadSnapshot, loadTrends, loadVulnData } from '../services/snapshot';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
@@ -61,6 +61,8 @@ interface FeedContextType {
   ensureMsrc: () => Promise<void>; // like ensureVulns, for data/msrc.json; use the useMsrc hook
   actors: ActorsData | null; // threat actor and malware profiles (ATT&CK, Malpedia)
   ensureActors: () => Promise<ActorsData | null>; // like ensureMsrc, for data/actors.json; resolves to the loaded data
+  trends: TrendsData | null; // daily mention counts per entity, up to 400 days
+  ensureTrends: () => Promise<void>; // like ensureMsrc, for data/trends.json; use the useTrends hook
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -108,6 +110,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [ransomwareIntel, setRansomwareIntel] = useState<RansomwareIntel | null>(null);
   const [msrc, setMsrc] = useState<MsrcData | null>(null);
   const [actors, setActors] = useState<ActorsData | null>(null);
+  const [trends, setTrends] = useState<TrendsData | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -246,6 +249,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMsrc(prev => prev ?? storedMsrc);
       const storedActors = await getStoredValue<ActorsData>('actors');
       setActors(prev => prev ?? storedActors);
+      const storedTrends = await getStoredValue<TrendsData>('trends');
+      setTrends(prev => prev ?? storedTrends);
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -713,6 +718,25 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return actorsRequest.current;
   }, []);
 
+  const trendsRef = useRef<TrendsData | null>(null);
+  trendsRef.current = trends;
+  const trendsRequest = useRef<Promise<void> | null>(null);
+  const ensureTrends = useCallback(() => {
+    const current = trendsRef.current;
+    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve();
+    if (!trendsRequest.current) {
+      trendsRequest.current = loadTrends()
+        .then(async (data) => {
+          if (!data) return;
+          setTrends(data);
+          // The offline copy is a convenience: a full or blocked IndexedDB mustn't fail the load
+          await saveStoredValue('trends', data).catch(() => undefined);
+        })
+        .finally(() => { trendsRequest.current = null; });
+    }
+    return trendsRequest.current;
+  }, []);
+
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
   const value = useMemo<FeedContextType>(() => ({
     feeds,
@@ -728,6 +752,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ensureMsrc,
     actors,
     ensureActors,
+    trends,
+    ensureTrends,
     articles,
     feedHealth,
     isRefreshing,
@@ -753,7 +779,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

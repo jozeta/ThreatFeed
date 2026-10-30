@@ -15,10 +15,38 @@ export interface TrendingEntity {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const presetTerms = (id: string) => WATCHLIST_PRESETS.find(p => p.id === id)?.keywords ?? [];
+export const presetTerms = (id: string) => WATCHLIST_PRESETS.find(p => p.id === id)?.keywords ?? [];
 
 // CVE list feeds mention each CVE once by design; counting them would just rank by feed volume
 const CVE_LIST_SOURCES = new Set(['cvefeed-latest', 'msrc-update-guide', 'zdi-advisories']);
+
+/**
+ * The CVEs and vocabulary terms an article mentions, shared by trending and the trends history. CVEs come
+ * once each (not from CVE list feeds); a term comes once per vocabulary entry it is listed in. Leak-site posts
+ * (ransomware.live) name their group in the title; with `leakSitePosts` false they match no terms at all.
+ */
+export function articleMentions<K extends string>(
+  a: Article,
+  vocab: { kind: K; terms: string[] }[],
+  leakSitePosts: boolean
+): { kind: K | 'cve'; name: string }[] {
+  const found: { kind: K | 'cve'; name: string }[] = [];
+  if (!CVE_LIST_SOURCES.has(a.sourceId)) {
+    for (const cve of new Set(a.cves || [])) found.push({ kind: 'cve', name: cve });
+  }
+  if (!leakSitePosts && a.sourceId === 'ransomware-live') return found;
+  const text = `${a.title} ${a.description || ''}`;
+  const lower = text.toLowerCase();
+  const victimGroup = a.sourceId === 'ransomware-live' ? a.title.match(/^\W*(.+?) has just published/u)?.[1]?.toLowerCase() : undefined;
+  for (const { kind, terms } of vocab) {
+    for (const term of terms) {
+      const key = term.toLowerCase();
+      // The substring check is a cheap filter before the whole-word regex; it never rejects a match
+      if ((kind === 'ransomware' && victimGroup === key) || (lower.includes(key) && containsTerm(text, term))) found.push({ kind, name: term });
+    }
+  }
+  return found;
+}
 
 /**
  * Which CVEs, ransomware groups, threat actors and frequently exploited products are mentioned
@@ -63,20 +91,8 @@ export function computeTrending(
   for (const a of recent) {
     const t = new Date(a.publishedAt).getTime();
     if (isNaN(t)) continue;
-    const text = `${a.title} ${a.description || ''}`;
-    if (!CVE_LIST_SOURCES.has(a.sourceId)) {
-      for (const cve of new Set(a.cves || [])) bump('cve', cve, t);
-    }
     // With structured victims, leak-site posts are counted from that data below instead of from the RSS feed
-    if (leakSiteVictims && a.sourceId === 'ransomware-live') continue;
-    const victimGroup = a.sourceId === 'ransomware-live' ? a.title.match(/^\W*(.+?) has just published/u)?.[1] : undefined;
-    for (const { kind, terms } of vocab) {
-      for (const term of terms) {
-        if ((kind === 'ransomware' && victimGroup?.toLowerCase() === term.toLowerCase()) || containsTerm(text, term)) {
-          bump(kind, term, t);
-        }
-      }
-    }
+    for (const m of articleMentions(a, vocab, !leakSiteVictims)) bump(m.kind, m.name, t);
   }
 
   for (const v of leakSiteVictims ?? []) {

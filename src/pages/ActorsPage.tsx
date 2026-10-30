@@ -1,16 +1,14 @@
 import React, { useCallback, useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
-import { useSettings } from '../context/SettingsContext';
-import { useActors, useVulns } from '../hooks/useVulns';
+import { useActors } from '../hooks/useVulns';
 import { parseHash, useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { usePagedCount } from '../hooks/usePagedCount';
 import { actorMentions, Mentions } from '../services/intelligence/actors';
 import { countryFlag, countryName } from '../utils/countries';
 import { LoadMoreButton } from '../components/Common/LoadMoreButton';
 import { selectClass } from './incidents/shared';
-import { articlesByCve } from './vulns/shared';
-import { CvePanel } from './vulns/CvePanel';
+import { CvePanelHost } from './vulns/CvePanelHost';
 import { ActorPanel } from './actors/ActorPanel';
 import { MalwarePanel } from './actors/MalwarePanel';
 import { MentionTrend } from './actors/shared';
@@ -20,25 +18,6 @@ type Sub = 'actors' | 'malware';
 type Sort = 'mentions' | 'name';
 const PAGE = 50;
 const PANELS = ['actor', 'malware', 'cve'] as const;
-
-/** The CVE panel on top of an actor or malware panel; vulns.json only loads once one is opened */
-const CvePanelHost: React.FC<{ cve: string; articles: Article[]; onOpenArticle: (a: Article) => void; onClose: () => void }> = ({ cve, articles, onOpenArticle, onClose }) => {
-  const vulns = useVulns();
-  const { settings, updateSettings } = useSettings();
-  const watched = settings.watchedCves;
-  const news = useMemo(() => articlesByCve(articles).get(cve) ?? [], [articles, cve]);
-  return (
-    <CvePanel
-      cve={cve}
-      vulns={vulns}
-      news={news}
-      watched={watched.includes(cve)}
-      onToggleWatch={() => updateSettings({ watchedCves: watched.includes(cve) ? watched.filter((c) => c !== cve) : [...watched, cve] })}
-      onOpenArticle={onOpenArticle}
-      onClose={onClose}
-    />
-  );
-};
 
 export const ActorsPage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
   const { articles } = useFeeds();

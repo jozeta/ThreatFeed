@@ -14,7 +14,7 @@ export interface HashRoute {
 
 // URL slug for each page (the newspaper is the bare #/)
 const SLUGS: Record<ActiveNavTab, string> = {
-  newspaper: '', latest: 'latest', unread: 'unread', briefing: 'briefing', feed: 'feed', ransomware: 'ransomware', actors: 'actors',
+  newspaper: '', latest: 'latest', unread: 'unread', briefing: 'briefing', trends: 'trends', feed: 'feed', ransomware: 'ransomware', actors: 'actors',
   vulnerabilities: 'vulns', bookmarks: 'saved', sources: 'sources', health: 'health', settings: 'settings',
 };
 const PAGES = new Map(Object.entries(SLUGS).map(([page, slug]) => [slug, page as ActiveNavTab]));
