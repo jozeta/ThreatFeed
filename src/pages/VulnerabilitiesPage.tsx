@@ -10,7 +10,6 @@ import { NewCvesTab } from './vulns/NewCvesTab';
 import { ExploitTab } from './vulns/ExploitTab';
 import { OpenSourceTab } from './vulns/OpenSourceTab';
 import { VulnNewsTab } from './vulns/VulnNewsTab';
-import { CvePanel } from './vulns/CvePanel';
 import { WatchingTab } from './vulns/WatchingTab';
 import { PatchTuesdayTab } from './vulns/PatchTuesdayTab';
 import { articlesByCve } from './vulns/shared';
@@ -34,9 +33,9 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
   const [route, navigate] = useHashRoute();
   const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'kev';
   const setTab = (t: Tab) => navigate('vulnerabilities', t);
-  const [cveParam, setCveParam] = useHashParam('cve');
-  const openCve = cveParam || null;
-  const setOpenCve = (cve: string | null) => setCveParam(cve ?? '', Boolean(cve));
+  // The CVE panel itself is the app's, over any page
+  const [, setCveParam] = useHashParam('cve');
+  const openCve = (cve: string) => setCveParam(cve, true);
 
   const watched = settings.watchedCves;
   const watch = (cve: string) => updateSettings({ watchedCves: [...watched.filter((c) => c !== cve), cve] });
@@ -95,27 +94,16 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
         ))}
       </div>
 
-      {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} stackKeywords={settings.stackKeywords} onOpenCve={setOpenCve} /> : noData('The CISA KEV catalog'))}
-      {tab === 'new' && (vulns?.nvd ? <NewCvesTab stats={vulns.nvd} notable={vulns.notable} kevIds={kevIds} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} onOpenCve={setOpenCve} /> : noData('NVD data'))}
-      {tab === 'patch' && <PatchTuesdayView stackKeywords={settings.stackKeywords} onOpenCve={setOpenCve} noData={noData('Patch Tuesday data')} />}
-      {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} exploits={vulns.exploits ?? {}} news={news} onOpenCve={setOpenCve} /> : noData('EPSS data'))}
-      {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={setOpenCve} /> : noData('GitHub advisory data'))}
+      {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} stackKeywords={settings.stackKeywords} onOpenCve={openCve} /> : noData('The CISA KEV catalog'))}
+      {tab === 'new' && (vulns?.nvd ? <NewCvesTab stats={vulns.nvd} notable={vulns.notable} kevIds={kevIds} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} onOpenCve={openCve} /> : noData('NVD data'))}
+      {tab === 'patch' && <PatchTuesdayView stackKeywords={settings.stackKeywords} onOpenCve={openCve} noData={noData('Patch Tuesday data')} />}
+      {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} exploits={vulns.exploits ?? {}} news={news} onOpenCve={openCve} /> : noData('EPSS data'))}
+      {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={openCve} /> : noData('GitHub advisory data'))}
       {tab === 'news' && <VulnNewsTab articles={articles} feeds={feeds} kevIds={kevIds} onOpenArticle={onOpenArticle} />}
       {tab === 'watching' && (
-        <WatchingTab watched={watched} vulns={vulns} cveIntel={cveIntel} articles={articles} onWatch={watch} onUnwatch={unwatch} onOpenCve={setOpenCve} />
+        <WatchingTab watched={watched} vulns={vulns} cveIntel={cveIntel} articles={articles} onWatch={watch} onUnwatch={unwatch} onOpenCve={openCve} />
       )}
 
-      {openCve && (
-        <CvePanel
-          cve={openCve}
-          vulns={vulns}
-          news={news.get(openCve) ?? []}
-          watched={watched.includes(openCve)}
-          onToggleWatch={() => (watched.includes(openCve) ? unwatch(openCve) : watch(openCve))}
-          onOpenArticle={(a) => { setOpenCve(null); onOpenArticle(a); }}
-          onClose={() => setOpenCve(null)}
-        />
-      )}
     </div>
   );
 };

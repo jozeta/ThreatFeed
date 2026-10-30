@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHash, parseHash } from './useHashRoute';
+import { buildHash, canonicalHash, parseHash } from './useHashRoute';
 
 describe('hash routes', () => {
   it('parses page, tab and parameters', () => {
@@ -23,19 +23,21 @@ describe('hash routes', () => {
     expect(buildHash('bookmarks')).toBe('#/saved');
   });
 
-  it('routes the Trends page with its period, kind and open CVE panel', () => {
-    const route = parseHash('#/trends?period=year&kind=vendor&cve=CVE-2026-1');
-    expect(route.page).toBe('trends');
-    expect(route.params.get('period')).toBe('year');
-    expect(buildHash('trends', '', new URLSearchParams({ kind: 'cve' }))).toBe('#/trends?kind=cve');
+  it('sends removed or unknown pages to the newspaper, keeping their parameters', () => {
+    const route = parseHash('#/actors/malware?actor=G0007');
+    expect(route.page).toBe('newspaper');
+    expect(route.sub).toBe('');
+    expect(route.params.get('actor')).toBe('G0007');
+    expect(parseHash('#/trends?period=year').page).toBe('newspaper');
   });
 
-  it('routes the Actors page with its malware sub-tab and open panel', () => {
-    const route = parseHash('#/actors/malware?malware=cobalt-strike');
-    expect(route.page).toBe('actors');
-    expect(route.sub).toBe('malware');
-    expect(route.params.get('malware')).toBe('cobalt-strike');
-    expect(buildHash('actors', '', new URLSearchParams({ actor: 'G0007' }))).toBe('#/actors?actor=G0007');
+  it('rewrites a removed page\'s hash to the newspaper\'s, and leaves known pages alone', () => {
+    expect(canonicalHash('#/actors?actor=G0007')).toBe('#/?actor=G0007');
+    expect(canonicalHash('#/actors/malware?malware=cobalt-strike')).toBe('#/?malware=cobalt-strike');
+    expect(canonicalHash('#/trends')).toBe('#/');
+    expect(canonicalHash('#/vulns/kev?cve=CVE-2026-1')).toBeNull();
+    expect(canonicalHash('#/?vendor=Fortinet')).toBeNull();
+    expect(canonicalHash('')).toBeNull();
   });
 
   it('routes My Feed with its News / Vulns sub-tab', () => {

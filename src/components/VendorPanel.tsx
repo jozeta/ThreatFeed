@@ -10,15 +10,11 @@ import { formatRelativeTime } from '../utils/date';
 import { SectionTitle } from '../pages/incidents/shared';
 import { StackedBars } from '../pages/vulns/StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from '../pages/vulns/shared';
-import { CvePanelHost } from '../pages/vulns/CvePanelHost';
 import { PanelCloseButton, SidePanel } from './Common/SidePanel';
 import { ExternalLink, Skull, Layers, EyeOff, Building2 } from 'lucide-react';
 
 const NEWS_SHOWN = 10;
 const NEW_CVES_SHOWN = 10;
-
-// Pages that already open a CVE panel from ?cve=; elsewhere the vendor panel brings its own
-const PAGES_WITH_CVE_PANEL = new Set(['vulnerabilities', 'trends', 'actors', 'feed']);
 
 const toggleClass = (on: boolean) =>
   `flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono font-bold transition-colors ${on ? 'bg-theme-accent/15 border-theme-accent/40 text-theme-accent' : 'border-theme-border text-theme-text-muted hover:text-theme-text'}`;
@@ -250,12 +246,10 @@ const WithMsrc: React.FC<{ children: (msrc: MsrcData | null) => React.ReactNode 
 
 interface HostProps {
   vendor: string;
-  cve: string; // a CVE opened on top of the panel
-  page: string;
   onOpenArticle: (a: Article) => void;
 }
 
-/** Mounted once by the app for ?vendor=…; closing removes the parameter (and any CVE opened from the panel) */
+/** Mounted once by the app for ?vendor=…; closing removes the parameter (and any CVE opened from the panel, which the app's CVE host shows) */
 const VendorPanelHost: React.FC<HostProps> = (props) => {
   const vulns = useVulns();
   return canonicalVendor(props.vendor) === 'Microsoft'
@@ -263,7 +257,7 @@ const VendorPanelHost: React.FC<HostProps> = (props) => {
     : <VendorView {...props} vulns={vulns} />;
 };
 
-const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData | null }> = ({ vendor, cve, vulns, msrc, page, onOpenArticle }) => {
+const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData | null }> = ({ vendor, vulns, msrc, onOpenArticle }) => {
   const { articles } = useFeeds();
   const { settings, updateSettings } = useSettings();
   const summary = useMemo(() => vendorSummary(vendor, vulns, articles, msrc), [vendor, vulns, articles, msrc]);
@@ -277,25 +271,20 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
   const read = (a: Article) => { close(); onOpenArticle(a); };
 
   return (
-    <>
-      <VendorPanel
-        summary={summary}
-        loading={!vulns}
-        inStack={inStack}
-        hidden={hidden}
-        onToggleStack={() => updateSettings({ stackKeywords: inStack ? stack.filter((k) => k.toLowerCase() !== summary.name.toLowerCase()) : [...stack, summary.name] })}
-        onToggleHidden={hiddenName ? () => updateSettings({
-          hiddenVulnVendors: hidden ? settings.hiddenVulnVendors.filter((v) => v !== hiddenName) : [...settings.hiddenVulnVendors, hiddenName],
-        }) : undefined}
-        onOpenCve={(id) => setHashParams({ cve: id }, true)}
-        onOpenProduct={(v, p) => goToPage('vulnerabilities', 'kev', new URLSearchParams({ kevVendor: v, product: `${v} ${p}`, days: '0' }))}
-        onOpenArticle={read}
-        onClose={close}
-      />
-      {cve && !PAGES_WITH_CVE_PANEL.has(page) && (
-        <CvePanelHost cve={cve} articles={articles} onOpenArticle={read} onClose={() => setHashParams({ cve: '' })} />
-      )}
-    </>
+    <VendorPanel
+      summary={summary}
+      loading={!vulns}
+      inStack={inStack}
+      hidden={hidden}
+      onToggleStack={() => updateSettings({ stackKeywords: inStack ? stack.filter((k) => k.toLowerCase() !== summary.name.toLowerCase()) : [...stack, summary.name] })}
+      onToggleHidden={hiddenName ? () => updateSettings({
+        hiddenVulnVendors: hidden ? settings.hiddenVulnVendors.filter((v) => v !== hiddenName) : [...settings.hiddenVulnVendors, hiddenName],
+      }) : undefined}
+      onOpenCve={(id) => setHashParams({ cve: id }, true)}
+      onOpenProduct={(v, p) => goToPage('vulnerabilities', 'kev', new URLSearchParams({ kevVendor: v, product: `${v} ${p}`, days: '0' }))}
+      onOpenArticle={read}
+      onClose={close}
+    />
   );
 };
 

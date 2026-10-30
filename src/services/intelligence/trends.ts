@@ -5,33 +5,18 @@ import { articleMentions, EntityKind, presetTerms } from './trending';
 /**
  * The trends history (data/trends.json): per UTC day, how many articles mentioned each CVE, ransomware
  * group, threat actor, product and vendor. The snapshot recounts the last few days every run; after 60 days
- * the days are summed into Monday-to-Sunday weeks, kept for two years. The Trends page ranks entities over a
- * week, month or year from it.
+ * the days are summed into Monday-to-Sunday weeks, kept for two years.
  */
 
 export type TrendKind = EntityKind | 'vendor';
 export type TrendVocab = { kind: TrendKind; terms: string[] }[];
-export type TrendPeriod = 'week' | 'month' | 'year';
 
-export const TREND_KINDS: TrendKind[] = ['cve', 'ransomware', 'actor', 'product', 'vendor'];
 // Two years, so the year can be compared with the one before
 export const TREND_KEEP_DAYS = 730;
 export const TREND_RECOUNT_DAYS = 3;
 // Days older than this are summed into their week: the month and the month before it stay daily, and the
 // year view only needs weeks
 export const TREND_DAILY_DAYS = 60;
-export const PERIOD_DAYS: Record<TrendPeriod, number> = { week: 7, month: 30, year: 365 };
-const YEAR_WEEKS = 52;
-
-export interface TrendRow {
-  key: string; // `${kind}:${name}`, as in trends.json
-  kind: TrendKind;
-  name: string;
-  count: number; // articles in the period
-  previous: number | null; // articles in the period before it; null when the history doesn't reach back that far
-  change: number | null;
-  series: number[]; // oldest first: per day for a week or month, per week for a year
-}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -156,90 +141,6 @@ export function pickPreviousTrends(
   return { base: null, write: !published.error, source: 'none' };
 }
 
-/** The first day the history has (YYYY-MM-DD; a week counts from its Monday) */
-export function historyStart(history: Pick<TrendsData, 'days' | 'weeks'>): string | undefined {
-  return [...Object.keys(history.days), ...Object.keys(history.weeks ?? {})].reduce<string | undefined>((min, d) => (!min || d < min ? d : min), undefined);
-}
-
-/**
- * The week's days for the Trends page: the history, plus this browser's articles where the history can't
- * know them. Days the history lacks are counted from local articles; on the others, articles from the
- * user's own feeds and those newer than the snapshot are added.
- */
-export function weekTrendDays(history: TrendsData | null, articles: Article[], vocab: TrendVocab, customSources: Set<string>, now = Date.now()): TrendDays {
-  const today = dayNumber(now);
-  const span = PERIOD_DAYS.week * 2; // the week and the one before it
-  const since = history?.generatedAt ? Date.parse(history.generatedAt) : -Infinity;
-  const recent = articles.filter(a => dayNumber(new Date(a.publishedAt).getTime()) > today - span);
-  const firstLocal = recent.reduce((min, a) => Math.min(min, dayNumber(new Date(a.publishedAt).getTime())), today);
-
-  const days: TrendDays = {};
-  for (const [key, counts] of Object.entries(history?.days ?? {})) days[key] = { ...counts };
-  const missing: TrendDays = {};
-  for (let d = Math.max(firstLocal, today - span + 1); d <= today; d++) if (!days[dayKeyOf(d)]) missing[dayKeyOf(d)] = {};
-  for (const a of recent) {
-    const key = new Date(a.publishedAt).toISOString().slice(0, 10);
-    if (missing[key]) countInto(missing, a, vocab);
-    else if (customSources.has(a.sourceId) || new Date(a.publishedAt).getTime() > since) countInto(days, a, vocab);
-  }
-  return { ...days, ...missing };
-}
-
-/**
- * Entities ranked by mentions over the period ending today (most first, then the biggest rise), with the
- * change against the period before and a series for a sparkline. A week or month counts days; the year is
- * the last 52 Monday-to-Sunday weeks (this one so far included), from days and weekly sums alike. `kind`
- * 'all' keeps every kind.
- */
-export function rankTrends(history: Pick<TrendsData, 'days' | 'weeks'>, period: TrendPeriod, kind: TrendKind | 'all', now = Date.now()): TrendRow[] {
-  const today = dayNumber(now);
-  const yearly = period === 'year';
-  const buckets = yearly ? YEAR_WEEKS : PERIOD_DAYS[period];
-  // Position of a day in the series: 0 is the oldest bucket, negative is the previous period
-  const thisWeek = weekStart(today);
-  const bucketOf = (day: number) => (yearly ? buckets - 1 - (thisWeek - weekStart(day)) / 7 : buckets - 1 - (today - day));
-  const start = historyStart(history);
-  // The previous period is only comparable when the history covers all of it
-  const comparable = start !== undefined && bucketOf(dayNumberOf(start)) <= -buckets;
-
-  const rows = new Map<string, TrendRow>();
-  const add = (dayKey: string, counts: Record<string, number>) => {
-    const i = bucketOf(dayNumberOf(dayKey));
-    if (i >= buckets || i < -buckets) return;
-    for (const [key, n] of Object.entries(counts)) {
-      const sep = key.indexOf(':');
-      const k = key.slice(0, sep) as TrendKind;
-      if (kind !== 'all' && k !== kind) continue;
-      let row = rows.get(key);
-      if (!row) {
-        row = { key, kind: k, name: key.slice(sep + 1), count: 0, previous: comparable ? 0 : null, change: null, series: new Array(buckets).fill(0) };
-        rows.set(key, row);
-      }
-      if (i >= 0) {
-        row.count += n;
-        row.series[i] += n;
-      } else if (row.previous !== null) {
-        row.previous += n;
-      }
-    }
-  };
-  for (const [key, counts] of Object.entries(history.days)) add(key, counts);
-  // Weekly sums only reach back past the daily days, which a week or month never does
-  if (yearly) for (const [key, counts] of Object.entries(history.weeks ?? {})) add(key, counts);
-  return [...rows.values()]
-    .filter(r => r.count > 0)
-    .map(r => ({ ...r, change: r.previous === null ? null : r.count - r.previous }))
-    .sort((a, b) => b.count - a.count || (b.change ?? 0) - (a.change ?? 0) || a.name.localeCompare(b.name));
-}
-
-/** The entities whose mentions grew the most against the previous period (at least two mentions now) */
-export function risers(rows: TrendRow[], limit: number): TrendRow[] {
-  return rows
-    .filter(r => r.change !== null && r.change > 0 && r.count >= 2)
-    .sort((a, b) => b.change! - a.change! || b.count - a.count)
-    .slice(0, limit);
-}
-
 /** Validates trends.json (the app's load and the snapshot's carry-over): malformed days and counts are dropped */
 export function decodeTrends(raw: any): TrendsData | null {
   const isMap = (x: any) => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -257,5 +158,3 @@ export function decodeTrends(raw: any): TrendsData | null {
   return { generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : undefined, days: clean(raw.days), weeks: clean(raw.weeks) };
 }
 
-/** The entity kinds by their trends key prefix, for labels */
-export const TREND_KIND_LABELS: Record<TrendKind, string> = { cve: 'CVE', ransomware: 'Ransomware', actor: 'Actor', product: 'Product', vendor: 'Vendor' };

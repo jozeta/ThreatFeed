@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countEntitiesByDay, decodeTrends, historyStart, mergeTrends, pickPreviousTrends, rankTrends, risers, trendsVocab, TrendVocab, weekTrendDays } from './trends';
+import { countEntitiesByDay, decodeTrends, mergeTrends, pickPreviousTrends, trendsVocab, TrendVocab } from './trends';
 import { article } from '../../test/fixtures';
 
 const NOW = Date.parse('2026-10-30T12:00:00Z');
@@ -87,84 +87,6 @@ describe('pickPreviousTrends', () => {
   it('writes nothing when no history could be read, unless there has never been one (404)', () => {
     expect(pickPreviousTrends(null, { data: null, error: 'HTTP 503' })).toEqual({ base: null, write: false, source: 'none' });
     expect(pickPreviousTrends(null, { data: null })).toEqual({ base: null, write: true, source: 'none' });
-  });
-});
-
-describe('rankTrends', () => {
-  const history = {
-    days: {
-      '2026-10-30': { 'actor:Lazarus': 2, 'vendor:Fortinet': 1 },
-      '2026-10-27': { 'actor:Lazarus': 1, 'cve:CVE-2026-1': 4 },
-      '2026-10-20': { 'actor:Lazarus': 1, 'vendor:Fortinet': 5 },
-      '2026-10-01': { 'vendor:Fortinet': 2 },
-    },
-  };
-
-  it('sums the period, compares it with the one before and gives a daily series', () => {
-    const rows = rankTrends(history, 'week', 'all', NOW);
-    expect(rows.map(r => r.key)).toEqual(['cve:CVE-2026-1', 'actor:Lazarus', 'vendor:Fortinet']);
-    expect(rows[1]).toEqual({ key: 'actor:Lazarus', kind: 'actor', name: 'Lazarus', count: 3, previous: 1, change: 2, series: [0, 0, 0, 1, 0, 0, 2] });
-    expect(rows[2]).toMatchObject({ count: 1, previous: 5, change: -4 });
-    expect(rankTrends(history, 'week', 'vendor', NOW).map(r => r.name)).toEqual(['Fortinet']);
-  });
-
-  it('has no change when the history does not reach back over the previous period', () => {
-    const rows = rankTrends(history, 'month', 'all', NOW);
-    expect(rows.find(r => r.name === 'Fortinet')).toMatchObject({ count: 8, previous: null, change: null });
-    expect(rows[0].series).toHaveLength(30);
-  });
-
-  it('buckets the year by whole Monday-to-Sunday weeks, the last one this week', () => {
-    const [row] = rankTrends(history, 'year', 'vendor', NOW);
-    expect(row.series).toHaveLength(52);
-    expect(row.series.slice(-5)).toEqual([2, 0, 0, 5, 1]);
-  });
-
-  it('compares the year with the 52 weeks before it, from days and weekly sums', () => {
-    const [row] = rankTrends({
-      days: { '2026-10-30': { 'vendor:Fortinet': 1 } },
-      weeks: { '2026-01-05': { 'vendor:Fortinet': 4 }, '2025-10-27': { 'vendor:Fortinet': 3 }, '2024-11-04': { 'vendor:Fortinet': 1 } },
-    }, 'year', 'vendor', NOW);
-    expect(row).toMatchObject({ count: 5, previous: 4, change: 1 });
-    expect(row.series[9]).toBe(4);
-    expect(row.series[51]).toBe(1);
-  });
-
-  it('has no year-on-year change when the history covers less than two years', () => {
-    // From 2025-12 only: the 52 weeks before this year aren't covered
-    const [row] = rankTrends({
-      days: { '2026-10-30': { 'vendor:Fortinet': 1 } },
-      weeks: { '2025-12-01': { 'vendor:Fortinet': 4 } },
-    }, 'year', 'vendor', NOW);
-    expect(row).toMatchObject({ count: 5, previous: null, change: null });
-    expect(row.series).toHaveLength(52);
-  });
-
-  it('picks the biggest risers that have a previous period to compare with', () => {
-    const rows = rankTrends(history, 'week', 'all', NOW);
-    expect(risers(rows, 5).map(r => r.name)).toEqual(['CVE-2026-1', 'Lazarus']);
-    expect(historyStart(history)).toBe('2026-10-01');
-    expect(historyStart({ days: {}, weeks: { '2025-01-06': {} } })).toBe('2025-01-06');
-  });
-});
-
-describe('weekTrendDays', () => {
-  it('fills days the history lacks from local articles and adds custom feeds and newer articles to the rest', () => {
-    const days = weekTrendDays(
-      { generatedAt: daysAgo(0, 6), days: { '2026-10-30': { 'actor:Lazarus': 2 }, '2026-10-29': {} } },
-      [
-        article('snap', { title: 'Lazarus', publishedAt: daysAgo(0, 8) }), // already in the history
-        article('new', { title: 'Lazarus', publishedAt: daysAgo(0, 1) }), // newer than the snapshot
-        article('mine', { sourceId: 'my-feed', title: 'Lazarus', publishedAt: daysAgo(1) }), // a custom feed
-        article('old', { title: 'Lazarus', publishedAt: daysAgo(4) }), // before the history begins
-      ],
-      vocab,
-      new Set(['my-feed']),
-      NOW,
-    );
-    expect(days['2026-10-30']).toEqual({ 'actor:Lazarus': 3 });
-    expect(days['2026-10-29']).toEqual({ 'actor:Lazarus': 1 });
-    expect(days['2026-10-26']).toEqual({ 'actor:Lazarus': 1 });
   });
 });
 

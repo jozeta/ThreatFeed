@@ -1,17 +1,15 @@
 import React, { useMemo } from 'react';
-import { Article, LeakSiteVictim } from '../types';
+import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useRansomwareIntel } from '../hooks/useVulns';
-import { useHashParam, useHashRoute } from '../hooks/useHashRoute';
-import { ransomwareVictims } from '../services/intelligence/ransomware';
-import { countryCodeFromName } from '../utils/countries';
+import { setHashParams, useHashRoute } from '../hooks/useHashRoute';
+import { useLeakSiteVictims } from '../hooks/useLeakSiteVictims';
 import { VictimsTab } from './incidents/VictimsTab';
 import { BreachesTab } from './incidents/BreachesTab';
 import { IncidentNewsTab } from './incidents/IncidentNewsTab';
 import { PublicReportsTab } from './incidents/PublicReportsTab';
 import { PaymentsTab } from './incidents/PaymentsTab';
 import { GroupsTab } from './incidents/GroupsTab';
-import { GroupPanel } from './incidents/GroupPanel';
 import { Skull, Database, Newspaper, Megaphone, Bitcoin, Users } from 'lucide-react';
 
 const TABS = ['victims', 'groups', 'reports', 'breaches', 'payments', 'news'] as const;
@@ -21,29 +19,15 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
   const { articles, incidents } = useFeeds();
   const intel = useRansomwareIntel();
 
-  // The tab lives in the URL (#/ransomware/reports) like the Vulns page; the open group is ?group=
+  // The tab lives in the URL (#/ransomware/reports) like the Vulns page
   const [route, navigate] = useHashRoute();
   const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'victims';
   const setTab = (t: Tab) => navigate('ransomware', t === 'victims' ? '' : t);
-  // The open group panel is ?group=<name>, so any tab (and the Vulns page) can link to it
-  const [groupParam, setGroupParam] = useHashParam('group');
-  const openGroup = (g: string) => setGroupParam(g.toLowerCase(), true);
+  // A group opens the app's group panel (?group=<name>), which any page can link to
+  const openGroup = (g: string) => setHashParams({ group: g.toLowerCase() }, true);
 
-  // Structured victims come with the snapshot; without one, fall back to parsing the RSS feed
-  const victims: LeakSiteVictim[] = useMemo(() => {
-    if (incidents && incidents.victims.length > 0) return incidents.victims;
-    return ransomwareVictims(articles).map((v) => ({
-      id: v.id,
-      victim: v.victim,
-      group: v.group,
-      country: countryCodeFromName(v.country),
-      sector: v.sector,
-      discoveredAt: v.publishedAt,
-      url: v.url,
-      description: v.description,
-    }));
-  }, [incidents, articles]);
-  const structured = Boolean(incidents && incidents.victims.length > 0);
+  // Structured victims come with the snapshot; without one, they're parsed from the RSS feed
+  const { victims, structured } = useLeakSiteVictims();
   const groupNames = useMemo(() => Array.from(new Set(victims.map((v) => v.group))).filter((g) => g.length >= 4), [victims]);
   const breaches = incidents?.breaches ?? [];
 
@@ -97,18 +81,6 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
       {tab === 'breaches' && (breaches.length > 0 ? <BreachesTab breaches={breaches} /> : noData('Breach data from Have I Been Pwned'))}
       {tab === 'payments' && (intel?.payments?.families.length ? <PaymentsTab families={intel.payments.families} updatedAt={intel.payments.updatedAt} /> : noData('Ransom payment data'))}
       {tab === 'news' && <IncidentNewsTab articles={articles} groupNames={groupNames} onOpenArticle={onOpenArticle} />}
-
-      {groupParam && (
-        <GroupPanel
-          group={groupParam}
-          victims={victims}
-          profile={incidents?.groups[groupParam]}
-          intel={intel?.groups[groupParam]}
-          articles={articles}
-          onOpenArticle={(a) => { setGroupParam(''); onOpenArticle(a); }}
-          onClose={() => setGroupParam('')}
-        />
-      )}
     </div>
   );
 };

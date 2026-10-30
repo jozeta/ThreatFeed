@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useFeeds } from './context/FeedContext';
 import { useSettings } from './context/SettingsContext';
 import { useFilter } from './context/FilterContext';
@@ -16,7 +16,7 @@ import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
 import { AlertMonitor } from './components/AlertMonitor';
 import { CveWatchMonitor } from './components/CveWatchMonitor';
-import { useHashParam, useHashRoute } from './hooks/useHashRoute';
+import { redirectRemovedPage, setHashParams, useHashRoute } from './hooks/useHashRoute';
 
 // Secondary pages load on first visit, keeping the initial bundle to what the front page needs
 const SourcesPage = lazy(() => import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage })));
@@ -24,12 +24,15 @@ const FeedHealthPage = lazy(() => import('./pages/FeedHealthPage').then((m) => (
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then((m) => ({ default: m.BookmarksPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const BriefingPage = lazy(() => import('./pages/BriefingPage').then((m) => ({ default: m.BriefingPage })));
-const TrendsPage = lazy(() => import('./pages/TrendsPage').then((m) => ({ default: m.TrendsPage })));
 const MyFeedPage = lazy(() => import('./pages/MyFeedPage').then((m) => ({ default: m.MyFeedPage })));
 const RansomwarePage = lazy(() => import('./pages/RansomwarePage').then((m) => ({ default: m.RansomwarePage })));
-const ActorsPage = lazy(() => import('./pages/ActorsPage').then((m) => ({ default: m.ActorsPage })));
 const VulnerabilitiesPage = lazy(() => import('./pages/VulnerabilitiesPage').then((m) => ({ default: m.VulnerabilitiesPage })));
+// Detail panels over any page, each from its hash parameter
 const VendorPanelHost = lazy(() => import('./components/VendorPanel'));
+const CvePanelHost = lazy(() => import('./pages/vulns/CvePanelHost').then((m) => ({ default: m.CvePanelHost })));
+const ActorPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.ActorPanelHost })));
+const MalwarePanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.MalwarePanelHost })));
+const GroupPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.GroupPanelHost })));
 
 export const App: React.FC = () => {
   const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
@@ -40,8 +43,11 @@ export const App: React.FC = () => {
   const [route, navigate] = useHashRoute();
   const activeTab: ActiveNavTab = route.page;
   const setActiveTab = useCallback((tab: ActiveNavTab) => navigate(tab), [navigate]);
-  // A vendor panel (?vendor=Fortinet) can open over any page
-  const [vendor] = useHashParam('vendor');
+  // Old links to removed pages (#/trends, #/actors?actor=G0007) become the newspaper's, keeping their panel
+  useEffect(redirectRemovedPage);
+  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…) open over any page
+  const panel = (key: string) => route.params.get(key) ?? '';
+  const [vendor, cve, actor, malware, group] = ['vendor', 'cve', 'actor', 'malware', 'group'].map(panel);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
@@ -187,10 +193,8 @@ export const App: React.FC = () => {
             <BriefingPage onOpenArticle={handleOpenArticle} onSearch={handleSearch} />
           )}
 
-          {activeTab === 'trends' && <TrendsPage onOpenArticle={handleOpenArticle} onSearch={handleSearch} />}
           {activeTab === 'feed' && <MyFeedPage onOpenArticle={handleOpenArticle} />}
           {activeTab === 'ransomware' && <RansomwarePage onOpenArticle={handleOpenArticle} />}
-          {activeTab === 'actors' && <ActorsPage onOpenArticle={handleOpenArticle} />}
           {activeTab === 'vulnerabilities' && <VulnerabilitiesPage onOpenArticle={handleOpenArticle} />}
 
           {activeTab === 'bookmarks' && (
@@ -211,17 +215,21 @@ export const App: React.FC = () => {
         </Suspense>
       </main>
 
-      {/* Vendor panel (?vendor=…), over whichever page opened it */}
-      {vendor && (
-        <Suspense fallback={null}>
-          <VendorPanelHost
-            vendor={vendor}
-            cve={route.params.get('cve') ?? ''}
-            page={activeTab}
-            onOpenArticle={handleOpenArticle}
+      {/* Detail panels, over whichever page opened them; their levels stack a CVE over a vendor over the rest */}
+      <Suspense fallback={null}>
+        {actor && <ActorPanelHost id={actor} onOpenArticle={handleOpenArticle} />}
+        {malware && <MalwarePanelHost id={malware} onOpenArticle={handleOpenArticle} />}
+        {group && <GroupPanelHost id={group} onOpenArticle={handleOpenArticle} />}
+        {vendor && <VendorPanelHost vendor={vendor} onOpenArticle={handleOpenArticle} />}
+        {cve && (
+          <CvePanelHost
+            cve={cve}
+            articles={articles}
+            onOpenArticle={(a) => { setHashParams({ cve: '' }); handleOpenArticle(a); }}
+            onClose={() => setHashParams({ cve: '' })}
           />
-        </Suspense>
-      )}
+        )}
+      </Suspense>
 
       {/* Reader Modal (Distraction-free article reader) */}
       {activeArticle && (

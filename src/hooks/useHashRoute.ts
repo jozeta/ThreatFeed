@@ -14,16 +14,33 @@ export interface HashRoute {
 
 // URL slug for each page (the newspaper is the bare #/)
 const SLUGS: Record<ActiveNavTab, string> = {
-  newspaper: '', latest: 'latest', unread: 'unread', briefing: 'briefing', trends: 'trends', feed: 'feed', ransomware: 'ransomware', actors: 'actors',
+  newspaper: '', latest: 'latest', unread: 'unread', briefing: 'briefing', feed: 'feed', ransomware: 'ransomware',
   vulnerabilities: 'vulns', bookmarks: 'saved', sources: 'sources', health: 'health', settings: 'settings',
 };
 const PAGES = new Map(Object.entries(SLUGS).map(([page, slug]) => [slug, page as ActiveNavTab]));
 const ROUTE_EVENT = 'threatfeed:route';
 
-export function parseHash(hash: string): HashRoute {
+function splitHash(hash: string) {
   const [path, query = ''] = hash.replace(/^#\/?/, '').split('?');
   const [slug = '', sub = ''] = path.split('/').map(decodeURIComponent);
-  return { page: PAGES.get(slug) ?? 'newspaper', sub, params: new URLSearchParams(query) };
+  return { slug, sub, query };
+}
+
+/**
+ * An unknown or removed page (#/trends, #/actors) is the newspaper with that page's parameters, so an old
+ * #/actors?actor=G0007 link still opens the actor panel, now over the newspaper
+ */
+export function parseHash(hash: string): HashRoute {
+  const { slug, sub, query } = splitHash(hash);
+  const page = PAGES.get(slug);
+  return { page: page ?? 'newspaper', sub: page ? sub : '', params: new URLSearchParams(query) };
+}
+
+/** The newspaper's hash for an unknown or removed page's, or null when the hash already names a page */
+export function canonicalHash(hash: string): string | null {
+  if (PAGES.has(splitHash(hash).slug)) return null;
+  const route = parseHash(hash);
+  return buildHash(route.page, route.sub, route.params);
 }
 
 export function buildHash(page: ActiveNavTab, sub = '', params?: URLSearchParams): string {
@@ -49,6 +66,12 @@ export function setHashParams(changes: Record<string, string>, push = false) {
     else params.delete(key);
   }
   go(buildHash(current.page, current.sub, params), !push);
+}
+
+/** Rewrites an unknown or removed page's hash in place (no history entry), e.g. #/actors?actor=G0007 to #/?actor=G0007 */
+export function redirectRemovedPage() {
+  const hash = canonicalHash(window.location.hash);
+  if (hash) go(hash, true);
 }
 
 /** Moves to a page from outside a component (a history entry, like a page change through the navigation) */

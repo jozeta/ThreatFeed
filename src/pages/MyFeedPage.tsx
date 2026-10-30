@@ -11,8 +11,7 @@ import { NewspaperView } from '../components/Newspaper/NewspaperView';
 import { ListThumbnailView } from '../components/Layouts/ListThumbnailView';
 import { EmptyState } from '../components/Common/EmptyState';
 import { LoadMoreButton } from '../components/Common/LoadMoreButton';
-import { CvePanel } from './vulns/CvePanel';
-import { ExploitBadges, SeverityPill, articlesByCve } from './vulns/shared';
+import { ExploitBadges, SeverityPill } from './vulns/shared';
 import { formatRelativeTime } from '../utils/date';
 import { Inbox, CheckCheck, SlidersHorizontal, Newspaper, ShieldAlert } from 'lucide-react';
 
@@ -82,19 +81,18 @@ const VulnRow: React.FC<{ row: AlertRow; vulns: VulnData | null; onOpen: () => v
 export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
   const { articles } = useFeeds();
   const vulns = useVulns();
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const feed = useAlertFeed();
 
   // Sub-tab, rule filter and open CVE live in the URL (#/feed/vulns?rule=…&cve=…)
   const [route, navigate] = useHashRoute();
   const sub: Sub = (SUBS as readonly string[]).includes(route.sub) ? (route.sub as Sub) : 'news';
   const [ruleParam, setRuleParam] = useHashParam('rule');
-  const [cveParam, setCveParam] = useHashParam('cve');
-  const openCve = cveParam || null;
-  const setOpenCve = (cve: string | null) => setCveParam(cve ?? '', Boolean(cve));
+  // The CVE panel itself is the app's, over any page
+  const [, setCveParam] = useHashParam('cve');
+  const openCve = (cve: string) => setCveParam(cve, true);
 
   const articleById = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
-  const news = useMemo(() => articlesByCve(articles), [articles]);
 
   // Articles that have aged out of the store can no longer be opened, so their rows are dropped
   const allRows = sub === 'news' ? feed.news.filter((r) => articleById.has(r.ref)) : feed.vulns;
@@ -111,10 +109,6 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
     () => (newsLayout === 'list' ? [] : rows.map((r) => articleById.get(r.ref)!)),
     [newsLayout, rows, articleById]
   );
-
-  const watched = settings.watchedCves;
-  const toggleWatch = (cve: string) =>
-    updateSettings({ watchedCves: watched.includes(cve) ? watched.filter((c) => c !== cve) : [...watched, cve] });
 
   const subTabs: { id: Sub; label: string; icon: React.ReactNode }[] = [
     { id: 'news', label: 'News', icon: <Newspaper className="w-4 h-4" /> },
@@ -196,7 +190,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
       ) : (
         <div className="rounded-lg border border-theme-border bg-theme-card overflow-hidden">
           {rows.slice(0, visibleCount).map((row) => {
-            if (row.kind === 'vulns') return <VulnRow key={row.ref} row={row} vulns={vulns} onOpen={() => setOpenCve(row.ref)} />;
+            if (row.kind === 'vulns') return <VulnRow key={row.ref} row={row} vulns={vulns} onOpen={() => openCve(row.ref)} />;
             const article = articleById.get(row.ref)!;
             return (
               <div key={row.ref}>
@@ -212,17 +206,6 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
       )}
       {hasMore && newsLayout === 'list' && <LoadMoreButton remaining={remaining} onClick={showMore} />}
 
-      {openCve && (
-        <CvePanel
-          cve={openCve}
-          vulns={vulns}
-          news={news.get(openCve) ?? []}
-          watched={watched.includes(openCve)}
-          onToggleWatch={() => toggleWatch(openCve)}
-          onOpenArticle={(a) => { setOpenCve(null); onOpenArticle(a); }}
-          onClose={() => setOpenCve(null)}
-        />
-      )}
     </div>
   );
 };

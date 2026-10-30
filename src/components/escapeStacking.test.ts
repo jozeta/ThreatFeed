@@ -5,14 +5,18 @@ import { createRoot, Root } from 'react-dom/client';
 // The panels only need these to render; no network
 vi.mock('../context/FeedContext', () => ({ useFeeds: () => ({ articles: [] }) }));
 vi.mock('../context/SettingsContext', () => ({ useSettings: () => ({ settings: { stackKeywords: [], hiddenVulnVendors: [], watchedCves: [] }, updateSettings() {} }) }));
-vi.mock('../hooks/useVulns', () => ({ useVulns: () => null, useMsrc: () => null }));
+const ACTORS = {
+  actors: [{ id: 'G0007', name: 'APT28', aliases: [], description: '', techniques: [], software: [], url: 'https://attack.mitre.org/groups/G0007/' }],
+  malware: [],
+};
+vi.mock('../hooks/useVulns', () => ({ useVulns: () => null, useMsrc: () => null, useActors: () => ACTORS, useRansomwareIntel: () => null }));
 vi.mock('../services/intelligence/vendor', async (orig) => ({ ...(await orig<typeof import('../services/intelligence/vendor')>()), fetchWikiSummary: () => Promise.resolve(null) }));
 vi.mock('../services/intelligence/cvss', () => ({ fetchCveDescription: () => Promise.resolve(null) }));
 vi.mock('../services/intelligence/cveWatch', async (orig) => ({ ...(await orig<typeof import('../services/intelligence/cveWatch')>()), fetchEpssHistory: () => Promise.resolve([]) }));
 
 import VendorPanelHost from './VendorPanel';
 import { KeyboardShortcutsModal } from './Common/KeyboardShortcutsModal';
-import { ProfilePanel } from '../pages/actors/shared';
+import { ActorPanelHost } from './EntityPanelHosts';
 import { CvePanelHost } from '../pages/vulns/CvePanelHost';
 import { parseHash, setHashParams } from '../hooks/useHashRoute';
 
@@ -21,18 +25,18 @@ import { parseHash, setHashParams } from '../hooks/useHashRoute';
 const params = () => parseHash(window.location.hash).params;
 
 /**
- * The layers as the app mounts them on the Actors page: the actor panel and the CVE opened on top of it are
- * the page's (in that order, as ActorsPage renders them), the vendor panel is the app's, the shortcuts modal
- * tops everything. They all register with the one panel stack, so mount order alone doesn't decide the top
+ * The layers as the app mounts them over any page: the actor, vendor and CVE hosts (in App's order), with the
+ * shortcuts modal over everything. They all register with the one panel stack, so the CVE opened from the
+ * actor panel sits on top by its level, whichever mounted first
  */
 const Layers: React.FC<{ shortcuts: boolean; onCloseShortcuts: () => void }> = ({ shortcuts, onCloseShortcuts }) => {
   const actor = params().get('actor');
   const vendor = params().get('vendor');
   const cve = params().get('cve');
   return React.createElement(React.Fragment, null,
-    actor && React.createElement(ProfilePanel, { title: 'APT28', label: 'APT28', onClose: () => setHashParams({ actor: '' }), children: null }),
+    actor && React.createElement(ActorPanelHost, { id: actor, onOpenArticle() {} }),
+    vendor && React.createElement(VendorPanelHost, { vendor, onOpenArticle() {} }),
     cve && React.createElement(CvePanelHost, { cve, articles: [], onOpenArticle() {}, onClose: () => setHashParams({ cve: '' }) }),
-    vendor && React.createElement(VendorPanelHost, { vendor, cve: cve ?? '', page: 'actors', onOpenArticle() {} }),
     React.createElement(KeyboardShortcutsModal, { isOpen: shortcuts, onClose: onCloseShortcuts }),
   );
 };
@@ -64,7 +68,7 @@ describe('Escape with stacked panels', () => {
   });
 
   it('closes one layer per press, topmost first: CVE, then vendor, then actor', async () => {
-    window.location.hash = '#/actors?actor=G0007&vendor=Fortinet&cve=CVE-2026-21643';
+    window.location.hash = '#/?actor=G0007&vendor=Fortinet&cve=CVE-2026-21643';
     await render();
     expect(document.querySelectorAll('[role=dialog]')).toHaveLength(3);
 
@@ -78,7 +82,7 @@ describe('Escape with stacked panels', () => {
   });
 
   it('closes only the shortcuts modal when it is open over the panels', async () => {
-    window.location.hash = '#/actors?actor=G0007&vendor=Fortinet';
+    window.location.hash = '#/?actor=G0007&vendor=Fortinet';
     shortcuts = true;
     await render();
     await escape();
@@ -89,7 +93,7 @@ describe('Escape with stacked panels', () => {
   });
 
   it('a second press during the exit animation goes to the next panel down', async () => {
-    window.location.hash = '#/actors?actor=G0007&vendor=Fortinet';
+    window.location.hash = '#/?actor=G0007&vendor=Fortinet';
     await render();
     await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     await escape();

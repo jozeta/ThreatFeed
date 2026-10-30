@@ -79,7 +79,7 @@ export async function loadMsrc(): Promise<MsrcData | null> {
   }
 }
 
-/** Loads data/actors.json (threat actor and malware profiles) for the Actors page and trending chips */
+/** Loads data/actors.json (threat actor and malware profiles) for the actor and malware panels and trending chips */
 export async function loadActors(): Promise<ActorsData | null> {
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/actors.json`, { cache: 'no-cache' });
@@ -92,7 +92,7 @@ export async function loadActors(): Promise<ActorsData | null> {
   }
 }
 
-/** Loads data/trends.json (daily mention counts, with older days rolled up into weeks over 730 days) for the Trends page */
+/** Loads data/trends.json (daily mention counts, with older days rolled up into weeks over 730 days) for the detail panels' mention history */
 export async function loadTrends(): Promise<TrendsData | null> {
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/trends.json`, { cache: 'no-cache' });

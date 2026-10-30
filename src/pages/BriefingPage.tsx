@@ -40,7 +40,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
   const { articles, cveIntel, incidents } = useFeeds();
   const vulns = useVulns();
   const { settings } = useSettings();
-  const { open: openTrending, hasProfile } = useOpenTrending(onSearch);
+  const { open: openTrending, clickHint } = useOpenTrending(onSearch);
   const [windowHours, setWindowHours] = useState(24);
   const [copied, setCopied] = useState(false);
 
@@ -217,7 +217,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
               <ul className="space-y-1.5 text-xs font-mono">
                 {briefing.trending.map((t) => (
                   <li key={`${t.kind}:${t.name}`}>
-                    <button onClick={() => void openTrending(t)} className="w-full flex items-center gap-2 hover:text-theme-accent transition-colors text-left" title={hasProfile(t) ? `Open the ${t.name} profile` : `Search for ${t.name}`}>
+                    <button onClick={() => void openTrending(t)} className="w-full flex items-center gap-2 hover:text-theme-accent transition-colors text-left" title={`${t.name}: click to ${clickHint(t)}`}>
                       <span className="flex-1 truncate text-theme-text">{t.name}</span>
                       <span className="text-[10px] uppercase text-theme-text-muted">{t.kind}</span>
                       <Sparkline values={t.daily} className="text-theme-accent" />
