@@ -95,6 +95,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   bookmarkFolders: DEFAULT_BOOKMARK_FOLDERS,
   clusteringEnabled: true,
   sectionsEnabled: true,
+  alertRules: [],
+  alertGapHours: 1,
 };
 
 interface SettingsContextType {

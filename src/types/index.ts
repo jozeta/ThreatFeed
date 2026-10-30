@@ -353,6 +353,8 @@ export interface UserSettings {
   bookmarkFolders: string[];
   clusteringEnabled: boolean;
   sectionsEnabled: boolean;
+  alertRules: AlertRule[];
+  alertGapHours: number; // minimum hours between desktop notifications
 }
 
 export interface FilterState {
@@ -370,3 +372,26 @@ export interface FilterState {
 }
 
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
+
+export type AlertRuleKind = 'news' | 'vulns';
+export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves';
+export type NewsCondition =
+  | { field: 'keyword'; values: string[] } // checkWatchlistMatch semantics
+  | { field: 'vendor'; values: string[] } // containsTerm on title + description
+  | { field: 'severity'; min: ThreatSeverity }
+  | { field: 'category' | 'source' | 'tag'; values: string[] } // category = the feed's category; source = feed id
+  | { field: 'hasCve' }
+  | { field: 'cveMatchesVulnRule' };
+export type VulnCondition =
+  | { field: 'vendor'; values: string[] } // containsTerm on vendor, product, name, products
+  | { field: 'cvss' | 'epss'; min: number } // epss as 0–1
+  | { field: 'kev' | 'activelyExploited' | 'publicExploit' | 'ransomware' | 'remoteNoAuth' | 'newCve' }
+  | { field: 'kevAddedWithinDays'; days: number }
+  | { field: 'cwe' | 'cve'; values: string[] }
+  | { field: 'watched' }; // the live watchedCves list; event-driven
+export interface ConditionGroup<C> { op: 'all' | 'any'; items: (C | ConditionGroup<C>)[] }
+export interface AlertRule {
+  id: string; name: string; kind: AlertRuleKind; enabled: boolean; notify: boolean;
+  root: ConditionGroup<NewsCondition> | ConditionGroup<VulnCondition>;
+  builtIn?: BuiltInRule; createdAt: string; updatedAt: string;
+}
