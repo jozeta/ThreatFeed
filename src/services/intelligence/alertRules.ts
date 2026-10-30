@@ -116,8 +116,9 @@ const anyEqual = (have: string[], values: string[]) => {
 
 function newsCondition(c: NewsCondition, a: Article, ctx: EvalContext): boolean {
   switch (c.field) {
-    case 'keyword': return Array.isArray(c.values) && checkWatchlistMatch(a, c.values).matched;
-    case 'vendor': return anyTerm(`${a.title} ${a.description ?? ''}`, c.values);
+    // vendor reads the same text as the "Your stack" badge (title, description, custom tags, CVEs)
+    case 'keyword':
+    case 'vendor': return Array.isArray(c.values) && checkWatchlistMatch(a, c.values).matched;
     case 'severity': return a.severity !== undefined && SEVERITY_RANK[a.severity] >= SEVERITY_RANK[c.min];
     case 'category': {
       const category = ctx.feedCategory(a.sourceId);
@@ -203,6 +204,11 @@ export function builtInTerms(rule: AlertRule, s: RuleLists): string[] {
   }
 }
 
+/** True when an enabled Vulns rule needs vulns.json; a built-in with an empty list can't match, so it doesn't count */
+export function rulesNeedVulns(rules: AlertRule[], s: RuleLists): boolean {
+  return rules.some(r => r.enabled && r.kind === 'vulns' && (!r.builtIn || builtInTerms(r, s).length > 0));
+}
+
 export function resolveRoot(rule: AlertRule, s: RuleLists): AlertRule['root'] {
   switch (rule.builtIn) {
     case 'watchlist': return { op: 'any', items: [{ field: 'keyword', values: s.watchlistKeywords }] };
@@ -227,6 +233,24 @@ function freeze(node: unknown, watchedCves: string[]): unknown {
   }
   return node;
 }
+
+/**
+ * CVEs matched right now by enabled Vulns rules, for previewing News rules that use cveMatchesVulnRule.
+ * Event-driven (`watched`) rules are left out: they match changes at a check, not current data.
+ */
+export function matchedVulnCves(rules: AlertRule[], s: RuleLists, items: Iterable<VulnItem>, now: Date): Set<string> {
+  const roots = rules
+    .filter(r => r.enabled && r.kind === 'vulns')
+    .map(r => resolveRoot(r, s) as ConditionGroup<VulnCondition>)
+    .filter(root => !hasWatched(root));
+  const ctx: EvalContext = { now, feedCategory: () => undefined };
+  const out = new Set<string>();
+  for (const v of items) if (roots.some(root => matchesVuln(root, v, ctx))) out.add(v.cve);
+  return out;
+}
+
+const hasWatched = (node: VulnCondition | ConditionGroup<VulnCondition>): boolean =>
+  isGroup(node) ? node.items.some(hasWatched) : node.field === 'watched';
 
 export function duplicateRule(rule: AlertRule, s: RuleLists, now: Date, id: string): AlertRule {
   const stamp = now.toISOString();

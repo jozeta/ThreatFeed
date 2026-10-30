@@ -144,10 +144,15 @@ export function hasInvalidCondition(kind: AlertRuleKind, g: FormGroup): boolean 
 /**
  * Applies an editor save onto the CURRENT rules: only the edited fields replace the live rule, so list toggles made
  * while the editor was open survive. Returns null when a previously saved rule was deleted meanwhile.
+ * updatedAt (the engine's baseline version) moves only when the name or conditions changed; a 🔔-only save keeps it.
  */
 export function applyRuleEdit(rules: AlertRule[], edited: AlertRule, isNew: boolean): AlertRule[] | null {
   const current = rules.find(r => r.id === edited.id);
   if (!current) return isNew ? [...rules, edited] : null;
-  const merged: AlertRule = { ...current, name: edited.name, kind: edited.kind, notify: edited.notify, root: edited.root, updatedAt: edited.updatedAt };
+  const changed = edited.name !== current.name || edited.kind !== current.kind || JSON.stringify(edited.root) !== JSON.stringify(current.root);
+  const merged: AlertRule = {
+    ...current, name: edited.name, kind: edited.kind, notify: edited.notify, root: edited.root,
+    updatedAt: changed ? edited.updatedAt : current.updatedAt,
+  };
   return rules.map(r => (r.id === edited.id ? merged : r));
 }

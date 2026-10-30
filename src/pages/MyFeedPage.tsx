@@ -137,7 +137,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
             <span>Mark all seen</span>
           </button>
           <a
-            href={buildHash('settings')}
+            href={buildHash('settings', 'alert-rules')}
             className="px-3 py-2 rounded bg-theme-card border border-theme-border text-theme-text hover:border-theme-accent transition-colors font-mono text-xs flex items-center gap-1.5"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />

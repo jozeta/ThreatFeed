@@ -470,7 +470,8 @@ for (const cve of new Set(articles.flatMap(a => a.cves || []))) {
 
 const { msf, nuclei, pocs } = await exploitsPromise;
 const exploits: Record<string, ExploitInfo> = {};
-for (const cve of new Set([...kevEntries.map(k => k.cve), ...notable.map(r => r.id), ...epssTop.map(e => e.cve)])) {
+// CVSS 7-8.9 (watchable) too, so the alert rules' "public exploit" condition can match them
+for (const cve of new Set([...kevEntries.map(k => k.cve), ...notable.map(r => r.id), ...watchable.map(r => r.id), ...epssTop.map(e => e.cve)])) {
   const info = exploitInfo(cve, msf, nuclei, pocs);
   if (info) exploits[cve] = info;
 }

@@ -75,4 +75,14 @@ describe('ruleForm', () => {
     expect(applyRuleEdit([], rule({}), false)).toBeNull();
     expect(applyRuleEdit([], rule({}), true)).toHaveLength(1);
   });
+
+  it('applyRuleEdit stamps updatedAt only when the name or conditions changed', () => {
+    const live = rule({});
+    const notifyOnly = applyRuleEdit([live], rule({ notify: true, updatedAt: 't1' }), false)!;
+    expect(notifyOnly[0]).toMatchObject({ notify: true, updatedAt: 't0' });
+    expect(applyRuleEdit([live], rule({ name: 'B', updatedAt: 't1' }), false)![0].updatedAt).toBe('t1');
+    const root = { op: 'all' as const, items: [{ field: 'cvss' as const, min: 8 }] };
+    expect(applyRuleEdit([live], rule({ root, updatedAt: 't1' }), false)![0].updatedAt).toBe('t1');
+    expect(applyRuleEdit([], rule({ updatedAt: 't1' }), true)![0].updatedAt).toBe('t1');
+  });
 });

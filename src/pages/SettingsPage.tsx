@@ -1,6 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSettings, DEFAULT_NEWSPAPER_SECTIONS } from '../context/SettingsContext';
 import { useFeeds } from '../context/FeedContext';
+import { useHashRoute } from '../hooks/useHashRoute';
 import { WATCHLIST_PRESETS } from '../services/intelligence/watchlist';
 import { AlertRulesSettings } from './settings/AlertRulesSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
@@ -50,6 +51,12 @@ const ACCENT_PRESETS = [
 export const SettingsPage: React.FC = () => {
   const { settings, updateSettings, resetSettings } = useSettings();
   const { feeds, articles } = useFeeds();
+  const [route] = useHashRoute();
+
+  // #/settings/<section> (e.g. My Feed's "Manage rules" → alert-rules) scrolls to that section's card
+  useEffect(() => {
+    if (route.sub) document.getElementById(`${route.sub}-settings`)?.scrollIntoView({ behavior: 'smooth' });
+  }, [route.sub]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newKeyword, setNewKeyword] = useState('');

@@ -57,6 +57,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, kindLocked,
   );
   const eventDriven = containsField(draft.root, 'watched');
   const lowCvss = containsField(draft.root, 'cvss', c => (c.min as number) < 7);
+  const sparseData = containsField(draft.root, 'publicExploit') || containsField(draft.root, 'epss');
   const invalid = hasEmptyGroup(draft.root) || hasInvalidCondition(kind, form);
   const count = useMemo(() => (eventDriven || invalid || previewLoading ? 0 : preview(draft)), [draft, eventDriven, invalid, previewLoading, preview]);
 
@@ -107,6 +108,11 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, kindLocked,
           New CVEs below CVSS 7 are only matched when they are in KEV or mentioned in an article.
         </p>
       )}
+      {sparseData && (
+        <p className="text-xs font-serif text-amber-600 dark:text-amber-400">
+          Public exploit data exists only for KEV and CVSS 7+ CVEs; EPSS only for KEV, CVSS 9+ and CVEs mentioned in articles.
+        </p>
+      )}
       <p className="text-xs font-serif text-theme-text-muted">
         {eventDriven
           ? 'Matches on changes to your watched CVEs'
@@ -120,6 +126,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, kindLocked,
           type="button"
           className={primaryClass}
           disabled={invalid || name.trim() === ''}
+          // applyRuleEdit keeps the old updatedAt (no re-baseline) unless the name or conditions changed
           onClick={() => onSave({ ...draft, updatedAt: new Date().toISOString() })}
         >
           Save

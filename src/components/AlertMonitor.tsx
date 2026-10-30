@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { runAlertCheck } from '../services/intelligence/alertEngine';
-import { alertSettingsFrom } from '../services/intelligence/alertRules';
+import { alertSettingsFrom, rulesNeedVulns } from '../services/intelligence/alertRules';
 import { getSettingsFromDB } from '../services/storage/indexeddb';
 import { loadAlertStore, saveAlertStore } from '../services/intelligence/alertStore';
 import { fetchEpssScores } from '../services/intelligence/cveWatch';
@@ -50,7 +50,7 @@ export function AlertMonitor(): null {
       setIsLeader(false);
     };
   }, []);
-  const needsVulns = settings.alertRules.some(r => r.enabled && r.kind === 'vulns');
+  const needsVulns = rulesNeedVulns(settings.alertRules, settings);
 
   // Again for every new snapshot, like useVulns: otherwise a long-open tab keeps checking the first vulns.json
   useEffect(() => {
@@ -65,7 +65,7 @@ export function AlertMonitor(): null {
     try {
       const s = alertSettingsFrom(latest.current.settings, await getSettingsFromDB(), new Date());
       // A Vulns rule added in another tab: load the data; its arrival re-runs the check
-      if (s.alertRules.some(r => r.enabled && r.kind === 'vulns')) void ensureVulns();
+      if (rulesNeedVulns(s.alertRules, s)) void ensureVulns();
       const watched = s.watchedCves;
       const epss = watched.length > 0 ? await fetchEpssScores(watched) : new Map<string, number>();
       const { feeds: feedList, articles: list, cveIntel: intel, vulns: data } = latest.current; // read after the await

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem,
-  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, alertSettingsFrom,
+  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, matchedVulnCves, alertSettingsFrom, rulesNeedVulns,
 } from './alertRules';
 import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord, UserSettings } from '../../types';
 import { article } from '../../test/fixtures';
@@ -90,6 +90,12 @@ describe('matchesNews', () => {
     const g = newsAll({ field: 'vendor', values: ['Fortinet'] });
     expect(matchesNews(g, article('a', { title: 'Fortinet patches bug' }), ctx())).toBe(true);
     expect(matchesNews(g, article('a', { description: 'about Fortinetx' }), ctx())).toBe(false);
+  });
+
+  it('vendor reads the same text as the "Your stack" badge (custom tags and CVEs too, not auto tags)', () => {
+    expect(matchesNews(newsAll({ field: 'vendor', values: ['Fortinet'] }), article('a', { customTags: ['Fortinet'] }), ctx())).toBe(true);
+    expect(matchesNews(newsAll({ field: 'vendor', values: ['CVE-2026-1'] }), article('a', { cves: ['CVE-2026-1'] }), ctx())).toBe(true);
+    expect(matchesNews(newsAll({ field: 'vendor', values: ['Fortinet'] }), article('a', { tags: ['Fortinet'] }), ctx())).toBe(false);
   });
 
   it('severity compares by rank', () => {
@@ -255,6 +261,31 @@ describe('sanitizeRule condition shapes', () => {
   });
 });
 
+describe('matchedVulnCves', () => {
+  const now = new Date('2026-10-30T12:00:00Z');
+  const r = (id: string, root: AlertRule['root'], over: Partial<AlertRule> = {}): AlertRule => ({
+    id, name: id, kind: 'vulns', enabled: true, notify: false, root, createdAt: 't', updatedAt: 't', ...over,
+  });
+  const items = [vuln({ cve: 'CVE-1', kev: true }), vuln({ cve: 'CVE-2', cvss: 9 }), vuln({ cve: 'CVE-3' })];
+  const lists = { watchlistKeywords: [], stackKeywords: ['Acme'], watchedCves: ['CVE-3'] };
+
+  it('collects CVEs matched by enabled, non-event-driven Vulns rules', () => {
+    const rules = [
+      r('kev', all({ field: 'kev' })),
+      r('off', all({ field: 'cvss', min: 8 }), { enabled: false }),
+      r('w', all({ field: 'watched' })),
+      r('n', { op: 'all', items: [{ field: 'hasCve' }] } as AlertRule['root'], { kind: 'news' }),
+    ];
+    expect([...matchedVulnCves(rules, lists, items, now)]).toEqual(['CVE-1']);
+  });
+
+  it('reads built-ins through their live lists', () => {
+    const builtIns = createBuiltInRules(false, now);
+    const acme = [vuln({ cve: 'CVE-9', vendor: 'Acme' })];
+    expect([...matchedVulnCves(builtIns, lists, acme, now)]).toEqual(['CVE-9']);
+  });
+});
+
 describe('alertSettingsFrom', () => {
   const now = new Date('2026-10-30T12:00:00Z');
   const memory = {
@@ -277,5 +308,25 @@ describe('alertSettingsFrom', () => {
     expect(alertSettingsFrom(memory, null, now)).toEqual(memory);
     const out = alertSettingsFrom(memory, { alertGapHours: 5, watchedCves: 'CVE-9' } as unknown as Partial<UserSettings>, now);
     expect(out).toEqual(memory);
+  });
+});
+
+describe('rulesNeedVulns', () => {
+  const now = new Date('2026-10-30T12:00:00Z');
+  const builtIns = createBuiltInRules(false, now);
+  const empty = { watchlistKeywords: ['x'], stackKeywords: [], watchedCves: [] };
+
+  it('ignores built-in Vulns rules whose live list is empty', () => {
+    expect(rulesNeedVulns(builtIns, empty)).toBe(false);
+    expect(rulesNeedVulns(builtIns, { ...empty, stackKeywords: ['Cisco'] })).toBe(true);
+    expect(rulesNeedVulns(builtIns, { ...empty, watchedCves: ['CVE-1'] })).toBe(true);
+  });
+
+  it('needs vulns for any enabled custom Vulns rule, but not a disabled one', () => {
+    const custom: AlertRule = {
+      id: 'c', name: 'c', kind: 'vulns', enabled: true, notify: false, root: { op: 'all', items: [{ field: 'kev' }] }, createdAt: 't', updatedAt: 't',
+    };
+    expect(rulesNeedVulns([...builtIns, custom], empty)).toBe(true);
+    expect(rulesNeedVulns([...builtIns, { ...custom, enabled: false }], empty)).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ import { useFeeds } from '../../context/FeedContext';
 import { useVulns } from '../../hooks/useVulns';
 import { AlertRule, BuiltInRule } from '../../types';
 import {
-  ALERT_GAP_OPTIONS, buildVulnItems, builtInTerms, duplicateRule, matchesNews, matchesVuln, resolveRoot,
+  ALERT_GAP_OPTIONS, buildVulnItems, builtInTerms, duplicateRule, matchedVulnCves, matchesNews, matchesVuln, resolveRoot,
 } from '../../services/intelligence/alertRules';
 import { applyRuleEdit, containsField } from '../../services/intelligence/ruleForm';
 import { notificationsSupported, requestNotificationPermission } from '../../services/notifications';
@@ -39,14 +39,19 @@ export const AlertRulesSettings: React.FC = () => {
   );
   const vulnItems = useMemo(() => (vulns ? Array.from(buildVulnItems(vulns, cveIntel).values()) : null), [vulns, cveIntel]);
   const categories = useMemo(() => new Map(feeds.map(f => [f.id, f.category])), [feeds]);
+  // For previewing "CVE matches a vulnerability rule": CVEs the enabled Vulns rules match right now
+  const vulnRuleCves = useMemo(
+    () => matchedVulnCves(rules, lists, vulnItems ?? [], new Date()),
+    [rules, lists, vulnItems],
+  );
 
   /** Current matches for a rule; built-ins are read through their live lists */
   const countMatches = useCallback((rule: AlertRule): number => {
     const root = resolveRoot(rule, lists);
-    const ctx = { now: new Date(), feedCategory: (id: string) => categories.get(id) };
+    const ctx = { now: new Date(), feedCategory: (id: string) => categories.get(id), vulnRuleMatches: (cve: string) => vulnRuleCves.has(cve) };
     if (rule.kind === 'news') return articles.filter(a => matchesNews(root as never, a, ctx)).length;
     return (vulnItems ?? []).filter(v => matchesVuln(root as never, v, ctx)).length;
-  }, [lists, categories, articles, vulnItems]);
+  }, [lists, categories, articles, vulnItems, vulnRuleCves]);
 
   const setRules = (next: AlertRule[]) => updateSettings({ alertRules: next });
   // Toggles from the list leave updatedAt alone; only saving from the editor stamps it
@@ -95,7 +100,7 @@ export const AlertRulesSettings: React.FC = () => {
   };
 
   return (
-    <section className={sectionClass}>
+    <section id="alert-rules-settings" className={sectionClass}>
       <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
         <Bell className="w-5 h-5 text-amber-500" />
         <div>
