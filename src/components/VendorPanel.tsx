@@ -4,7 +4,7 @@ import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { useMsrc, useVulns } from '../hooks/useVulns';
 import { goToPage, parseHash, setHashParams } from '../hooks/useHashRoute';
-import { fetchWikiSummary, vendorSummary, VendorSummary, WikiSummary } from '../services/intelligence/vendor';
+import { canonicalVendor, fetchWikiSummary, vendorSummary, VendorSummary, WikiSummary } from '../services/intelligence/vendor';
 import { severityFromScore } from '../services/intelligence/vulns';
 import { formatRelativeTime } from '../utils/date';
 import { SectionTitle } from '../pages/incidents/shared';
@@ -100,7 +100,7 @@ interface VendorPanelProps {
 /** One vendor at a glance: what Wikipedia says, its KEV history, new CVEs, news and advisories. */
 export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, inStack, hidden, onToggleStack, onToggleHidden, onOpenCve, onOpenProduct, onOpenArticle, onClose, loading }) => {
   return (
-    <div className="fixed inset-0 z-[45] flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={s.name}>
+    <div className="fixed inset-0 z-[55] flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={s.name}>
       <div className="w-full max-w-xl h-full overflow-y-auto modal-glass [--glass-base:var(--color-bg)] !border-y-0 !border-r-0 p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -260,7 +260,7 @@ interface HostProps {
 /** Mounted once by the app for ?vendor=…; closing removes the parameter (and any CVE opened from the panel) */
 const VendorPanelHost: React.FC<HostProps> = (props) => {
   const vulns = useVulns();
-  return props.vendor.toLowerCase() === 'microsoft'
+  return canonicalVendor(props.vendor) === 'Microsoft'
     ? <WithMsrc>{(msrc) => <VendorView {...props} vulns={vulns} msrc={msrc} />}</WithMsrc>
     : <VendorView {...props} vulns={vulns} />;
 };
@@ -273,10 +273,13 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
   const close = () => setHashParams({ vendor: '', cve: '' });
   const coveredRef = useRef(covered);
   coveredRef.current = covered;
-  // Capture phase: this runs before a CVE panel on top closes itself, so it can tell it was there
+  // Capture phase: this runs before a CVE panel on top closes itself, so it can tell it was there. When the
+  // vendor panel is topmost (it sits above actor, malware and group panels) the key stops here, so a page
+  // panel underneath stays open for the next Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || coveredRef.current || parseHash(window.location.hash).params.get('cve')) return;
+      e.stopPropagation();
       setHashParams({ vendor: '' });
     };
     window.addEventListener('keydown', onKey, true);

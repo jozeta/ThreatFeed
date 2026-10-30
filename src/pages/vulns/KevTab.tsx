@@ -253,7 +253,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
             <SectionTitle>Vendors</SectionTitle>
             <BarList rows={vendors.slice(0, 10).map(([v, n]) => ({
               key: v, label: v, value: n, active: vendor === v, onClick: () => toggle(vendor, v, setVendor),
-              action: <VendorButton name={v} className="p-0.5 text-theme-text-muted shrink-0"><Building2 className="w-3 h-3" aria-label={`${v} vendor page`} /></VendorButton>,
+              action: <VendorButton name={v} label={`${v} vendor page`} className="p-0.5 text-theme-text-muted shrink-0"><Building2 className="w-3 h-3" aria-hidden="true" /></VendorButton>,
             }))} />
           </div>
           <div>

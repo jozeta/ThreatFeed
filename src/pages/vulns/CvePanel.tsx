@@ -88,8 +88,9 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
     ...(nvd?.assigner ? [['Assigned by', nvd.assigner] as [string, React.ReactNode]] : []),
   ];
 
+  // z-60: above page panels (z-50) and the vendor panel (z-55) it can be opened from
   return (
-    <div className="fixed inset-0 z-50 flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={cve}>
+    <div className="fixed inset-0 z-[60] flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={cve}>
       <div className="w-full max-w-xl h-full overflow-y-auto modal-glass [--glass-base:var(--color-bg)] !border-y-0 !border-r-0 p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div>

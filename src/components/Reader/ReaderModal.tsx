@@ -179,7 +179,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex justify-center p-0 sm:p-4 md:p-6 animate-fadeIn">
+    <div className="fixed inset-0 z-[70] overflow-y-auto modal-backdrop flex justify-center p-0 sm:p-4 md:p-6 animate-fadeIn">
       {/* Background click overlay */}
       <div className="fixed inset-0" onClick={onClose} />
 

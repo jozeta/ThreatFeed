@@ -34,6 +34,27 @@ export interface VendorSummary {
   patchTuesday?: { id: string; title: string; released: string; total: number; critical: number; exploited: number; disclosed: number; rce: number };
 }
 
+const SEPARATOR = /[\s_-]/;
+
+/**
+ * Whether an NVD "vendor product" pair starts with the vendor. The vendor has to lead, or "Linux" would claim
+ * "debian debian linux"; spaces, hyphens and underscores don't count, since CPE names write "checkpoint" and
+ * "paloaltonetworks"; and a word must end there, so "Fortinet" doesn't claim "fortinetwork".
+ */
+export function ledByVendor(product: string, vendor: string): boolean {
+  const p = product.toLowerCase();
+  const v = vendor.toLowerCase().replace(/[\s_-]+/g, '');
+  if (!v) return false;
+  let i = 0;
+  for (let j = 0; j < v.length; i++) {
+    if (i >= p.length) return false;
+    if (SEPARATOR.test(p[i])) continue;
+    if (p[i] !== v[j]) return false;
+    j++;
+  }
+  return i === p.length || !/\w/.test(p[i]);
+}
+
 const newestFirst = (a: Article, b: Article) => b.publishedAt.localeCompare(a.publishedAt);
 
 /**
@@ -43,8 +64,7 @@ const newestFirst = (a: Article, b: Article) => b.publishedAt.localeCompare(a.pu
 export function vendorSummary(rawName: string, vulns: VulnData | null, articles: Article[], msrc?: MsrcData | null, now = new Date()): VendorSummary {
   const name = canonicalVendor(rawName);
   const key = name.toLowerCase();
-  // NVD products are "vendor product" pairs: the vendor has to lead, or "Linux" would claim "debian debian linux"
-  const productsMatch = (products: string[] | undefined) => (products ?? []).some((p) => containsTerm(p.slice(0, name.length + 1), name));
+  const productsMatch = (products: string[] | undefined) => (products ?? []).some((p) => ledByVendor(p, name));
   const day = (days: number) => new Date(now.getTime() - days * DAY_MS).toISOString().slice(0, 10);
 
   const byVendor = (k: KevEntry) => canonicalVendor(k.vendor).toLowerCase() === key;

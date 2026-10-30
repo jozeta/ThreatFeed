@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalVendor, parseWikiSummary, vendorSummary, wikiTitle } from './vendor';
+import { canonicalVendor, ledByVendor, parseWikiSummary, vendorSummary, wikiTitle } from './vendor';
 import { Article, CveRecord, KevEntry, MsrcData, VulnData } from '../../types';
 
 const NOW = new Date('2026-10-30T12:00:00Z');
@@ -25,6 +25,8 @@ const vulns = {
     kev('CVE-2026-0006', 'Microsoft', '2026-10-01', { product: 'Windows' }),
     // Runs on a Fortinet product's platform list, but the vendor isn't the one leading the pair
     kev('CVE-2026-0007', 'Debian', '2026-10-02', { products: ['debian fortinet connector'] }),
+    kev('CVE-2026-0008', 'Check Point', '2026-10-03', { product: 'Quantum' }),
+    kev('CVE-2026-0009', 'Unknown', '2026-10-04', { products: ['checkpoint quantum security gateway'] }),
   ],
   notable: [
     cve('CVE-2026-1001', '2026-10-28T10:00:00Z', ['Fortinet FortiOS']),
@@ -49,6 +51,23 @@ describe('canonicalVendor', () => {
     expect(canonicalVendor('apple inc.')).toBe('Apple');
     expect(canonicalVendor('Google LLC')).toBe('Google');
     expect(canonicalVendor('  Fortinet ')).toBe('Fortinet');
+  });
+});
+
+describe('ledByVendor', () => {
+  it('compares the leading vendor ignoring case, spaces, hyphens and underscores', () => {
+    expect(ledByVendor('checkpoint quantum security gateway', 'Check Point')).toBe(true);
+    expect(ledByVendor('Check Point Quantum', 'Check Point')).toBe(true);
+    expect(ledByVendor('paloaltonetworks pan-os', 'Palo Alto Networks')).toBe(true);
+    expect(ledByVendor('dlink dir-859', 'D-Link')).toBe(true);
+    expect(ledByVendor('d_link dir-859', 'D-Link')).toBe(true);
+  });
+
+  it('needs a word boundary after the vendor and the vendor in front', () => {
+    expect(ledByVendor('fortinetwork router', 'Fortinet')).toBe(false);
+    expect(ledByVendor('debian debian linux', 'Linux')).toBe(false);
+    expect(ledByVendor('fortinet', 'Fortinet')).toBe(true);
+    expect(ledByVendor('', 'Fortinet')).toBe(false);
   });
 });
 
@@ -106,6 +125,10 @@ describe('vendorSummary', () => {
     expect(ms.kevTotal).toBe(1);
     expect(ms.newsMentions.map((a) => a.id)).toEqual(['a5']);
     expect(ms.patchTuesday).toEqual({ id: '2026-Oct', title: 'October 2026', released: '2026-10-13', total: 2, critical: 1, exploited: 1, disclosed: 1, rce: 1 });
+  });
+
+  it('matches NVD vendor spellings without spaces', () => {
+    expect(vendorSummary('Check Point', vulns, [], undefined, NOW).recentKev.map((k) => k.cve)).toEqual(['CVE-2026-0009', 'CVE-2026-0008']);
   });
 
   it('copes with no data at all', () => {
