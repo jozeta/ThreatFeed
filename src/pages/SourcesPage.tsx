@@ -4,6 +4,7 @@ import { useFeeds } from '../context/FeedContext';
 import { useFilter } from '../context/FilterContext';
 import { exportFeedsToOPML, parseOPML } from '../services/rss/opml';
 import { isValidFeedUrl } from '../services/rss/sanitizer';
+import { googleNewsFeedUrl, isKeywordMonitor } from '../services/rss/keywordMonitor';
 import {
   Radio,
   Plus,
@@ -17,8 +18,16 @@ import {
   AlertTriangle,
   ExternalLink,
   Layers,
+  Search,
   X
 } from 'lucide-react';
+
+const MONITOR_LOCALES = [
+  { label: 'English (US)', lang: 'en-US', country: 'US' },
+  { label: 'English (UK)', lang: 'en-GB', country: 'GB' },
+  { label: 'Svenska (SE)', lang: 'sv-SE', country: 'SE' },
+  { label: 'Deutsch (DE)', lang: 'de-DE', country: 'DE' },
+];
 
 interface SourcesPageProps {
   onSelectFeed: (feedId: string) => void;
@@ -51,6 +60,12 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
   const [formTags, setFormTags] = useState('');
   const [formError, setFormError] = useState('');
 
+  // Keyword monitor form state
+  const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
+  const [monitorQueryText, setMonitorQueryText] = useState('');
+  const [monitorLocale, setMonitorLocale] = useState(0);
+  const [monitorError, setMonitorError] = useState('');
+
   // Group feeds by category
   const categories = Array.from(new Set(feeds.map((f) => f.category)));
 
@@ -74,6 +89,31 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
     setFormTags('');
     setFormError('');
     setIsAddModalOpen(true);
+  };
+
+  const handleOpenMonitorModal = () => {
+    setMonitorQueryText('');
+    setMonitorLocale(0);
+    setMonitorError('');
+    setIsMonitorModalOpen(true);
+  };
+
+  const handleSaveMonitor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = monitorQueryText.trim();
+    if (!query) {
+      setMonitorError('Enter a search query.');
+      return;
+    }
+    const { lang, country } = MONITOR_LOCALES[monitorLocale];
+    await addCustomFeed({
+      name: `Monitor: ${query}`,
+      url: googleNewsFeedUrl(query, { lang, country }),
+      category: 'Keyword Monitors',
+      tags: ['monitor'],
+      enabled: true,
+    });
+    setIsMonitorModalOpen(false);
   };
 
   const handleOpenEditModal = (feed: Feed) => {
@@ -191,6 +231,15 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
           </button>
 
           <button
+            onClick={handleOpenMonitorModal}
+            className="px-3 py-2 rounded bg-theme-card border border-theme-border text-theme-text hover:border-theme-accent transition-colors flex items-center gap-1.5"
+            title="Follow a keyword or phrase via Google News"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span>Add Keyword Monitor</span>
+          </button>
+
+          <button
             onClick={handleExportOPML}
             className="px-3 py-2 rounded bg-theme-card border border-theme-border text-theme-text hover:border-theme-accent transition-colors flex items-center gap-1.5"
             title="Export feeds as standard OPML 2.0"
@@ -249,6 +298,11 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
                     >
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0">
+                          {isKeywordMonitor(feed) && (
+                            <span className="inline-block mb-1 px-1.5 py-0.5 rounded bg-theme-accent/15 text-theme-accent font-mono text-[10px] font-bold uppercase">
+                              Monitor
+                            </span>
+                          )}
                           <h3
                             onClick={() => handleFilterBySource(feed.id)}
                             className="font-serif text-base font-bold text-theme-text hover:text-theme-accent transition-colors cursor-pointer truncate"
@@ -444,6 +498,76 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
                   className="px-4 py-2 rounded bg-theme-accent text-white font-bold hover:bg-theme-accent-hover"
                 >
                   {editingFeed ? 'Update Feed' : 'Add Feed'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Add Keyword Monitor Modal */}
+      {isMonitorModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+          <div className="modal-glass w-full max-w-lg rounded-xl p-6 relative">
+            <button
+              onClick={() => setIsMonitorModalOpen(false)}
+              className="absolute top-4 right-4 text-theme-text-muted hover:text-theme-text"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="font-serif text-xl font-bold text-theme-text mb-1">Add Keyword Monitor</h3>
+            <p className="text-xs font-mono text-theme-text-muted mb-4">
+              Follow a keyword or phrase via Google News. Quotes and OR work as in Google News.
+            </p>
+
+            {monitorError && (
+              <div className="mb-4 p-3 rounded bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-mono">
+                {monitorError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveMonitor} className="space-y-4 font-mono text-xs">
+              <div>
+                <label className="block text-theme-text-muted uppercase mb-1">Query</label>
+                <input
+                  type="text"
+                  value={monitorQueryText}
+                  onChange={(e) => setMonitorQueryText(e.target.value)}
+                  placeholder='e.g. "Acme Corp" OR acme.com breach'
+                  className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-theme-text focus:outline-none focus:border-theme-accent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-theme-text-muted uppercase mb-1">Language / Region</label>
+                <select
+                  value={monitorLocale}
+                  onChange={(e) => setMonitorLocale(Number(e.target.value))}
+                  className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-theme-text focus:outline-none focus:border-theme-accent"
+                >
+                  {MONITOR_LOCALES.map((l, i) => (
+                    <option key={l.lang} value={i}>{l.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-theme-text-muted">
+                Google News is fetched through your CORS gateway; if it's blocked, Feed Health will show it.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-theme-border">
+                <button
+                  type="button"
+                  onClick={() => setIsMonitorModalOpen(false)}
+                  className="px-4 py-2 rounded bg-theme-card border border-theme-border text-theme-text hover:bg-theme-surface"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded bg-theme-accent text-white font-bold hover:bg-theme-accent-hover"
+                >
+                  Add Monitor
                 </button>
               </div>
             </form>
