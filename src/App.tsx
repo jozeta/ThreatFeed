@@ -218,7 +218,6 @@ export const App: React.FC = () => {
             vendor={vendor}
             cve={route.params.get('cve') ?? ''}
             page={activeTab}
-            covered={Boolean(activeArticle || isShortcutsOpen)}
             onOpenArticle={handleOpenArticle}
           />
         </Suspense>

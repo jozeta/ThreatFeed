@@ -9,7 +9,8 @@ import { VendorButton } from '../../components/VendorLink';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
 import { EpssValue, ExploitBadges, SeverityPill, SsvcBadge, vectorText } from './shared';
-import { X, ExternalLink, Skull, Star } from 'lucide-react';
+import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
+import { ExternalLink, Skull, Star } from 'lucide-react';
 
 interface CvePanelProps {
   cve: string;
@@ -53,12 +54,6 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
     return () => { cancelled = true; };
   }, [cve, nvd?.description]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const trend = history.length >= 2 ? history[history.length - 1].epss - history[0].epss : 0;
   const facts: [string, React.ReactNode][] = [
     ['EPSS (30-day exploitation probability)', (
@@ -88,113 +83,111 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
     ...(nvd?.assigner ? [['Assigned by', nvd.assigner] as [string, React.ReactNode]] : []),
   ];
 
-  // z-60: above page panels (z-50) and the vendor panel (z-55) it can be opened from
+  // Level 2: above the vendor panel it can be opened from, also when both come from one link
   return (
-    <div className="fixed inset-0 z-[60] flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={cve}>
-      <div className="w-full max-w-xl h-full overflow-y-auto modal-glass [--glass-base:var(--color-bg)] !border-y-0 !border-r-0 p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-mono text-2xl font-extrabold text-theme-text">{cve}</h2>
-            {kev && <p className="font-serif text-sm font-bold text-theme-text mt-1">{kev.name}</p>}
-            <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] font-mono font-bold uppercase">
-              {kev && <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white">Known exploited (CISA KEV)</span>}
-              {kev?.ransomware && <span className="px-1.5 py-0.5 rounded bg-theme-text text-theme-bg inline-flex items-center gap-1"><Skull className="w-3 h-3" /> Used by ransomware</span>}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={onToggleWatch}
-              aria-pressed={watched}
-              title={watched ? 'Stop watching this CVE' : 'Watch: get alerts when it lands in KEV, its EPSS jumps or new articles mention it'}
-              className={`flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono font-bold transition-colors ${watched ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300' : 'border-theme-border text-theme-text-muted hover:text-theme-text'}`}
-            >
-              <Star className={`w-3.5 h-3.5 ${watched ? 'fill-current' : ''}`} /> {watched ? 'Watching' : 'Watch'}
-            </button>
-            <button onClick={onClose} className="p-1 text-theme-text-muted hover:text-theme-text" aria-label="Close"><X className="w-5 h-5" /></button>
-          </div>
-        </div>
-
-        {description === undefined
-          ? <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading description from NVD…</p>
-          : description && <p className="text-sm font-serif text-theme-text leading-relaxed">{description}</p>}
-        {kev && <p className="text-xs font-mono text-theme-text-muted"><VendorButton name={kev.vendor} className="font-bold text-theme-text" /> · {kev.product}</p>}
-
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-mono">
-          {facts.map(([label, value]) => (
-            <React.Fragment key={label}>
-              <dt className="text-theme-text-muted">{label}</dt>
-              <dd className="text-theme-text">{value}</dd>
-            </React.Fragment>
-          ))}
-        </dl>
-
-        {exploit && (
-          <div>
-            <SectionTitle>Public exploit code</SectionTitle>
-            <div className="mb-2"><ExploitBadges info={exploit} /></div>
-            <ul className="space-y-1 text-xs font-mono">
-              {exploit.msf?.map((m) => (
-                <li key={m}>
-                  <a href={`https://github.com/rapid7/metasploit-framework/blob/master/modules/${m}.rb`} target="_blank" rel="noopener noreferrer" className="text-theme-accent hover:underline inline-flex items-center gap-1">
-                    Metasploit: {m} <ExternalLink className="w-3 h-3" />
-                  </a>
-                </li>
-              ))}
-              {exploit.nuclei && (
-                <li>
-                  <a href={`https://github.com/projectdiscovery/nuclei-templates/blob/main/${exploit.nuclei}`} target="_blank" rel="noopener noreferrer" className="text-theme-accent hover:underline inline-flex items-center gap-1">
-                    Nuclei detection template <ExternalLink className="w-3 h-3" />
-                  </a>
-                </li>
-              )}
-              {exploit.pocUrls?.map((u) => (
-                <li key={u}>
-                  <a href={u} target="_blank" rel="noopener noreferrer nofollow" className="text-theme-accent hover:underline inline-flex items-center gap-1">
-                    PoC: {u.replace('https://github.com/', '')} <ExternalLink className="w-3 h-3" />
-                  </a>
-                </li>
-              ))}
-              {(exploit.pocs ?? 0) > (exploit.pocUrls?.length ?? 0) && <li className="text-theme-text-muted">…and {exploit.pocs! - exploit.pocUrls!.length} more proof-of-concept repositories</li>}
-            </ul>
-            <p className="mt-2 text-[10px] font-serif text-theme-text-muted">Third-party code from GitHub: review before running anything, and only against systems you're authorized to test.</p>
-          </div>
-        )}
-
-        {groups.length > 0 && (
-          <div>
-            <SectionTitle>Exploited by ransomware groups</SectionTitle>
-            <div className="flex flex-wrap gap-2">
-              {groups.map((g) => (
-                <a key={g} href={buildHash('ransomware', '', new URLSearchParams({ group: g.toLowerCase() }))} className="px-2 py-1 rounded border border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-xs font-mono font-bold hover:underline inline-flex items-center gap-1">
-                  <Skull className="w-3 h-3" /> {g}
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-4 text-xs font-mono">
-          <a href={nvdUrl(cve)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-theme-accent hover:underline">NVD <ExternalLink className="w-3 h-3" /></a>
-          <a href={`https://www.cve.org/CVERecord?id=${encodeURIComponent(cve)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-theme-accent hover:underline">CVE.org <ExternalLink className="w-3 h-3" /></a>
-          {advisories.map((a) => (
-            <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-theme-accent hover:underline">{a.id} <ExternalLink className="w-3 h-3" /></a>
-          ))}
-        </div>
-
+    <SidePanel onClose={onClose} title={cve} level={2}>
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <SectionTitle>In the news ({news.length})</SectionTitle>
-          {news.length ? (
-            <ul className="space-y-2">
-              {news.slice(0, 15).map((a) => (
-                <li key={a.id}>
-                  <button onClick={() => onOpenArticle(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent">{a.title}</button>
-                  <p className="text-[11px] font-mono text-theme-text-muted">{a.sourceName} · {formatRelativeTime(a.publishedAt)}</p>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="text-xs font-serif italic text-theme-text-muted">No articles in your feeds mention {cve}.</p>}
+          <h2 className="font-mono text-2xl font-extrabold text-theme-text">{cve}</h2>
+          {kev && <p className="font-serif text-sm font-bold text-theme-text mt-1">{kev.name}</p>}
+          <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] font-mono font-bold uppercase">
+            {kev && <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white">Known exploited (CISA KEV)</span>}
+            {kev?.ransomware && <span className="px-1.5 py-0.5 rounded bg-theme-text text-theme-bg inline-flex items-center gap-1"><Skull className="w-3 h-3" /> Used by ransomware</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={onToggleWatch}
+            aria-pressed={watched}
+            title={watched ? 'Stop watching this CVE' : 'Watch: get alerts when it lands in KEV, its EPSS jumps or new articles mention it'}
+            className={`flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono font-bold transition-colors ${watched ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300' : 'border-theme-border text-theme-text-muted hover:text-theme-text'}`}
+          >
+            <Star className={`w-3.5 h-3.5 ${watched ? 'fill-current' : ''}`} /> {watched ? 'Watching' : 'Watch'}
+          </button>
+          <PanelCloseButton />
         </div>
       </div>
-    </div>
+
+      {description === undefined
+        ? <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading description from NVD…</p>
+        : description && <p className="text-sm font-serif text-theme-text leading-relaxed">{description}</p>}
+      {kev && <p className="text-xs font-mono text-theme-text-muted"><VendorButton name={kev.vendor} className="font-bold text-theme-text" /> · {kev.product}</p>}
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-mono">
+        {facts.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <dt className="text-theme-text-muted">{label}</dt>
+            <dd className="text-theme-text">{value}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+
+      {exploit && (
+        <div>
+          <SectionTitle>Public exploit code</SectionTitle>
+          <div className="mb-2"><ExploitBadges info={exploit} /></div>
+          <ul className="space-y-1 text-xs font-mono">
+            {exploit.msf?.map((m) => (
+              <li key={m}>
+                <a href={`https://github.com/rapid7/metasploit-framework/blob/master/modules/${m}.rb`} target="_blank" rel="noopener noreferrer" className="text-theme-accent hover:underline inline-flex items-center gap-1">
+                  Metasploit: {m} <ExternalLink className="w-3 h-3" />
+                </a>
+              </li>
+            ))}
+            {exploit.nuclei && (
+              <li>
+                <a href={`https://github.com/projectdiscovery/nuclei-templates/blob/main/${exploit.nuclei}`} target="_blank" rel="noopener noreferrer" className="text-theme-accent hover:underline inline-flex items-center gap-1">
+                  Nuclei detection template <ExternalLink className="w-3 h-3" />
+                </a>
+              </li>
+            )}
+            {exploit.pocUrls?.map((u) => (
+              <li key={u}>
+                <a href={u} target="_blank" rel="noopener noreferrer nofollow" className="text-theme-accent hover:underline inline-flex items-center gap-1">
+                  PoC: {u.replace('https://github.com/', '')} <ExternalLink className="w-3 h-3" />
+                </a>
+              </li>
+            ))}
+            {(exploit.pocs ?? 0) > (exploit.pocUrls?.length ?? 0) && <li className="text-theme-text-muted">…and {exploit.pocs! - exploit.pocUrls!.length} more proof-of-concept repositories</li>}
+          </ul>
+          <p className="mt-2 text-[10px] font-serif text-theme-text-muted">Third-party code from GitHub: review before running anything, and only against systems you're authorized to test.</p>
+        </div>
+      )}
+
+      {groups.length > 0 && (
+        <div>
+          <SectionTitle>Exploited by ransomware groups</SectionTitle>
+          <div className="flex flex-wrap gap-2">
+            {groups.map((g) => (
+              <a key={g} href={buildHash('ransomware', '', new URLSearchParams({ group: g.toLowerCase() }))} className="px-2 py-1 rounded border border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-xs font-mono font-bold hover:underline inline-flex items-center gap-1">
+                <Skull className="w-3 h-3" /> {g}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-4 text-xs font-mono">
+        <a href={nvdUrl(cve)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-theme-accent hover:underline">NVD <ExternalLink className="w-3 h-3" /></a>
+        <a href={`https://www.cve.org/CVERecord?id=${encodeURIComponent(cve)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-theme-accent hover:underline">CVE.org <ExternalLink className="w-3 h-3" /></a>
+        {advisories.map((a) => (
+          <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-theme-accent hover:underline">{a.id} <ExternalLink className="w-3 h-3" /></a>
+        ))}
+      </div>
+
+      <div>
+        <SectionTitle>In the news ({news.length})</SectionTitle>
+        {news.length ? (
+          <ul className="space-y-2">
+            {news.slice(0, 15).map((a) => (
+              <li key={a.id}>
+                <button onClick={() => onOpenArticle(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent">{a.title}</button>
+                <p className="text-[11px] font-mono text-theme-text-muted">{a.sourceName} · {formatRelativeTime(a.publishedAt)}</p>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs font-serif italic text-theme-text-muted">No articles in your feeds mention {cve}.</p>}
+      </div>
+    </SidePanel>
   );
 };

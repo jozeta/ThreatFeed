@@ -425,7 +425,7 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
             }
           }}
         >
-          <div className="modal-glass w-full max-w-lg rounded-xl p-6 relative">
+          <div className="glass-modal w-full max-w-lg rounded-xl p-6 relative">
             <button
               onClick={() => {
                 setIsAddModalOpen(false);
@@ -534,7 +534,7 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
             if (e.target === e.currentTarget) setIsMonitorModalOpen(false);
           }}
         >
-          <div className="modal-glass w-full max-w-lg rounded-xl p-6 relative">
+          <div className="glass-modal w-full max-w-lg rounded-xl p-6 relative">
             <button
               onClick={() => setIsMonitorModalOpen(false)}
               className="absolute top-4 right-4 text-theme-text-muted hover:text-theme-text"

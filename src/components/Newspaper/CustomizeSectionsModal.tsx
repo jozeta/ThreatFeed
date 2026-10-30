@@ -62,9 +62,9 @@ export const CustomizeSectionsModal: React.FC<CustomizeSectionsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
       <div
-        className="modal-glass [--glass-base:var(--color-card)] rounded-xl max-w-xl w-full max-h-[85vh] flex flex-col overflow-hidden text-theme-text"
+        className="glass-modal rounded-xl max-w-xl w-full max-h-[85vh] flex flex-col overflow-hidden text-theme-text"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

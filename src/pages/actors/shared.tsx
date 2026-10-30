@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { ActorsData, Article } from '../../types';
 import { Mentions } from '../../services/intelligence/actors';
 import { Sparkline } from '../../components/Common/Sparkline';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
-import { X, ExternalLink } from 'lucide-react';
+import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
+import { ExternalLink } from 'lucide-react';
 
 export const chipLink = 'px-2 py-1 rounded border text-xs font-mono hover:underline inline-flex items-center gap-1';
 
@@ -16,25 +17,17 @@ export function actorByName(data: ActorsData | null, name: string) {
 
 /** Side panel shell shared by the actor and malware panels, styled like the ransomware group panel */
 export const ProfilePanel: React.FC<{ title: string; label: string; subtitle?: React.ReactNode; onClose: () => void; children: React.ReactNode }> = ({ title, label, subtitle, onClose, children }) => {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={label}>
-      <div className="w-full max-w-xl h-full overflow-y-auto modal-glass [--glass-base:var(--color-bg)] !border-y-0 !border-r-0 p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="font-serif text-2xl font-extrabold text-theme-text break-words">{title}</h2>
-            {subtitle}
-          </div>
-          <button onClick={onClose} className="p-1 text-theme-text-muted hover:text-theme-text" aria-label="Close"><X className="w-5 h-5" /></button>
+    <SidePanel onClose={onClose} title={label}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="font-serif text-2xl font-extrabold text-theme-text break-words">{title}</h2>
+          {subtitle}
         </div>
-        {children}
+        <PanelCloseButton />
       </div>
-    </div>
+      {children}
+    </SidePanel>
   );
 };
 

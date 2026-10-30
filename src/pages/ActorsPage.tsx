@@ -46,8 +46,6 @@ export const ActorsPage: React.FC<{ onOpenArticle: (article: Article) => void }>
     navigate('actors', route.sub, params, true);
   }, [navigate, route.sub]);
   const readArticle = (a: Article) => { closePanel(...PANELS); onOpenArticle(a); };
-  // Escape reaches every open panel; with a CVE open on top, only the CVE panel should close
-  const closeUnlessCve = (key: 'actor' | 'malware') => () => { if (!parseHash(window.location.hash).params.get('cve')) closePanel(key); };
 
   // Counted here rather than in the snapshot, so the user's own feeds count too
   const mentions = useMemo(() => ({
@@ -180,7 +178,7 @@ export const ActorsPage: React.FC<{ onOpenArticle: (article: Article) => void }>
           onOpenMalware={(id) => openPanel('malware', id)}
           onOpenCve={(c) => openPanel('cve', c)}
           onOpenArticle={readArticle}
-          onClose={closeUnlessCve('actor')}
+          onClose={() => closePanel('actor')}
         />
       )}
       {data && openMalware && (
@@ -191,7 +189,7 @@ export const ActorsPage: React.FC<{ onOpenArticle: (article: Article) => void }>
           onOpenActor={(id) => openPanel('actor', id)}
           onOpenCve={(c) => openPanel('cve', c)}
           onOpenArticle={readArticle}
-          onClose={closeUnlessCve('malware')}
+          onClose={() => closePanel('malware')}
         />
       )}
       {cve && <CvePanelHost cve={cve} articles={articles} onOpenArticle={readArticle} onClose={() => closePanel('cve')} />}

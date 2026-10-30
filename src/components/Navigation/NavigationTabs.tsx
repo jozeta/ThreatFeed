@@ -273,7 +273,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
         </nav>
         {moreOpen && (
           <div className="sm:hidden fixed inset-0 z-50 flex items-end modal-backdrop" onClick={() => setMoreOpen(false)} role="dialog" aria-modal="true" aria-label="More pages">
-            <div className="w-full modal-glass [--glass-base:var(--color-surface)] rounded-t-xl !border-x-0 !border-b-0 p-3 pb-6 safe-area-pb" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full glass-modal rounded-t-xl !border-x-0 !border-b-0 p-3 pb-6 safe-area-pb" onClick={(e) => e.stopPropagation()}>
               <ul className="grid grid-cols-3 gap-2">
                 {mobileMore.map((tab) => (
                   <li key={tab.id}>

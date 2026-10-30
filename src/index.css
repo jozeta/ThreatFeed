@@ -218,34 +218,132 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   FROSTED MODALS
-   .modal-backdrop is the dark grey overlay (same in light and dark themes);
-   .modal-glass is the panel on top of it. --glass-base (set by a utility) picks the panel colour token, default surface.
+   GLASS PANELS AND MODALS
+   The reference glass: clear and strongly blurred, a faint white tint, a thin bright edge and a soft shadow.
+   .glass-panel is a side panel (SidePanel), .glass-modal a centred modal. .panel-backdrop dims only the page
+   left of a side panel, so the panel's blur shows the page itself; .modal-backdrop dims the whole page.
    ───────────────────────────────────────────────────────────── */
-.modal-backdrop {
-  background-color: rgb(24 26 30 / 0.72);
-  -webkit-backdrop-filter: blur(6px) saturate(140%);
-  backdrop-filter: blur(6px) saturate(140%);
+.glass-panel,
+.glass-modal {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+/* Light theme: on white the bright edge would vanish, and the faint tint leaves dark text unreadable where the
+   panel passes over a dark image or card, so the white is lifted. Dark theme: a soft shadow keeps light text
+   legible over bright patches (thumbnails) in the blur */
+.light .glass-panel,
+.light .glass-modal {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.dark .glass-panel,
+.dark .glass-modal {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
+}
+
+/* Inner cards keep only a hint of fill, so the glass reads as one sheet */
+.glass-panel :is(.bg-theme-surface, .bg-theme-card),
+.glass-modal :is(.bg-theme-surface, .bg-theme-card) {
+  background-color: rgb(255 255 255 / 0.04);
+}
+.light .glass-panel :is(.bg-theme-surface, .bg-theme-card),
+.light .glass-modal :is(.bg-theme-surface, .bg-theme-card) {
+  background-color: rgb(0 0 0 / 0.03);
+}
+
+/* Without backdrop-filter the clear glass would leave text on the bare page */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .modal-backdrop {
-    background-color: rgb(24 26 30 / 0.85);
+  .glass-panel,
+  .glass-modal {
+    background: var(--color-surface);
   }
 }
 
-.modal-glass {
-  background-color: color-mix(in srgb, var(--glass-base, var(--color-surface)) 94%, transparent);
-  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.06), transparent 40%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgb(255 255 255 / 0.08);
-  box-shadow: 0 24px 64px -12px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.06);
+.modal-backdrop,
+.panel-backdrop {
+  background-color: rgb(24 26 30 / 0.55);
 }
 
-.light .modal-glass {
-  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.35), transparent 40%);
-  border-color: rgb(255 255 255 / 0.6);
+/* Side panel: slides in from the right (280 ms), then the backdrop fades in (220 ms from 160 ms).
+   Closing reverses it: the backdrop fades out (140 ms), then the panel slides out (220 ms) */
+.side-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(100%, var(--panel-w));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0 0 0 1px;
+  animation: panel-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.side-panel[data-state='closed'] {
+  animation: panel-out 220ms cubic-bezier(0.64, 0, 0.78, 0) 140ms both;
+}
+
+.panel-backdrop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: min(100%, var(--panel-w));
+  animation: backdrop-in 220ms ease-out 160ms both;
+}
+.panel-backdrop[data-state='closed'] {
+  animation: backdrop-out 140ms ease-in both;
+}
+.panel-backdrop[data-clear] {
+  background-color: transparent;
+}
+
+/* Centred modals fade and scale up. The backdrop fades its colour, not its opacity: opacity below 1 on the
+   modal's parent would cut the modal's blur off from the page */
+.modal-backdrop {
+  animation: dim-in 200ms ease-out both;
+}
+.glass-modal {
+  animation: modal-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes panel-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes panel-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes dim-in {
+  from { background-color: transparent; }
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Delays too, which the global .reduce-motion rule leaves in place */
+.reduce-motion :is(.side-panel, .panel-backdrop, .modal-backdrop, .glass-modal) {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-panel,
+  .panel-backdrop,
+  .modal-backdrop,
+  .glass-modal {
+    animation: none !important;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -263,9 +361,10 @@ body {
 
   /* The frosted effects have nothing to blur on paper */
   .modal-backdrop,
-  .modal-glass {
-    background-color: transparent !important;
-    background-image: none !important;
+  .panel-backdrop,
+  .glass-panel,
+  .glass-modal {
+    background: transparent !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }

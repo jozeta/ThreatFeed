@@ -23,18 +23,16 @@ const params = () => parseHash(window.location.hash).params;
 /**
  * The layers as the app mounts them on the Actors page: the actor panel and the CVE opened on top of it are
  * the page's (in that order, as ActorsPage renders them), the vendor panel is the app's, the shortcuts modal
- * tops everything
+ * tops everything. They all register with the one panel stack, so mount order alone doesn't decide the top
  */
 const Layers: React.FC<{ shortcuts: boolean; onCloseShortcuts: () => void }> = ({ shortcuts, onCloseShortcuts }) => {
   const actor = params().get('actor');
   const vendor = params().get('vendor');
   const cve = params().get('cve');
-  // ActorsPage's closeUnlessCve('actor')
-  const closeActor = () => { if (!params().get('cve')) setHashParams({ actor: '' }); };
   return React.createElement(React.Fragment, null,
-    actor && React.createElement(ProfilePanel, { title: 'APT28', label: 'APT28', onClose: closeActor, children: null }),
+    actor && React.createElement(ProfilePanel, { title: 'APT28', label: 'APT28', onClose: () => setHashParams({ actor: '' }), children: null }),
     cve && React.createElement(CvePanelHost, { cve, articles: [], onOpenArticle() {}, onClose: () => setHashParams({ cve: '' }) }),
-    vendor && React.createElement(VendorPanelHost, { vendor, cve: cve ?? '', page: 'actors', covered: shortcuts, onOpenArticle() {} }),
+    vendor && React.createElement(VendorPanelHost, { vendor, cve: cve ?? '', page: 'actors', onOpenArticle() {} }),
     React.createElement(KeyboardShortcutsModal, { isOpen: shortcuts, onClose: onCloseShortcuts }),
   );
 };
@@ -47,10 +45,13 @@ describe('Escape with stacked panels', () => {
   };
   const escape = async () => {
     await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    // Side panels call onClose once their exit animation has played
+    await act(async () => { vi.advanceTimersByTime(400); });
     await render();
   };
 
   beforeEach(() => {
+    vi.useFakeTimers();
     shortcuts = false;
     const el = document.createElement('div');
     document.body.appendChild(el);
@@ -59,6 +60,7 @@ describe('Escape with stacked panels', () => {
   afterEach(() => {
     act(() => root.unmount());
     document.body.replaceChildren();
+    vi.useRealTimers();
   });
 
   it('closes one layer per press, topmost first: CVE, then vendor, then actor', async () => {
@@ -84,5 +86,13 @@ describe('Escape with stacked panels', () => {
     expect([params().get('actor'), params().get('vendor')]).toEqual(['G0007', 'Fortinet']);
     await escape();
     expect([params().get('actor'), params().get('vendor')]).toEqual(['G0007', null]);
+  });
+
+  it('a second press during the exit animation goes to the next panel down', async () => {
+    window.location.hash = '#/actors?actor=G0007&vendor=Fortinet';
+    await render();
+    await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await escape();
+    expect([params().get('actor'), params().get('vendor')]).toEqual([null, null]);
   });
 });

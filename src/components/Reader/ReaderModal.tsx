@@ -10,6 +10,7 @@ import { extractIOCs } from '../../services/intelligence/iocExtractor';
 import { iocLookupLinks } from '../../services/intelligence/iocLinks';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { sanitizeHtml } from '../../services/rss/sanitizer';
+import { READER_LEVEL, usePanelLayer } from '../Common/panelStack';
 import {
   X,
   ExternalLink,
@@ -100,7 +101,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     markViewed(article.id);
   }, [article.id, markViewed]);
 
-  // Handle escape and keyboard controls
+  // Escape goes through the panel stack (the reader sits above every side panel); the other keys are its own
+  usePanelLayer(true, onClose, READER_LEVEL);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -110,9 +112,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       if (e.metaKey || e.ctrlKey || e.altKey) {
         return;
       }
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'ArrowRight' || e.key === 'j') {
+      if (e.key === 'ArrowRight' || e.key === 'j') {
         if (hasNext && onNext) onNext();
       } else if (e.key === 'ArrowLeft' || e.key === 'k') {
         if (hasPrev && onPrev) onPrev();
@@ -179,13 +179,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] overflow-y-auto modal-backdrop flex justify-center p-0 sm:p-4 md:p-6 animate-fadeIn">
+    <div className="fixed inset-0 z-[70] overflow-y-auto modal-backdrop flex justify-center p-0 sm:p-4 md:p-6">
       {/* Background click overlay */}
       <div className="fixed inset-0" onClick={onClose} />
 
       {/* Reader Modal Sheet */}
       <div
-        className="relative modal-glass w-full max-w-4xl min-h-screen sm:min-h-0 sm:rounded-xl flex flex-col z-10 overflow-hidden my-auto"
+        className="relative glass-modal w-full max-w-4xl min-h-screen sm:min-h-0 sm:rounded-xl flex flex-col z-10 overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Control Bar */}
