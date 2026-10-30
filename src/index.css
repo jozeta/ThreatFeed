@@ -152,6 +152,16 @@ body {
   background: var(--color-accent);
 }
 
+/* Scrollable rows (tab bars, chip strips) without a visible scrollbar */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Subtle animations */
 @keyframes fadeIn {
   from {

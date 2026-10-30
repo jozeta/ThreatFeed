@@ -135,22 +135,27 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       {/* Desktop Navigation & Category/Watchlist Bar */}
       <nav className="bg-theme-surface border-b border-theme-border hidden sm:block">
         <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-          {/* Left: Navigation Tabs */}
-          <div className="flex items-center space-x-1">
+          {/* Left: Navigation Tabs. Ten don't fit beside the category and watchlist controls below xl, so
+              there only the active tab shows its label (the others have it as a tooltip); the row scrolls
+              rather than overflow if it still doesn't fit */}
+          <div className="flex items-center space-x-1 min-w-0 overflow-x-auto scrollbar-none">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => onSelectTab(tab.id)}
-                  className={`px-3 py-2.5 font-mono text-xs font-semibold tracking-wider uppercase transition-colors relative flex items-center gap-1.5 border-b-2 ${
+                  title={tab.label}
+                  aria-label={tab.badge !== undefined ? `${tab.label} (${tab.badge})` : tab.label}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`px-3 py-2.5 font-mono text-xs font-semibold tracking-wider uppercase transition-colors relative flex items-center gap-1.5 border-b-2 whitespace-nowrap flex-shrink-0 ${
                     isActive
                       ? 'border-theme-accent text-theme-accent'
                       : 'border-transparent text-theme-text-muted hover:text-theme-text hover:border-theme-border'
                   }`}
                 >
                   {tab.icon}
-                  <span>{tab.label}</span>
+                  <span className={isActive ? undefined : 'hidden xl:inline'}>{tab.label}</span>
                   {tab.badge !== undefined && (
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-tight ${tab.badgeColor}`}
