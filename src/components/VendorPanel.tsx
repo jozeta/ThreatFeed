@@ -253,7 +253,7 @@ interface HostProps {
   vendor: string;
   cve: string; // a CVE opened on top of the panel
   page: string;
-  covered: boolean; // the reader is open on top: Escape belongs to it
+  covered: boolean; // the reader or the shortcuts modal is open on top: Escape belongs to it
   onOpenArticle: (a: Article) => void;
 }
 

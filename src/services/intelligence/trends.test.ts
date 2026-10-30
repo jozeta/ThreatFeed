@@ -130,6 +130,16 @@ describe('rankTrends', () => {
     expect(row.series[51]).toBe(1);
   });
 
+  it('has no year-on-year change when the history covers less than two years', () => {
+    // From 2025-12 only: the 52 weeks before this year aren't covered
+    const [row] = rankTrends({
+      days: { '2026-10-30': { 'vendor:Fortinet': 1 } },
+      weeks: { '2025-12-01': { 'vendor:Fortinet': 4 } },
+    }, 'year', 'vendor', NOW);
+    expect(row).toMatchObject({ count: 5, previous: null, change: null });
+    expect(row.series).toHaveLength(52);
+  });
+
   it('picks the biggest risers that have a previous period to compare with', () => {
     const rows = rankTrends(history, 'week', 'all', NOW);
     expect(risers(rows, 5).map(r => r.name)).toEqual(['CVE-2026-1', 'Lazarus']);
@@ -176,5 +186,10 @@ describe('decodeTrends', () => {
       .toEqual({ generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } }, weeks: { '2026-10-26': { 'cve:CVE-1': 3 } } });
     expect(decodeTrends(null)).toBeNull();
     expect(decodeTrends({ days: [] })).toBeNull();
+  });
+
+  it('reads files written before the weekly rollup (no weeks) as having none', () => {
+    expect(decodeTrends({ version: 1, generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } } }))
+      .toEqual({ generatedAt: 'x', days: { '2026-10-30': { 'cve:CVE-1': 2 } }, weeks: {} });
   });
 });

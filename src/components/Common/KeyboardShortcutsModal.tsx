@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Keyboard } from 'lucide-react';
 
 interface KeyboardShortcutsModalProps {
@@ -10,6 +10,19 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  // Capture phase, stopped here: the modal sits above every panel and the reader, so Escape closes it alone
+  // (the vendor panel's own capture listener skips while it is open, see App's `covered`)
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const shortcuts = [
@@ -24,7 +37,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-[80] overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[80] overflow-y-auto modal-backdrop flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
       <div className="modal-glass w-full max-w-md rounded-xl p-6 relative">
         <button
           onClick={onClose}
