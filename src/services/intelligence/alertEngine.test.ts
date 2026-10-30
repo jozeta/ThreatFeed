@@ -199,7 +199,30 @@ describe('runAlertCheck', () => {
       const articles = [fresh('n1', 'Story one', { cves: [CVE] }), fresh('n2', 'Story two', { cves: [CVE] })];
       const next = runAlertCheck(input({ rules: [watched], vulns: vulnData([]), articles, epss: new Map([[CVE, 0.02]]), now: later(HOUR) }, settings), store);
       expect(ids(next.notify)).toEqual([`${CVE}#news:n1`, `${CVE}#news:n2`]);
+      expect(next.notify.find(m => m.itemId === `${CVE}#news:n1`)!.title).toBe(`${CVE}: new article: Story one`);
       expect(next.store.watch[CVE].articleIds).toEqual(['n1', 'n2']);
+      const rows = feedMatches(input({ rules: [watched], vulns: vulnData([]), articles }, settings), next.store);
+      expect(rows.find(m => m.itemId === `${CVE}#news:n1`)!.title).toBe(`${CVE}: new article: Story one`);
+    });
+
+    it('articles missing from one check never come back as news events', () => {
+      const n1 = fresh('n1', 'Story one', { cves: [CVE] });
+      // n1 is already known at the first sighting (the baseline), so it is never an event
+      const { store } = runAlertCheck(input({ rules: [watched], vulns: vulnData([]), articles: [n1] }, settings), emptyAlertStore(NOW));
+      expect(store.watch[CVE].articleIds).toEqual(['n1']);
+      const empty = runAlertCheck(input({ rules: [watched], vulns: vulnData([]), articles: [], now: later(HOUR) }, settings), store);
+      expect(empty.notify).toEqual([]);
+      const back = runAlertCheck(input({ rules: [watched], vulns: vulnData([]), articles: [n1], now: later(2 * HOUR) }, settings), empty.store);
+      expect(back.notify).toEqual([]);
+      expect(back.store.rules['watched-cves'].handled).toEqual({});
+    });
+
+    it('a news event for an article older than 24 h is recorded but does not notify', () => {
+      const store = start();
+      const old = fresh('old', 'Old story', { cves: [CVE], publishedAt: ago(3 * DAY) });
+      const next = runAlertCheck(input({ rules: [watched], vulns: vulnData([]), articles: [old], epss: new Map([[CVE, 0.02]]), now: later(HOUR) }, settings), store);
+      expect(next.notify).toEqual([]);
+      expect(next.store.rules['watched-cves'].handled[`${CVE}#news:old`]).toBeDefined();
     });
 
     it('baselines a newly watched CVE and drops unwatched ones', () => {
@@ -315,6 +338,32 @@ describe('runAlertCheck', () => {
     const article2 = fresh('c2', 'Another patch story', { cves: ['CVE-2026-2000'] });
     const third = runAlertCheck(input({ rules: [viaVulns, msRule], articles: [article1, article2], now: later(2 * HOUR) }), next.store);
     expect(ids(third.notify)).toEqual(['c2']);
+  });
+});
+
+describe('cveMatchesVulnRule floods', () => {
+  const viaVulns = rule('via', 'news', news({ field: 'cveMatchesVulnRule' }));
+  const msRule = rule('ms', 'vulns', vulnsRoot({ field: 'vendor', values: ['Microsoft'] }));
+  const c1 = fresh('c1', 'Patch story', { cves: ['CVE-2026-2000'] });
+
+  it('re-enabling a Vulns rule does not make recent articles on its CVEs notify', () => {
+    const off = { ...msRule, enabled: false };
+    const { store } = runAlertCheck(input({ rules: [viaVulns, off], articles: [c1] }), emptyAlertStore(NOW));
+    const second = runAlertCheck(input({ rules: [viaVulns, off], articles: [c1], now: later(HOUR) }), store);
+    const enabled = runAlertCheck(input({ rules: [viaVulns, msRule], articles: [c1], now: later(2 * HOUR) }), second.store);
+    expect(enabled.notify).toEqual([]);
+    expect(enabled.store.rules.via.handled.c1).toBeDefined();
+    const c2 = fresh('c2', 'Another patch story', { cves: ['CVE-2026-2000'] });
+    const next = runAlertCheck(input({ rules: [viaVulns, msRule], articles: [c1, c2], now: later(3 * HOUR) }), enabled.store);
+    expect(ids(next.notify)).toEqual(['c2']);
+  });
+
+  it('a News rule using cveMatchesVulnRule created while vulns are not loaded baselines once they load', () => {
+    const { store } = runAlertCheck(input({ rules: [msRule], articles: [c1] }), emptyAlertStore(NOW));
+    const skipped = runAlertCheck(input({ rules: [msRule, viaVulns], articles: [c1], vulns: null, now: later(HOUR) }), store);
+    expect(skipped.store.rules.via).toBeUndefined();
+    const loaded = runAlertCheck(input({ rules: [msRule, viaVulns], articles: [c1], now: later(2 * HOUR) }), skipped.store);
+    expect(loaded.notify).toEqual([]);
   });
 });
 

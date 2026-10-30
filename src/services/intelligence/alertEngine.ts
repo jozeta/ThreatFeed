@@ -23,6 +23,7 @@ export interface RuleState {
   terms: string[];
   handled: Record<string, string>; // itemId → firstMatchedAt
   quiet?: string[];
+  enabled?: boolean; // at the last check, so a Vulns rule switched back on doesn't count as having matched all along
 }
 
 export interface AlertStore {
@@ -81,7 +82,7 @@ export function isNew(m: AlertMatch, store: AlertStore): boolean {
   return !seen || m.firstMatchedAt > seen;
 }
 
-/** One matching item for a rule; `published` lets old news be recorded without notifying */
+/** One matching item for a rule; set for articles and per-article events, `published` keeps old news from notifying */
 interface Hit {
   ref: string;
   title: string;
@@ -91,6 +92,7 @@ interface Hit {
 interface WatchEvent {
   id: string;
   text: string;
+  published?: string;
 }
 
 interface MatchData {
@@ -150,7 +152,7 @@ function ruleHits(rule: AlertRule, lists: RuleLists, d: MatchData, vulnRuleCves:
       const item = d.items.get(cve);
       const ctx: EvalContext = { now: d.now, feedCategory: d.feedCategory, watchedEvent: c => c === cve };
       if (!matchesVuln(group, item ?? minimalItem(cve), ctx)) continue;
-      for (const e of events) hits.set(e.id, { ref: cve, title: `${vulnTitle(cve, item)}: ${e.text}` });
+      for (const e of events) hits.set(e.id, { ref: cve, title: `${vulnTitle(cve, item)}: ${e.text}`, published: e.published });
     }
     return hits;
   }
@@ -165,6 +167,7 @@ function ruleHits(rule: AlertRule, lists: RuleLists, d: MatchData, vulnRuleCves:
 function watchEvents(input: CheckInput, vulns: VulnData, before: Record<string, CveWatchState>) {
   const events = new Map<string, WatchEvent[]>();
   const next: Record<string, CveWatchState> = {};
+  const byId = new Map(input.articles.map(a => [a.id, a]));
   for (const cve of input.settings.watchedCves) {
     const state = buildWatchState(cve, vulns, input.cveIntel, input.articles, input.epss);
     const prev = before[cve];
@@ -174,11 +177,17 @@ function watchEvents(input: CheckInput, vulns: VulnData, before: Record<string, 
       else if (change.kind === 'epss') list.push({ id: `${cve}#epss:${state.epss}`, text: change.text });
       else {
         const known = new Set(prev?.articleIds);
-        for (const id of state.articleIds) if (!known.has(id)) list.push({ id: `${cve}#news:${id}`, text: change.text });
+        for (const id of state.articleIds) {
+          if (known.has(id)) continue;
+          const a = byId.get(id)!;
+          list.push({ id: `${cve}#news:${id}`, text: `new article: ${a.title}`, published: a.publishedAt });
+        }
       }
     }
     events.set(cve, list);
-    next[cve] = state; // every watched CVE moves on, not only the changed ones; unwatched ones are dropped
+    // Every watched CVE moves on, not only the changed ones; unwatched ones are dropped. Article IDs accumulate,
+    // so an article missing from one check (a partial or empty list) isn't an event when it comes back.
+    next[cve] = { ...state, articleIds: [...new Set([...(prev?.articleIds ?? []), ...state.articleIds])] };
   }
   return { events, next };
 }
@@ -202,8 +211,8 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
   };
 
   // CVEs matched by enabled Vulns rules: `current` drives cveMatchesVulnRule, `prior` leaves out what only
-  // matches because a Vulns rule was just created, edited or given a new list term, so a News rule depending
-  // on it records those articles silently instead of notifying
+  // matches because a Vulns rule was just created, edited, switched back on or given a new list term, so a
+  // News rule depending on it records those articles silently instead of notifying
   const current = new Set<string>();
   const prior = new Set<string>();
   const rules: Record<string, RuleState> = {};
@@ -212,7 +221,9 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
 
   for (const rule of ordered) {
     const prev = store.rules[rule.id];
-    if (rule.kind === 'vulns' && !vulns) {
+    const dependsOnVulns = rule.kind === 'news' && hasField(resolveRoot(rule, lists), 'cveMatchesVulnRule');
+    // News rules looking at Vulns matches wait for vulns too, or they would baseline against nothing
+    if ((rule.kind === 'vulns' || dependsOnVulns) && !vulns) {
       if (prev) rules[rule.id] = prev;
       continue;
     }
@@ -220,7 +231,6 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
     const terms = builtInTerms(rule, lists);
     const baseline = !prev || prev.version !== version;
     const termsAdded = !baseline && terms.some(t => !prev.terms.includes(t));
-    const dependsOnVulns = rule.kind === 'news' && hasField(resolveRoot(rule, lists), 'cveMatchesVulnRule');
 
     const hits = ruleHits(rule, lists, data, current);
     // What the rule would have matched anyway: new hits outside this set are recorded silently
@@ -230,7 +240,7 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
 
     if (rule.kind === 'vulns' && rule.enabled) {
       for (const h of hits.values()) current.add(h.ref);
-      for (const h of expected.values()) prior.add(h.ref);
+      if (prev?.enabled !== false) for (const h of expected.values()) prior.add(h.ref);
     }
 
     const handled = { ...prev?.handled };
@@ -242,7 +252,7 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
         quiet.add(itemId);
         continue;
       }
-      if (!rule.enabled || !rule.notify || (rule.kind === 'news' && isOld(hit.published))) continue;
+      if (!rule.enabled || !rule.notify || (hit.published !== undefined && isOld(hit.published))) continue;
       fresh.push({ ruleId: rule.id, ruleName: rule.name, kind: rule.kind, itemId, ref: hit.ref, title: hit.title, firstMatchedAt: stamp, notifiable: true });
     }
 
@@ -253,7 +263,7 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
         quiet.delete(itemId);
       }
     }
-    rules[rule.id] = { version, terms: [...terms], handled, ...(quiet.size ? { quiet: [...quiet] } : {}) };
+    rules[rule.id] = { version, terms: [...terms], handled, enabled: rule.enabled, ...(quiet.size ? { quiet: [...quiet] } : {}) };
   }
 
   // Held matches of rules since switched off, muted or deleted are dropped; duplicates keep the newest
