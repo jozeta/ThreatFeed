@@ -92,7 +92,7 @@ export async function loadActors(): Promise<ActorsData | null> {
   }
 }
 
-/** Loads data/trends.json (daily mention counts, up to 400 days) for the Trends page */
+/** Loads data/trends.json (daily mention counts, with older days rolled up into weeks over 730 days) for the Trends page */
 export async function loadTrends(): Promise<TrendsData | null> {
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/trends.json`, { cache: 'no-cache' });

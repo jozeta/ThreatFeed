@@ -17,6 +17,7 @@ import {
   saveStoredValue
 } from '../services/storage/indexeddb';
 import { loadActors, loadMsrc, loadRansomwareIntel, loadSnapshot, loadTrends, loadVulnData } from '../services/snapshot';
+import { createSnapshotLoader } from '../services/snapshotLoader';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
@@ -58,11 +59,11 @@ interface FeedContextType {
   ransomwareIntel: RansomwareIntel | null; // group profiles, ATT&CK, linked CVEs, public reports, payments
   ensureRansomwareIntel: () => Promise<void>; // like ensureVulns, for data/ransomware.json
   msrc: MsrcData | null; // the latest Patch Tuesday releases (MSRC CVRF)
-  ensureMsrc: () => Promise<void>; // like ensureVulns, for data/msrc.json; use the useMsrc hook
+  ensureMsrc: () => Promise<MsrcData | null>; // like ensureVulns, for data/msrc.json; use the useMsrc hook
   actors: ActorsData | null; // threat actor and malware profiles (ATT&CK, Malpedia)
   ensureActors: () => Promise<ActorsData | null>; // like ensureMsrc, for data/actors.json; resolves to the loaded data
-  trends: TrendsData | null; // daily mention counts per entity, up to 400 days
-  ensureTrends: () => Promise<void>; // like ensureMsrc, for data/trends.json; use the useTrends hook
+  trends: TrendsData | null; // daily mention counts per entity, up to 730 days (older weeks rolled up)
+  ensureTrends: () => Promise<TrendsData | null>; // like ensureMsrc, for data/trends.json; use the useTrends hook
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -245,12 +246,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setVulns(prev => prev ?? storedVulns);
       setDataSources((await getStoredValue<DataSourceStatus[]>('dataSources')) || []);
       setRansomwareIntel(await getStoredValue<RansomwareIntel>('ransomwareIntel'));
-      const storedMsrc = await getStoredValue<MsrcData>('msrc');
-      setMsrc(prev => prev ?? storedMsrc);
-      const storedActors = await getStoredValue<ActorsData>('actors');
-      setActors(prev => prev ?? storedActors);
-      const storedTrends = await getStoredValue<TrendsData>('trends');
-      setTrends(prev => prev ?? storedTrends);
+      // Patch Tuesday, actor and trend data aren't read here: ensureMsrc/ensureActors/ensureTrends load them
+      // when a view needs them and read the stored copy only when offline, so they don't hold up the articles
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -679,63 +676,27 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return intelRequest.current;
   }, []);
 
+  // Patch Tuesday, actor and trend data: like ensureVulns, but the stored copy is only the offline fallback
+  // (see createSnapshotLoader)
   const msrcRef = useRef<MsrcData | null>(null);
   msrcRef.current = msrc;
-  const msrcRequest = useRef<Promise<void> | null>(null);
-  const ensureMsrc = useCallback(() => {
-    const current = msrcRef.current;
-    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve();
-    if (!msrcRequest.current) {
-      msrcRequest.current = loadMsrc()
-        .then(async (data) => {
-          if (!data) return;
-          setMsrc(data);
-          await saveStoredValue('msrc', data);
-        })
-        .finally(() => { msrcRequest.current = null; });
-    }
-    return msrcRequest.current;
-  }, []);
-
   const actorsRef = useRef<ActorsData | null>(null);
   actorsRef.current = actors;
-  const actorsRequest = useRef<Promise<ActorsData | null> | null>(null);
-  const ensureActors = useCallback(() => {
-    const current = actorsRef.current;
-    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve(current);
-    if (!actorsRequest.current) {
-      actorsRequest.current = loadActors()
-        .then(async (data) => {
-          if (!data) return actorsRef.current;
-          actorsRef.current = data;
-          setActors(data);
-          // The offline copy is a convenience: a full or blocked IndexedDB mustn't fail the load
-          await saveStoredValue('actors', data).catch(() => undefined);
-          return data;
-        })
-        .finally(() => { actorsRequest.current = null; });
-    }
-    return actorsRequest.current;
-  }, []);
-
   const trendsRef = useRef<TrendsData | null>(null);
   trendsRef.current = trends;
-  const trendsRequest = useRef<Promise<void> | null>(null);
-  const ensureTrends = useCallback(() => {
-    const current = trendsRef.current;
-    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve();
-    if (!trendsRequest.current) {
-      trendsRequest.current = loadTrends()
-        .then(async (data) => {
-          if (!data) return;
-          setTrends(data);
-          // The offline copy is a convenience: a full or blocked IndexedDB mustn't fail the load
-          await saveStoredValue('trends', data).catch(() => undefined);
-        })
-        .finally(() => { trendsRequest.current = null; });
-    }
-    return trendsRequest.current;
-  }, []);
+  const snapshotAt = () => snapshotAtRef.current;
+  const [ensureMsrc] = useState(() => createSnapshotLoader<MsrcData>({
+    ref: msrcRef, snapshotAt, load: loadMsrc, setState: setMsrc,
+    read: () => getStoredValue<MsrcData>('msrc'), save: (data) => saveStoredValue('msrc', data),
+  }));
+  const [ensureActors] = useState(() => createSnapshotLoader<ActorsData>({
+    ref: actorsRef, snapshotAt, load: loadActors, setState: setActors,
+    read: () => getStoredValue<ActorsData>('actors'), save: (data) => saveStoredValue('actors', data),
+  }));
+  const [ensureTrends] = useState(() => createSnapshotLoader<TrendsData>({
+    ref: trendsRef, snapshotAt, load: loadTrends, setState: setTrends,
+    read: () => getStoredValue<TrendsData>('trends'), save: (data) => saveStoredValue('trends', data),
+  }));
 
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
   const value = useMemo<FeedContextType>(() => ({
