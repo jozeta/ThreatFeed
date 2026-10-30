@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Feed } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useFilter } from '../context/FilterContext';
@@ -81,6 +81,19 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
     }
     return acc;
   }, {} as Record<string, number>);
+
+  const addModalShown = isAddModalOpen || !!editingFeed;
+  useEffect(() => {
+    if (!addModalShown && !isMonitorModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setIsAddModalOpen(false);
+      setEditingFeed(null);
+      setIsMonitorModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [addModalShown, isMonitorModalOpen]);
 
   const handleOpenAddModal = () => {
     setFormName('');
@@ -403,7 +416,15 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
 
       {/* Add / Edit Feed Modal */}
       {(isAddModalOpen || editingFeed) && (
-        <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAddModalOpen(false);
+              setEditingFeed(null);
+            }
+          }}
+        >
           <div className="modal-glass w-full max-w-lg rounded-xl p-6 relative">
             <button
               onClick={() => {
@@ -434,6 +455,7 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
                 <input
                   type="text"
                   value={formName}
+                  autoFocus
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. Unit 42 Palo Alto"
                   className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-theme-text focus:outline-none focus:border-theme-accent"
@@ -506,7 +528,12 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
       )}
       {/* Add Keyword Monitor Modal */}
       {isMonitorModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsMonitorModalOpen(false);
+          }}
+        >
           <div className="modal-glass w-full max-w-lg rounded-xl p-6 relative">
             <button
               onClick={() => setIsMonitorModalOpen(false)}
@@ -532,6 +559,7 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
                 <input
                   type="text"
                   value={monitorQueryText}
+                  autoFocus
                   onChange={(e) => setMonitorQueryText(e.target.value)}
                   placeholder='e.g. "Acme Corp" OR acme.com breach'
                   className="w-full bg-theme-card border border-theme-border rounded px-3 py-2 text-theme-text focus:outline-none focus:border-theme-accent"

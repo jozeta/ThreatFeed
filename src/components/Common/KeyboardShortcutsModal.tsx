@@ -24,7 +24,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[80] overflow-y-auto modal-backdrop flex items-center justify-center p-4">
       <div className="modal-glass w-full max-w-md rounded-xl p-6 relative">
         <button
           onClick={onClose}
