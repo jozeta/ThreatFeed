@@ -9,17 +9,18 @@ import { buildWatchState, fetchEpssScores, loadWatchStore, saveWatchStore } from
  * rules' job, see AlertMonitor). Renders nothing.
  */
 export function CveWatchMonitor(): null {
-  const { articles, cveIntel, vulns, ensureVulns, isRefreshing } = useFeeds();
+  const { articles, cveIntel, vulns, ensureVulns, snapshotGeneratedAt, isRefreshing } = useFeeds();
   const { settings } = useSettings();
   const latest = useRef({ articles, cveIntel, vulns });
   latest.current = { articles, cveIntel, vulns };
   const watched = settings.watchedCves;
   const watchedKey = watched.join(',');
 
-  // Watching CVEs is a reason to load the vulnerability data even if the Vulns page is never opened
+  // Watching CVEs is a reason to load the vulnerability data even if the Vulns page is never opened (and to
+  // reload it with each new snapshot)
   useEffect(() => {
     if (watched.length > 0) void ensureVulns();
-  }, [watchedKey, ensureVulns]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedKey, ensureVulns, snapshotGeneratedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (watched.length === 0 || isRefreshing) return; // check once a refresh has settled

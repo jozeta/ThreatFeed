@@ -13,7 +13,7 @@ const CHECK_INTERVAL_MS = 5 * 60_000; // sends matches held by the gap once it e
  * one combined desktop notification; the rest is recorded for My Feed. Renders nothing.
  */
 export function AlertMonitor(): null {
-  const { feeds, articles, cveIntel, vulns, ensureVulns, isRefreshing, initialSyncDone } = useFeeds();
+  const { feeds, articles, cveIntel, vulns, ensureVulns, snapshotGeneratedAt, isRefreshing, initialSyncDone } = useFeeds();
   const { settings } = useSettings();
   const latest = useRef({ feeds, articles, cveIntel, vulns, settings, initialSyncDone });
   latest.current = { feeds, articles, cveIntel, vulns, settings, initialSyncDone };
@@ -21,9 +21,10 @@ export function AlertMonitor(): null {
   const rerun = useRef(false);
   const needsVulns = settings.alertRules.some(r => r.enabled && r.kind === 'vulns');
 
+  // Again for every new snapshot, like useVulns: otherwise a long-open tab keeps checking the first vulns.json
   useEffect(() => {
     if (needsVulns) void ensureVulns();
-  }, [needsVulns, ensureVulns]);
+  }, [needsVulns, ensureVulns, snapshotGeneratedAt]);
 
   const check = async () => {
     // Before the stored data and first refresh have landed, articles/vulns are partial and would mis-baseline

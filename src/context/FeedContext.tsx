@@ -231,7 +231,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCveIntel(storedIntel);
       setSnapshotGeneratedAt(await getStoredValue<string>('snapshotGeneratedAt'));
       setIncidents(await getStoredValue<IncidentData>('incidents'));
-      setVulns(await getStoredValue<VulnData>('vulns'));
+      // ensureVulns may already have fetched a fresher copy while the stored data was loading
+      const storedVulns = await getStoredValue<VulnData>('vulns');
+      setVulns(prev => prev ?? storedVulns);
       setDataSources((await getStoredValue<DataSourceStatus[]>('dataSources')) || []);
       setRansomwareIntel(await getStoredValue<RansomwareIntel>('ransomwareIntel'));
 
