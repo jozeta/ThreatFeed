@@ -366,7 +366,7 @@ export interface StatsDay {
   crit: string[]; // CVSS 9+ CVEs published that day
   high: string[]; // CVSS 7-8.9
   kev: string[]; // CVEs added to the KEV catalog
-  exploits: string[]; // CVEs first seen that day with a Metasploit module, Nuclei template or GitHub PoC
+  exploits: string[]; // CVEs with a Metasploit module, Nuclei template or GitHub PoC, on their published day (else their KEV date)
   victims: string[]; // leak-site victim ids discovered that day
   groups: Record<string, number>;
   countries: Record<string, number>;

@@ -14,7 +14,9 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const LISTS = ['crit', 'high', 'kev', 'exploits', 'victims'] as const;
 const MAPS = ['groups', 'countries', 'sectors'] as const;
 
-const emptyDay = (): StatsDay => ({ crit: [], high: [], kev: [], exploits: [], victims: [], groups: {}, countries: {}, sectors: {} });
+// Names come from feeds: a plain object would take `__proto__` or `constructor` as more than a key
+const nullMap = (from: Record<string, number> = {}): Record<string, number> => Object.assign(Object.create(null), from);
+const emptyDay = (): StatsDay => ({ crit: [], high: [], kev: [], exploits: [], victims: [], groups: nullMap(), countries: nullMap(), sectors: nullMap() });
 const dayOf = (iso: string) => {
   const t = Date.parse(iso);
   return isNaN(t) ? '' : new Date(t).toISOString().slice(0, 10);
@@ -76,21 +78,37 @@ export function countStatsByDay(
  * The next stats.json history: the previous file's days with the recounted ones merged in, days older than
  * `keepDays` dropped. Ids are unioned. The recent victim list covers only about 30 days, so for a day it
  * only partly sees, the tallies keep the larger count per key of the two rather than replacing the
- * previous ones.
+ * previous ones. A CVE stays on the day the history has it for (exploits, KEV), and moves between crit and
+ * high with its latest score.
  */
 export function mergeStats(previous: StatsData | null, recent: Record<string, StatsDay>, now: number, keepDays = STATS_KEEP_DAYS): Record<string, StatsDay> {
   const oldest = new Date(now - (keepDays - 1) * DAY_MS).toISOString().slice(0, 10);
   const merged: Record<string, StatsDay> = {};
   const copy = (d: StatsDay): StatsDay => ({
     ...Object.fromEntries(LISTS.map(l => [l, [...d[l]]])),
-    ...Object.fromEntries(MAPS.map(m => [m, { ...d[m] }])),
+    ...Object.fromEntries(MAPS.map(m => [m, nullMap(d[m])])),
   } as unknown as StatsDay);
-  for (const [key, d] of Object.entries(previous?.days ?? {})) if (key >= oldest) merged[key] = copy(d);
+  // The day each id already has in the history, per list: a CVE keeps it, so a recount that dates it
+  // differently (a CVE that left the NVD window is dated by its KEV addition) doesn't count it twice
+  const held = Object.fromEntries(LISTS.map(l => [l, new Map<string, string>()]));
+  for (const [key, d] of Object.entries(previous?.days ?? {})) {
+    if (key < oldest) continue;
+    merged[key] = copy(d);
+    for (const l of LISTS) for (const id of d[l]) if (!held[l].has(id)) held[l].set(id, key);
+  }
   for (const [key, d] of Object.entries(recent)) {
     if (key < oldest) continue;
     const day = (merged[key] ??= emptyDay());
-    for (const l of LISTS) day[l] = [...new Set([...day[l], ...d[l]])];
+    for (const l of LISTS) day[l] = [...new Set([...day[l], ...d[l].filter(id => (held[l].get(id) ?? key) === key)])];
     for (const m of MAPS) for (const [name, n] of Object.entries(d[m])) day[m][name] = Math.max(n, day[m][name] ?? 0);
+  }
+  // A rescored CVE is in the newest run's severity list only
+  const recentIds = (l: 'crit' | 'high') => new Set(Object.values(recent).flatMap(d => d[l]));
+  const crit = recentIds('crit');
+  const high = new Set([...recentIds('high')].filter(id => !crit.has(id)));
+  for (const d of Object.values(merged)) {
+    d.high = d.high.filter(id => !crit.has(id));
+    d.crit = d.crit.filter(id => !high.has(id));
   }
   return Object.fromEntries(Object.entries(merged).sort(([a], [b]) => a.localeCompare(b)));
 }

@@ -56,6 +56,27 @@ describe('mergeStats', () => {
   });
 });
 
+describe('mergeStats across days', () => {
+  const count = (days: Record<string, StatsDay>, list: 'crit' | 'high' | 'exploits', id: string) => Object.values(days).filter(d => d[list].includes(id)).length;
+  it('counts an exploit once when a recount dates it differently', () => {
+    const prev: StatsData = { version: 1, generatedAt: '', days: { '2026-09-10': { ...empty(), exploits: ['CVE-1'] } } };
+    const merged = mergeStats(prev, { '2026-09-20': { ...empty(), exploits: ['CVE-1'] } }, NOW);
+    expect(count(merged, 'exploits', 'CVE-1')).toBe(1);
+    expect(merged['2026-09-10'].exploits).toEqual(['CVE-1']);
+  });
+  it('moves a rescored CVE from high to crit', () => {
+    const prev: StatsData = { version: 1, generatedAt: '', days: { '2026-10-20': { ...empty(), high: ['CVE-2'] } } };
+    const merged = mergeStats(prev, { '2026-10-20': { ...empty(), crit: ['CVE-2'] } }, NOW);
+    expect(count(merged, 'high', 'CVE-2')).toBe(0);
+    expect(merged['2026-10-20'].crit).toEqual(['CVE-2']);
+  });
+  it('tallies names like __proto__ and constructor as plain keys', () => {
+    const days = countStatsByDay({ ...input, victims: [victim('p', '2026-10-21T00:00:00Z', '__proto__', 'constructor')] }, NOW);
+    expect(days['2026-10-21'].groups['__proto__']).toBe(1);
+    expect(days['2026-10-21'].countries['constructor']).toBe(1);
+  });
+});
+
 describe('decodeStats', () => {
   it('rejects anything but a version 1 file', () => {
     expect(decodeStats(null)).toBeNull();
