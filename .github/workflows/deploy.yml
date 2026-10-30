@@ -77,9 +77,26 @@ jobs:
           if [ "$code" = 404 ]; then echo "No trends.json published yet"; exit 0; fi
           echo "::error::trends.json is missing and the published copy couldn't be fetched (HTTP $code); not deploying, so the history isn't lost"
           exit 1
+      # If a failed snapshot left msrc.json or actors.json missing or empty, deploy the published copies rather
+      # than a site without Patch Tuesday or actor data. Best effort: this step never fails the run.
+      - name: Keep the published Patch Tuesday and actor data
+        continue-on-error: true
+        run: |
+          mkdir -p public/data
+          for name in msrc actors; do
+            f=public/data/$name.json
+            [ -s "$f" ] && continue
+            if curl -sS -fL --retry 3 --retry-delay 15 --max-time 120 -o "$f.tmp" "https://jozeta.github.io/ThreatFeed/data/$name.json" && [ -s "$f.tmp" ]; then
+              mv "$f.tmp" "$f"; echo "Restored the published $name.json"
+            else
+              rm -f "$f.tmp"; echo "::warning::$name.json is missing and the published copy couldn't be fetched"
+            fi
+          done || true
       - name: Copy the trends history for the cache
         if: hashFiles('public/data/trends.json') != ''
         run: mkdir -p .cache && cp public/data/trends.json .cache/trends.json
+      # One cache entry per run is expected: restore picks the newest (trends- prefix) and GitHub evicts
+      # entries not used for 7 days, so they don't pile up
       - uses: actions/cache/save@v4
         if: hashFiles('public/data/trends.json') != ''
         with:
