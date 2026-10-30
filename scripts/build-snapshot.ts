@@ -487,6 +487,7 @@ const vulns: VulnData = {
     .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
   nvd: nvd ? summarizeNvd(nvd.cache.records, nvd.from, nvd.to) : null,
   notable: notable.map(r => ({ ...r, epss: epss.get(r.id)?.epss })),
+  // The file holds compact tuples; loadVulnData decodes them back to CveRecord[]
   watchable: encodeWatchable(watchable) as VulnData['watchable'],
   advisories,
   epssTop,

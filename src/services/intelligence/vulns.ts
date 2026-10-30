@@ -225,7 +225,12 @@ export function encodeNvdCache(cache: NvdCache): unknown {
   return {
     version: 2,
     fetchedAt: cache.fetchedAt,
-    records: cache.records.map(r => toTuple(r, (r.score ?? 0) >= 9, (r.score ?? 0) >= 9)),
+    records: cache.records.map(r => {
+      const t = toTuple(r, (r.score ?? 0) >= 9, (r.score ?? 0) >= 9);
+      // CVSS 7-8.9 records feed the alert-rule list, which matches on products: keep a few
+      if ((r.score ?? 0) >= 7 && (r.score ?? 0) < 9) t[8] = r.products?.slice(0, 3) ?? null;
+      return t;
+    }),
     kev: Object.values(cache.kev).map(r => toTuple(r, true, false)),
   };
 }
@@ -234,7 +239,7 @@ export function encodeNvdCache(cache: NvdCache): unknown {
 export function encodeWatchable(records: CveRecord[]): unknown[] {
   return records.map(r => {
     const t = toTuple(r, false, false);
-    t[8] = r.products ?? null;
+    t[8] = r.products?.slice(0, 3) ?? null; // three products are plenty (as in the KEV list)
     return t;
   });
 }

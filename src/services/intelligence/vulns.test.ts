@@ -192,6 +192,16 @@ describe('watchable CVEs', () => {
     expect(r.ssvc?.exploitation).toBe('poc');
     expect(r.description).toBeUndefined();
   });
+  it('caps products at three', () => {
+    const [r] = decodeWatchable(encodeWatchable([{ ...rec('CVE-2026-2', 8), products: ['A', 'B', 'C', 'D'] }]));
+    expect(r.products).toEqual(['A', 'B', 'C']);
+  });
+  it('keeps (capped) products for CVSS 7-8.9 records through the NVD cache', () => {
+    const cache = { fetchedAt: '2026-10-20T00:00:00.000Z', records: [{ ...rec('CVE-2026-3', 7.5), products: ['A', 'B', 'C', 'D'] }, { ...rec('CVE-2026-4', 5), products: ['A'] }], kev: {} };
+    const back = decodeNvdCache(encodeNvdCache(cache))!;
+    expect(back.records[0].products).toEqual(['A', 'B', 'C']);
+    expect(back.records[1].products).toBeUndefined();
+  });
   it('ignores malformed input', () => {
     expect(decodeWatchable(null)).toEqual([]);
     expect(decodeWatchable([['bad'], 5])).toEqual([]);
