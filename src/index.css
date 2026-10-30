@@ -265,7 +265,7 @@ body {
 
 .modal-backdrop,
 .panel-backdrop {
-  background-color: rgb(24 26 30 / 0.55);
+  background-color: rgb(24 26 30 / 0.7);
 }
 
 /* Side panel: slides in from the right (280 ms), then the backdrop fades in (220 ms from 160 ms).
