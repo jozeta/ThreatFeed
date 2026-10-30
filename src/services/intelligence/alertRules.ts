@@ -4,6 +4,7 @@ import {
 import { containsTerm } from '../../utils/textMatch';
 import { checkWatchlistMatch } from './watchlist';
 import { isRemoteNoAuth } from './vulns';
+import { fieldsFor } from './ruleForm';
 
 export const SEVERITY_RANK: Record<ThreatSeverity, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
@@ -104,16 +105,18 @@ function evalGroup<C>(group: ConditionGroup<C>, test: (c: C) => boolean): boolea
   return group.op === 'all' ? group.items.every(run) : group.items.some(run);
 }
 
-// A blank value would match at every word boundary, so it is skipped rather than matching everything
-const anyTerm = (text: string, values: string[]) => values.some(v => v.trim() !== '' && containsTerm(text, v));
+// A blank value would match at every word boundary, so it is skipped rather than matching everything.
+// A non-array (a malformed rule that slipped past validation) matches nothing instead of throwing mid-render.
+const anyTerm = (text: string, values: string[]) => Array.isArray(values) && values.some(v => v.trim() !== '' && containsTerm(text, v));
 const anyEqual = (have: string[], values: string[]) => {
+  if (!Array.isArray(values)) return false;
   const want = new Set(values.map(v => v.toLowerCase()));
   return have.some(h => want.has(h.toLowerCase()));
 };
 
 function newsCondition(c: NewsCondition, a: Article, ctx: EvalContext): boolean {
   switch (c.field) {
-    case 'keyword': return checkWatchlistMatch(a, c.values).matched;
+    case 'keyword': return Array.isArray(c.values) && checkWatchlistMatch(a, c.values).matched;
     case 'vendor': return anyTerm(`${a.title} ${a.description ?? ''}`, c.values);
     case 'severity': return a.severity !== undefined && SEVERITY_RANK[a.severity] >= SEVERITY_RANK[c.min];
     case 'category': {
@@ -235,17 +238,33 @@ export function duplicateRule(rule: AlertRule, s: RuleLists, now: Date, id: stri
   };
 }
 
-/** A group with a known op whose items are all valid groups or objects with a string `field` */
-function isValidGroup(g: unknown): boolean {
+/** A group with a known op whose items are all valid groups or conditions of this rule kind */
+function isValidGroup(g: unknown, kind: AlertRule['kind']): boolean {
   if (!g || typeof g !== 'object') return false;
   const x = g as ConditionGroup<unknown>;
-  return (x.op === 'all' || x.op === 'any') && Array.isArray(x.items) && x.items.every(isValidItem);
+  return (x.op === 'all' || x.op === 'any') && Array.isArray(x.items) && x.items.every(i => isValidItem(i, kind));
 }
 
-function isValidItem(item: unknown): boolean {
+const isFiniteNumber = (n: unknown) => typeof n === 'number' && Number.isFinite(n);
+
+function isValidItem(item: unknown, kind: AlertRule['kind']): boolean {
   if (!item || typeof item !== 'object') return false;
-  if ('op' in item || 'items' in item) return isValidGroup(item);
-  return typeof (item as { field?: unknown }).field === 'string';
+  if ('op' in item || 'items' in item) return isValidGroup(item, kind);
+  return isValidCondition(item as Record<string, unknown>, kind);
+}
+
+/** A known field for this kind carrying the value its NewsCondition/VulnCondition variant needs */
+function isValidCondition(c: Record<string, unknown>, kind: AlertRule['kind']): boolean {
+  const def = fieldsFor(kind).find(f => f.field === c.field);
+  switch (def?.value) {
+    case 'list': return Array.isArray(c.values) && c.values.every(v => typeof v === 'string');
+    case 'cvss':
+    case 'epss': return isFiniteNumber(c.min);
+    case 'severity': return typeof c.min === 'string' && Object.prototype.hasOwnProperty.call(SEVERITY_RANK, c.min);
+    case 'days': return isFiniteNumber(c.days);
+    case 'none': return true;
+    default: return false;
+  }
 }
 
 /**
@@ -261,7 +280,7 @@ export function sanitizeRule(r: unknown): AlertRule | null {
   if (typeof x.enabled !== 'boolean' || typeof x.notify !== 'boolean') return null;
   if (x.builtIn !== undefined && !BUILT_IN_ORDER.includes(x.builtIn)) return null;
   const builtIn = BUILT_IN_ORDER.find(b => b === x.id) ?? x.builtIn;
-  if (!builtIn && !isValidGroup(x.root)) return null;
+  if (!builtIn && !isValidGroup(x.root, x.kind)) return null;
   const stamp = new Date(0).toISOString();
   const createdAt = typeof x.createdAt === 'string' ? x.createdAt : stamp;
   const updatedAt = typeof x.updatedAt === 'string' ? x.updatedAt : createdAt;

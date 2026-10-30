@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem,
-  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules,
+  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule,
 } from './alertRules';
 import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord } from '../../types';
 import { article } from '../../test/fixtures';
@@ -205,5 +205,49 @@ describe('built-in rules', () => {
     const copy = duplicateRule(byId(rules, 'stack-vulns'), s, now, 'new2');
     stack.push('Cisco');
     expect(copy.root).toEqual({ op: 'any', items: [{ field: 'vendor', values: ['Fortinet'] }] });
+  });
+});
+
+describe('sanitizeRule condition shapes', () => {
+  const custom = (kind: AlertRule['kind'], ...items: unknown[]) => ({
+    id: 'c', name: 'C', kind, enabled: true, notify: false, root: { op: 'all', items }, createdAt: 't', updatedAt: 't',
+  });
+
+  it('keeps well-formed conditions of every value kind', () => {
+    expect(sanitizeRule(custom('vulns',
+      { field: 'vendor', values: ['x'] }, { field: 'cvss', min: 7 }, { field: 'epss', min: 0.1 }, { field: 'kev' },
+      { field: 'kevAddedWithinDays', days: 7 }, { op: 'any', items: [{ field: 'watched' }, { field: 'cve', values: [] }] },
+    ))).not.toBeNull();
+    expect(sanitizeRule(custom('news', { field: 'severity', min: 'high' }, { field: 'hasCve' }, { field: 'tag', values: ['a'] }))).not.toBeNull();
+  });
+
+  it('drops rules whose conditions have the wrong value shape', () => {
+    expect(sanitizeRule(custom('vulns', { field: 'vendor' }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { field: 'vendor', values: 'Cisco' }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { field: 'cwe', values: [1] }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { field: 'cvss' }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { field: 'epss', min: NaN }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { field: 'kevAddedWithinDays', days: '7' }))).toBeNull();
+    expect(sanitizeRule(custom('news', { field: 'severity', min: 'extreme' }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { op: 'any', items: [{ field: 'cvss', min: Infinity }] }))).toBeNull();
+  });
+
+  it('drops unknown fields and fields of the other kind', () => {
+    expect(sanitizeRule(custom('vulns', { field: 'bogus' }))).toBeNull();
+    expect(sanitizeRule(custom('news', { field: 'kev' }))).toBeNull();
+    expect(sanitizeRule(custom('vulns', { field: 'keyword', values: ['x'] }))).toBeNull();
+    expect(migrateAlertRules({ alertRules: [custom('vulns', { field: 'vendor' })] as unknown as AlertRule[] }, new Date())).toHaveLength(4);
+  });
+
+  it('evaluating a malformed condition does not throw', () => {
+    const bad = all({ field: 'vendor' } as unknown as VulnCondition);
+    expect(() => matchesVuln(bad, vuln({ vendor: 'Cisco' }), ctx())).not.toThrow();
+    expect(matchesVuln(bad, vuln({ vendor: 'Cisco' }), ctx())).toBe(false);
+    expect(matchesVuln(all({ field: 'cwe' } as unknown as VulnCondition), vuln({ cwes: ['CWE-79'] }), ctx())).toBe(false);
+    for (const field of ['keyword', 'vendor', 'tag', 'source', 'category']) {
+      const g = newsAll({ field } as unknown as NewsCondition);
+      expect(() => matchesNews(g, article('Cisco'), ctx())).not.toThrow();
+      expect(matchesNews(g, article('Cisco'), ctx())).toBe(false);
+    }
   });
 });
