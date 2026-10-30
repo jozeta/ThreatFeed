@@ -172,7 +172,7 @@ export const App: React.FC = () => {
         {(activeTab === 'newspaper' || activeTab === 'latest' || activeTab === 'unread') && (() => {
           const layout = settings.layout;
           const viewProps = { articles: displayArticles, isLoading: isRefreshing, onOpenArticle: handleOpenArticle };
-          return layout === 'newspaper' ? <NewspaperView {...viewProps} onSearch={handleSearch} />
+          return layout === 'newspaper' ? <NewspaperView key={activeTab} {...viewProps} onSearch={handleSearch} chronological={activeTab === 'latest'} />
             : layout === 'list-thumbnails' ? <ListThumbnailView {...viewProps} />
             : <ListView {...viewProps} />;
         })()}

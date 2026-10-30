@@ -16,6 +16,7 @@ import { stackMatches } from '../../services/intelligence/stack';
 import { TrendingStrip } from './TrendingStrip';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../Common/LoadMoreButton';
+import { newspaperModes } from '../../utils/layout';
 import {
   Flame,
   ShieldAlert,
@@ -34,6 +35,7 @@ interface NewspaperViewProps {
   isLoading: boolean;
   onOpenArticle: (article: Article) => void;
   onSearch?: (query: string) => void;
+  chronological?: boolean; // newest first, sections and clustering off unless toggled in this view
 }
 
 // Section types that guarantee 100% horizontal & vertical space filling with zero gaps
@@ -183,8 +185,17 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   isLoading,
   onOpenArticle,
   onSearch,
+  chronological = false,
 }) => {
   const { settings, updateSetting } = useSettings();
+  const [localModes, setLocalModes] = useState({ sections: false, clustering: false });
+  const modes = newspaperModes(chronological, settings, localModes);
+  const toggleSections = () => chronological
+    ? setLocalModes((m) => ({ ...m, sections: !m.sections }))
+    : updateSetting('sectionsEnabled', !modes.sections);
+  const toggleClustering = () => chronological
+    ? setLocalModes((m) => ({ ...m, clustering: !m.clustering }))
+    : updateSetting('clusteringEnabled', !modes.clustering);
   const [selectedCluster, setSelectedCluster] = useState<StoryCluster | null>(null);
   const [isCustomizingSections, setIsCustomizingSections] = useState(false);
 
@@ -195,10 +206,10 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     [articles]
   );
   const rawClusters = useMemo(() => {
-    if (!settings.clusteringEnabled) return [];
+    if (!modes.clustering) return [];
     return clusterArticles(articles);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- articles is captured via clusterSignature
-  }, [clusterSignature, settings.clusteringEnabled]);
+  }, [clusterSignature, modes.clustering]);
   const clusters = useMemo(() => {
     const byId = new Map(articles.map((a) => [a.id, a]));
     const live = (a: Article) => byId.get(a.id) ?? a;
@@ -220,19 +231,19 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
   // Set of related article IDs hidden from main page when clustering is active
   const clusteredSecondaryIds = useMemo(() => {
-    if (!settings.clusteringEnabled) return new Set<string>();
+    if (!modes.clustering) return new Set<string>();
     const ids = new Set<string>();
     clusters.forEach((c) => {
       c.relatedArticles.forEach((r) => ids.add(r.id));
     });
     return ids;
-  }, [clusters, settings.clusteringEnabled]);
+  }, [clusters, modes.clustering]);
 
   // Distinct articles to display on the newspaper front
   const primaryDisplayArticles = useMemo(() => {
-    if (!settings.clusteringEnabled) return articles;
+    if (!modes.clustering) return articles;
     return articles.filter((a) => !clusteredSecondaryIds.has(a.id));
-  }, [articles, clusteredSecondaryIds, settings.clusteringEnabled]);
+  }, [articles, clusteredSecondaryIds, modes.clustering]);
 
   // Helper to extract cluster props for any article
   const getClusterProps = (article: Article) => {
@@ -328,7 +339,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
   // Group articles by user configured sections
   const sectionedGroups = useMemo(() => {
-    if (settings.sectionsEnabled === false) return null;
+    if (!modes.sections) return null;
 
     const configs = [...(settings.newspaperSections || [])]
       .filter((s) => s.enabled)
@@ -385,7 +396,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     }
 
     return groups;
-  }, [primaryDisplayArticles, settings.newspaperSections, settings.sectionsEnabled, settings.stackKeywords]);
+  }, [primaryDisplayArticles, settings.newspaperSections, modes.sections, settings.stackKeywords]);
 
   if (isLoading && articles.length === 0) {
     return <NewspaperSkeleton />;
@@ -395,7 +406,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     return <EmptyState />;
   }
 
-  const isSectionsActive = settings.sectionsEnabled !== false;
+  const isSectionsActive = modes.sections;
 
   return (
     <div className="newspaper-container main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -423,7 +434,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           {/* Section Mode Toggle (Requirement: Disable sections -> Chronological order) */}
           <button
-            onClick={() => updateSetting('sectionsEnabled', !isSectionsActive)}
+            onClick={toggleSections}
             title={
               isSectionsActive
                 ? 'Disable sections to view all articles in strict chronological order'
@@ -441,16 +452,16 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
           {/* Clustering Toggle */}
           <button
-            onClick={() => updateSetting('clusteringEnabled', !settings.clusteringEnabled)}
+            onClick={toggleClustering}
             title="Toggle multi-source story clustering"
             className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-              settings.clusteringEnabled
+              modes.clustering
                 ? 'bg-theme-surface text-theme-accent border border-theme-accent/40 font-bold'
                 : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface border border-theme-border'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Clustering: {settings.clusteringEnabled ? 'ON' : 'OFF'}</span>
+            <span>Clustering: {modes.clustering ? 'ON' : 'OFF'}</span>
           </button>
 
           {/* Customize Sections Button (Only shown/enabled when sections are on) */}

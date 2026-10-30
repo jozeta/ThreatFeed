@@ -19,7 +19,7 @@ Inspired by the editorial elegance, typography, and usability of **Newsify for i
   - **Newspaper Mode**: Broadsheet editorial hierarchy.
   - **List + Thumbnails**: Modern media-rich newsfeed.
   - **Compact List**: Fast traditional scanner for rapid triage.
-- **Latest Tab**: A strict newest-first stream, independent of the sort filter, in the two list layouts; the newspaper layout arranges the same articles editorially.
+- **Latest Tab**: A strict newest-first stream, independent of the sort filter, in every layout: on Latest (and My Feed) the newspaper starts with sections and clustering off, and turning them on there leaves the front page unchanged.
 - Long lists render incrementally with a **Show more** button, so large archives stay responsive.
 - **Freshness Indicators**: Relative timestamps (`12m ago`, `2h ago`, `Yesterday`, `24 Sep`).
 - **Editorial Fallbacks**: Never leaves ugly broken image icons; generates threat-themed gradients and branding placeholders.

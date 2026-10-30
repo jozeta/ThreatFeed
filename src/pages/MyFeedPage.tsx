@@ -190,7 +190,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
         // The layout views bring their own page padding; cancel ours so the widths line up
         <div className="-mx-4 sm:-mx-6 lg:-mx-8">
           {newsLayout === 'newspaper'
-            ? <NewspaperView articles={layoutArticles} isLoading={false} onOpenArticle={onOpenArticle} />
+            ? <NewspaperView articles={layoutArticles} isLoading={false} onOpenArticle={onOpenArticle} chronological />
             : <ListThumbnailView articles={layoutArticles} isLoading={false} onOpenArticle={onOpenArticle} />}
         </div>
       ) : (
