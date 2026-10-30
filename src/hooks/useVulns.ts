@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useFeeds } from '../context/FeedContext';
-import { MsrcData, RansomwareIntel, VulnData } from '../types';
+import { ActorsData, MsrcData, RansomwareIntel, VulnData } from '../types';
 
 /**
  * Vulnerability data for views that need it. The first use loads data/vulns.json (about 160 KB
@@ -30,4 +30,13 @@ export function useMsrc(): MsrcData | null {
     void ensureMsrc();
   }, [ensureMsrc, snapshotGeneratedAt]);
   return msrc;
+}
+
+/** Threat actor and malware profiles (data/actors.json), loaded on first use */
+export function useActors(): ActorsData | null {
+  const { actors, ensureActors, snapshotGeneratedAt } = useFeeds();
+  useEffect(() => {
+    void ensureActors();
+  }, [ensureActors, snapshotGeneratedAt]);
+  return actors;
 }

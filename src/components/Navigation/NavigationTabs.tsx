@@ -14,6 +14,7 @@ import {
   ClipboardList,
   Skull,
   ShieldAlert,
+  Crosshair,
 } from 'lucide-react';
 
 const ORDERED_PRIMARY_CATEGORIES = [
@@ -86,6 +87,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       badgeColor: 'bg-theme-accent text-white',
     },
     { id: 'ransomware', label: 'Ransomware', icon: <Skull className="w-4 h-4" /> },
+    { id: 'actors', label: 'Actors', icon: <Crosshair className="w-4 h-4" /> },
     { id: 'vulnerabilities', label: 'Vulns', icon: <ShieldAlert className="w-4 h-4" /> },
     {
       id: 'bookmarks',

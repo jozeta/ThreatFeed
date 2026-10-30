@@ -1,7 +1,8 @@
 /**
  * Builds public/data/snapshot.json: every enabled default feed fetched server-side (no CORS, no
  * proxy), parsed with the app's own parser, plus CVE intelligence (CISA KEV, FIRST EPSS, NVD, GitHub
- * advisories, Microsoft Patch Tuesday) and incident data (Ransomware.live, Have I Been Pwned).
+ * advisories, Microsoft Patch Tuesday), incident data (Ransomware.live, Have I Been Pwned) and threat actor and
+ * malware profiles (MITRE ATT&CK, Malpedia).
  *
  * Runs in the deploy workflow on a schedule, so the published site always carries a recent
  * snapshot and the browser only needs live fetching for feeds the user added themselves.
@@ -26,6 +27,7 @@ const {
   cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor, malpediaProfiles, stopRansomwareAdvisories,
 } = await import('../src/services/intelligence/enrichment');
 const { refreshPatchMonths, decodeMsrc } = await import('../src/services/intelligence/patchTuesday');
+const { refreshActors, decodeActors, encodeActors } = await import('../src/services/intelligence/actors');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
@@ -43,6 +45,7 @@ type GroupIntel = import('../src/types').GroupIntel;
 type PublicAttack = import('../src/types').PublicAttack;
 type ExploitInfo = import('../src/types').ExploitInfo;
 type MsrcData = import('../src/types').MsrcData;
+type ActorsData = import('../src/types').ActorsData;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
@@ -50,6 +53,7 @@ const VULNS_OUT = resolve(root, 'public/data/vulns.json'); // loaded by the app 
 const NVD_CACHE_OUT = resolve(root, 'public/data/nvd-cache.json'); // read back by the next run, never by the app
 const RANSOMWARE_OUT = resolve(root, 'public/data/ransomware.json'); // group intel, public reports, payments: Ransomware page only
 const MSRC_OUT = resolve(root, 'public/data/msrc.json'); // Patch Tuesday releases: the Vulnerabilities page's Patch Tuesday tab only
+const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and malware profiles: the Actors page and trending chips
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
 // The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
 const PREVIOUS_BASE = process.env.PREVIOUS_SNAPSHOT_URL?.replace(/snapshot\.json$/, '');
@@ -381,9 +385,10 @@ async function loadRansomwareLive(previousIntel: RansomwareIntel | null) {
 
 // ---------- Slow-changing sources: refreshed once a day, carried over in between ----------
 
-async function loadDailySources(previousIntel: RansomwareIntel | null, updates: Record<string, string>) {
+/** `force` refetches ATT&CK and Malpedia regardless, when there is no actors.json to carry over yet */
+async function loadDailySources(previousIntel: RansomwareIntel | null, updates: Record<string, string>, force = false) {
   let attackBundle: any = null;
-  if (hoursSince(updates.attack) > 24) {
+  if (force || hoursSince(updates.attack) > 24) {
     attackBundle = await tryJson('attack', 'MITRE ATT&CK (enterprise)', 'https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json', 120000);
     if (attackBundle) updates.attack = new Date().toISOString();
   } else {
@@ -400,7 +405,7 @@ async function loadDailySources(previousIntel: RansomwareIntel | null, updates: 
     report({ id: 'payments', label: 'Ransomwhere payments', status: 'cached', detail: `refreshed daily, last ${updates.payments?.slice(0, 16)}` });
   }
   let malpedia: any = null;
-  if (hoursSince(updates.malpedia) > 24) {
+  if (force || hoursSince(updates.malpedia) > 24) {
     malpedia = await tryJson('malpedia', 'Malpedia families', 'https://malpedia.caad.fkie.fraunhofer.de/api/get/families', 120000);
     if (malpedia) updates.malpedia = new Date().toISOString();
   } else {
@@ -440,6 +445,18 @@ async function loadMsrc(): Promise<MsrcData> {
   return r.data;
 }
 
+// ---------- Threat actors and malware (ATT&CK and Malpedia, refreshed with the ransomware intel) ----------
+
+/** The published actors.json (PREVIOUS_ACTORS_URL), carried over on the runs that don't refresh the bundles */
+async function loadPreviousActors(): Promise<ActorsData | null> {
+  if (!process.env.PREVIOUS_ACTORS_URL) return null;
+  try {
+    return decodeActors(await getJson(process.env.PREVIOUS_ACTORS_URL, 60000));
+  } catch {
+    return null; // first run, or the site is down: the bundles are fetched this run
+  }
+}
+
 // ---------- Feeds ----------
 
 async function fetchFeeds() {
@@ -470,7 +487,9 @@ const previousIntel: RansomwareIntel | null = previousIntelRaw && typeof previou
 const rlPromise = loadRansomwareLive(previousIntel);
 const exploitsPromise = loadExploitSources();
 const msrcPromise = loadMsrc();
-const dailyPromise = rlPromise.then(rl => loadDailySources(previousIntel, rl.updates));
+const previousActorsPromise = loadPreviousActors();
+const dailyPromise = Promise.all([rlPromise, previousActorsPromise])
+  .then(([rl, previousActors]) => loadDailySources(previousIntel, rl.updates, !previousActors?.actors.length));
 const kevEntries = await loadKev();
 const vulnSourcesPromise = Promise.all([loadNvdData(new Set(kevEntries.map(k => k.cve))), loadAdvisories(), loadEpssTop()]);
 const { feeds, results } = await fetchFeeds();
@@ -619,6 +638,18 @@ const ransomwareIntel: RansomwareIntel = {
   sourceUpdates: rl.updates,
 };
 
+// Threat actor and malware profiles: rebuilt when ATT&CK (and Malpedia) came in this run, carried over otherwise
+const previousActors = await previousActorsPromise;
+const actorsRefresh = refreshActors(previousActors, attackBundle, malpedia, articles);
+const actors = actorsRefresh.data;
+report({
+  id: 'actors',
+  label: 'Threat actor and malware profiles',
+  status: actorsRefresh.built.length ? 'ok' : actors.actors.length ? 'cached' : 'failed',
+  count: actors.actors.length + actors.malware.length,
+  detail: [actorsRefresh.built.length && `built ${actorsRefresh.built.join(', ')}`, actorsRefresh.carried.length && `carried over ${actorsRefresh.carried.join(', ')}`].filter(Boolean).join('; ') || 'no ATT&CK data',
+});
+
 // Which groups exploit which CVE, for the Vulnerabilities page
 const cveGroups: Record<string, string[]> = {};
 for (const g of Object.values(intelGroups)) for (const c of g.cves ?? []) (cveGroups[c.cve] ??= []).push(g.name);
@@ -637,6 +668,8 @@ writeFileSync(RANSOMWARE_OUT, ransomwareJson);
 const msrc = await msrcPromise;
 const msrcJson = JSON.stringify({ version: 1, generatedAt, ...msrc });
 writeFileSync(MSRC_OUT, msrcJson);
+const actorsJson = JSON.stringify({ version: 1, ...encodeActors({ ...actors, generatedAt }) });
+writeFileSync(ACTORS_OUT, actorsJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
@@ -645,5 +678,6 @@ console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.leng
 console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${watchable.length} CVSS 7–8.9 (${mb(JSON.stringify(vulns.watchable))}), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
 console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Patch Tuesday: ${msrc.months.map(m => `${m.id} ${m.cves.length} CVEs (${m.cves.filter(c => c.exploited).length} exploited)`).join(', ') || 'no data'}, ${mb(msrcJson)}`);
+console.log(`Actors: ${actors.actors.length} threat actors (${actors.actors.filter(a => a.country).length} with a country), ${actors.malware.length} malware and tools (${actors.malware.filter(m => m.malpediaUrl).length} in Malpedia, ${actors.malware.filter(m => !m.attackId).length} Malpedia-only from the news), ${(actorsJson.length / 1024).toFixed(0)} KB${actorsJson.length > 400 * 1024 ? ' (over the 400 KB budget)' : ''}`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

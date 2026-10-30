@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -16,7 +16,7 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadMsrc, loadRansomwareIntel, loadSnapshot, loadVulnData } from '../services/snapshot';
+import { loadActors, loadMsrc, loadRansomwareIntel, loadSnapshot, loadVulnData } from '../services/snapshot';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
@@ -59,6 +59,8 @@ interface FeedContextType {
   ensureRansomwareIntel: () => Promise<void>; // like ensureVulns, for data/ransomware.json
   msrc: MsrcData | null; // the latest Patch Tuesday releases (MSRC CVRF)
   ensureMsrc: () => Promise<void>; // like ensureVulns, for data/msrc.json; use the useMsrc hook
+  actors: ActorsData | null; // threat actor and malware profiles (ATT&CK, Malpedia)
+  ensureActors: () => Promise<ActorsData | null>; // like ensureMsrc, for data/actors.json; resolves to the loaded data
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -105,6 +107,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [dataSources, setDataSources] = useState<DataSourceStatus[]>([]);
   const [ransomwareIntel, setRansomwareIntel] = useState<RansomwareIntel | null>(null);
   const [msrc, setMsrc] = useState<MsrcData | null>(null);
+  const [actors, setActors] = useState<ActorsData | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -241,6 +244,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRansomwareIntel(await getStoredValue<RansomwareIntel>('ransomwareIntel'));
       const storedMsrc = await getStoredValue<MsrcData>('msrc');
       setMsrc(prev => prev ?? storedMsrc);
+      const storedActors = await getStoredValue<ActorsData>('actors');
+      setActors(prev => prev ?? storedActors);
 
       // Re-apply current tagging/severity rules, and drop non-http(s) links stored by older versions
       setArticles(storedArticles.map(a => ({
@@ -687,6 +692,26 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return msrcRequest.current;
   }, []);
 
+  const actorsRef = useRef<ActorsData | null>(null);
+  actorsRef.current = actors;
+  const actorsRequest = useRef<Promise<ActorsData | null> | null>(null);
+  const ensureActors = useCallback(() => {
+    const current = actorsRef.current;
+    if (current?.generatedAt && current.generatedAt === snapshotAtRef.current) return Promise.resolve(current);
+    if (!actorsRequest.current) {
+      actorsRequest.current = loadActors()
+        .then(async (data) => {
+          if (!data) return actorsRef.current;
+          actorsRef.current = data;
+          setActors(data);
+          await saveStoredValue('actors', data);
+          return data;
+        })
+        .finally(() => { actorsRequest.current = null; });
+    }
+    return actorsRequest.current;
+  }, []);
+
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
   const value = useMemo<FeedContextType>(() => ({
     feeds,
@@ -700,6 +725,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ensureRansomwareIntel,
     msrc,
     ensureMsrc,
+    actors,
+    ensureActors,
     articles,
     feedHealth,
     isRefreshing,
@@ -725,7 +752,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

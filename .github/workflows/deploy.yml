@@ -40,6 +40,8 @@ jobs:
           PREVIOUS_NVD_CACHE_URL: https://jozeta.github.io/ThreatFeed/data/nvd-cache.json
           # Carries older Patch Tuesday months over, so their ~30 MB MSRC documents aren't refetched every run
           PREVIOUS_MSRC_URL: https://jozeta.github.io/ThreatFeed/data/msrc.json
+          # Carries actor and malware profiles over between the daily ATT&CK and Malpedia refreshes
+          PREVIOUS_ACTORS_URL: https://jozeta.github.io/ThreatFeed/data/actors.json
           # Optional (repo secret): a free NVD API key allows 10x the request rate. Empty is fine.
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           # Raises the GitHub Advisory Database API limit from 60 to 1000+ requests an hour (read-only use)

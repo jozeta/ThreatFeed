@@ -26,6 +26,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ de
 const BriefingPage = lazy(() => import('./pages/BriefingPage').then((m) => ({ default: m.BriefingPage })));
 const MyFeedPage = lazy(() => import('./pages/MyFeedPage').then((m) => ({ default: m.MyFeedPage })));
 const RansomwarePage = lazy(() => import('./pages/RansomwarePage').then((m) => ({ default: m.RansomwarePage })));
+const ActorsPage = lazy(() => import('./pages/ActorsPage').then((m) => ({ default: m.ActorsPage })));
 const VulnerabilitiesPage = lazy(() => import('./pages/VulnerabilitiesPage').then((m) => ({ default: m.VulnerabilitiesPage })));
 
 export const App: React.FC = () => {
@@ -184,6 +185,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'feed' && <MyFeedPage onOpenArticle={handleOpenArticle} />}
           {activeTab === 'ransomware' && <RansomwarePage onOpenArticle={handleOpenArticle} />}
+          {activeTab === 'actors' && <ActorsPage onOpenArticle={handleOpenArticle} />}
           {activeTab === 'vulnerabilities' && <VulnerabilitiesPage onOpenArticle={handleOpenArticle} />}
 
           {activeTab === 'bookmarks' && (

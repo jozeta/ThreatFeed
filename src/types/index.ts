@@ -309,6 +309,39 @@ export interface MsrcData {
   updates?: Record<string, string>; // when each month's document was last fetched, for the snapshot's carry-over
 }
 
+/** A threat actor from MITRE ATT&CK (data/actors.json) */
+export interface ActorProfile {
+  id: string; // ATT&CK group ID, e.g. G0007
+  name: string;
+  aliases: string[];
+  description: string; // first paragraph, links and citations stripped
+  country?: string; // ISO 3166-1 alpha-2, only when the description clearly attributes the group
+  firstSeen?: string; // e.g. "2004", from "active since at least 2004"
+  techniques: { id: string; name: string }[]; // max 40, by ID
+  software: { id: string; name: string }[]; // ATT&CK software IDs (MalwareProfile.attackId)
+  url: string; // attack.mitre.org
+}
+
+/** A malware family or tool: ATT&CK software merged with Malpedia (data/actors.json) */
+export interface MalwareProfile {
+  id: string; // URL slug, e.g. cobalt-strike
+  name: string;
+  aliases: string[];
+  description: string;
+  kind: 'malware' | 'tool';
+  attackId?: string; // e.g. S0154
+  actors: string[]; // names of groups using it (ATT&CK) or it is attributed to (Malpedia)
+  malpediaUrl?: string;
+  url?: string; // attack.mitre.org
+}
+
+export interface ActorsData {
+  generatedAt?: string;
+  actors: ActorProfile[];
+  malware: MalwareProfile[];
+  updates?: Record<string, string>; // when actors and malware were last built, for the snapshot's carry-over
+}
+
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
 export interface ExtractedIOC {
@@ -398,7 +431,7 @@ export interface FilterState {
   sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity' | 'relevance';
 }
 
-export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
+export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'actors' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 
 export type AlertRuleKind = 'news' | 'vulns';
 export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves';

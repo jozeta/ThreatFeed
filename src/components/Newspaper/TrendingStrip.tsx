@@ -3,15 +3,17 @@ import { Article } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
 import { computeTrending } from '../../services/intelligence/trending';
 import { Sparkline } from '../Common/Sparkline';
+import { useOpenTrending } from '../../hooks/useOpenTrending';
 import { TrendingUp } from 'lucide-react';
 
-/** One-line "what's being talked about this week" strip; each entity runs a search when clicked. */
+/** One-line "what's being talked about this week" strip; each entity runs a search (or opens its actor profile) when clicked. */
 export const TrendingStrip: React.FC<{ articles: Article[]; stackKeywords: string[]; onSearch: (query: string) => void }> = ({
   articles,
   stackKeywords,
   onSearch,
 }) => {
   const { incidents } = useFeeds();
+  const { open, hasProfile } = useOpenTrending(onSearch);
   const trending = useMemo(
     () => computeTrending(articles, stackKeywords, 7, Date.now(), incidents?.victims.length ? incidents.victims : undefined).slice(0, 8),
     [articles, stackKeywords, incidents]
@@ -27,8 +29,8 @@ export const TrendingStrip: React.FC<{ articles: Article[]; stackKeywords: strin
       {trending.map((t) => (
         <button
           key={`${t.kind}:${t.name}`}
-          onClick={() => onSearch(t.name)}
-          title={`${t.count} articles this week${t.previous ? `, ${t.previous} the week before` : ''}. Click to search.`}
+          onClick={() => void open(t)}
+          title={`${t.count} articles this week${t.previous ? `, ${t.previous} the week before` : ''}. Click to ${hasProfile(t) ? 'open the actor profile' : 'search'}.`}
           className="flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded bg-theme-surface border border-theme-border hover:border-theme-accent text-theme-text transition-colors"
         >
           <span>{t.name}</span>

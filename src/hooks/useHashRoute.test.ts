@@ -23,6 +23,14 @@ describe('hash routes', () => {
     expect(buildHash('bookmarks')).toBe('#/saved');
   });
 
+  it('routes the Actors page with its malware sub-tab and open panel', () => {
+    const route = parseHash('#/actors/malware?malware=cobalt-strike');
+    expect(route.page).toBe('actors');
+    expect(route.sub).toBe('malware');
+    expect(route.params.get('malware')).toBe('cobalt-strike');
+    expect(buildHash('actors', '', new URLSearchParams({ actor: 'G0007' }))).toBe('#/actors?actor=G0007');
+  });
+
   it('routes My Feed with its News / Vulns sub-tab', () => {
     const route = parseHash('#/feed/vulns');
     expect(route.page).toBe('feed');

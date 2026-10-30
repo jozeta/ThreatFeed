@@ -30,6 +30,7 @@ public/data/vulns.json
 public/data/nvd-cache.json
 public/data/ransomware.json
 public/data/msrc.json
+public/data/actors.json
 
 # Brainstorming companion mockups
 .superpowers/
