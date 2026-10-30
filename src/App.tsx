@@ -17,6 +17,8 @@ import { ActiveNavTab, Article } from './types';
 import { AlertMonitor } from './components/AlertMonitor';
 import { CveWatchMonitor } from './components/CveWatchMonitor';
 import { redirectRemovedPage, setHashParams, useHashRoute } from './hooks/useHashRoute';
+import { usePanelLevels } from './hooks/usePanelLevels';
+import { PanelLevel } from './components/Common/SidePanel';
 
 // Secondary pages load on first visit, keeping the initial bundle to what the front page needs
 const SourcesPage = lazy(() => import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage })));
@@ -48,6 +50,7 @@ export const App: React.FC = () => {
   // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…) open over any page
   const panel = (key: string) => route.params.get(key) ?? '';
   const [vendor, cve, actor, malware, group] = ['vendor', 'cve', 'actor', 'malware', 'group'].map(panel);
+  const levels = usePanelLevels(route.params, Boolean(activeArticle));
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
@@ -215,19 +218,23 @@ export const App: React.FC = () => {
         </Suspense>
       </main>
 
-      {/* Detail panels, over whichever page opened them; their levels stack a CVE over a vendor over the rest */}
+      {/* Detail panels, over whichever page opened them, stacked in the order they were opened (their levels).
+          Keyed by what they show, so a panel opened again for something else comes in anew, on top */}
       <Suspense fallback={null}>
-        {actor && <ActorPanelHost id={actor} onOpenArticle={handleOpenArticle} />}
-        {malware && <MalwarePanelHost id={malware} onOpenArticle={handleOpenArticle} />}
-        {group && <GroupPanelHost id={group} onOpenArticle={handleOpenArticle} />}
-        {vendor && <VendorPanelHost vendor={vendor} onOpenArticle={handleOpenArticle} />}
+        {actor && <PanelLevel.Provider value={levels.actor ?? 0}><ActorPanelHost key={actor} id={actor} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
+        {malware && <PanelLevel.Provider value={levels.malware ?? 0}><MalwarePanelHost key={malware} id={malware} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
+        {group && <PanelLevel.Provider value={levels.group ?? 0}><GroupPanelHost key={group} id={group} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
+        {vendor && <PanelLevel.Provider value={levels.vendor ?? 0}><VendorPanelHost key={vendor} vendor={vendor} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
         {cve && (
-          <CvePanelHost
-            cve={cve}
-            articles={articles}
-            onOpenArticle={(a) => { setHashParams({ cve: '' }); handleOpenArticle(a); }}
-            onClose={() => setHashParams({ cve: '' })}
-          />
+          <PanelLevel.Provider value={levels.cve ?? 0}>
+            <CvePanelHost
+              key={cve}
+              cve={cve}
+              articles={articles}
+              onOpenArticle={(a) => { setHashParams({ cve: '' }); handleOpenArticle(a); }}
+              onClose={() => setHashParams({ cve: '' })}
+            />
+          </PanelLevel.Provider>
         )}
       </Suspense>
 

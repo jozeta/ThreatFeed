@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EntityText } from '../EntityText';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
@@ -130,7 +131,7 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
 
           {article.description && (
             <p className="font-serif text-xs text-theme-text-muted line-clamp-1 mb-2">
-              {article.description}
+              <EntityText text={article.description} context={article.title} />
             </p>
           )}
         </div>

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EntityText } from '../EntityText';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
@@ -88,7 +89,7 @@ export const FeatureArticle: React.FC<FeatureArticleProps> = ({
 
         {article.description && (
           <p className="font-serif text-sm text-theme-text-muted leading-relaxed line-clamp-2 mb-3">
-            {article.description}
+            <EntityText text={article.description} context={article.title} />
           </p>
         )}
 

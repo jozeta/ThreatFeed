@@ -3,7 +3,7 @@ import { useFeeds } from '../context/FeedContext';
 import { findProfile } from '../services/intelligence/actors';
 import { EntityKind } from '../services/intelligence/trending';
 import { groupDisplayName } from '../utils/countries';
-import { setHashParams } from './useHashRoute';
+import { openPanel } from './useHashRoute';
 
 // A trending chip's entity
 type Entity = { kind: EntityKind; name: string };
@@ -27,8 +27,8 @@ export function useOpenTrending(onSearch: (query: string) => void) {
   }, [incidents]);
 
   const open = useCallback(async (t: Entity) => {
-    if (t.kind === 'cve') return setHashParams({ cve: t.name }, true);
-    if (t.kind === 'ransomware') return setHashParams({ group: groupKeys.get(t.name.toLowerCase()) ?? t.name.toLowerCase() }, true);
+    if (t.kind === 'cve') return openPanel('cve', t.name);
+    if (t.kind === 'ransomware') return openPanel('group', groupKeys.get(t.name.toLowerCase()) ?? t.name.toLowerCase());
     if (t.kind !== 'actor') return onSearch(t.name);
     if (pending.current) return; // a repeat click while actors.json loads
     pending.current = true;
@@ -43,7 +43,7 @@ export function useOpenTrending(onSearch: (query: string) => void) {
       // The user moved on while it loaded: don't yank them back
       if (window.location.hash !== hashAtClick) return;
       const hit = findProfile(data, t.name);
-      if (hit) setHashParams({ actor: '', malware: '', [hit.kind]: hit.id }, true);
+      if (hit) openPanel(hit.kind, hit.id);
       else onSearch(t.name);
     } finally {
       pending.current = false;

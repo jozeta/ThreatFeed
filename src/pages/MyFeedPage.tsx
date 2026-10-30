@@ -10,6 +10,7 @@ import { ListArticle } from '../components/ArticleCard/ListArticle';
 import { NewspaperView } from '../components/Newspaper/NewspaperView';
 import { ListThumbnailView } from '../components/Layouts/ListThumbnailView';
 import { EmptyState } from '../components/Common/EmptyState';
+import { EntityLink, EntityText } from '../components/EntityText';
 import { LoadMoreButton } from '../components/Common/LoadMoreButton';
 import { ExploitBadges, SeverityPill } from './vulns/shared';
 import { formatRelativeTime } from '../utils/date';
@@ -40,7 +41,8 @@ function cveFacts(cve: string, vulns: VulnData | null) {
   const score = kev?.cvss ?? record?.score;
   return {
     inKev: Boolean(kev),
-    vendorProduct: kev ? `${kev.vendor} ${kev.product}` : undefined,
+    vendor: kev?.vendor,
+    product: kev?.product,
     score,
     severity: record?.severity,
     exploit: vulns?.exploits?.[cve],
@@ -65,8 +67,8 @@ const VulnRow: React.FC<{ row: AlertRow; vulns: VulnData | null; onOpen: () => v
       <div className="min-w-0 flex-grow space-y-1">
         <div className="font-serif text-sm text-theme-text">
           {events.length > 0
-            ? events.map((m) => <p key={m.itemId}>{m.title}</p>)
-            : <p className="truncate">{facts.vendorProduct ?? row.matches[0].title}</p>}
+            ? events.map((m) => <p key={m.itemId}><EntityText text={m.title} /></p>)
+            : <p className="truncate">{facts.vendor ? <><EntityLink entity={{ kind: 'vendor', id: facts.vendor }}>{facts.vendor}</EntityLink> {facts.product}</> : <EntityText text={row.matches[0].title} />}</p>}
         </div>
         <RuleLabels row={row} />
       </div>

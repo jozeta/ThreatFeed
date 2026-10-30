@@ -13,6 +13,7 @@ import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incid
 import { StackedBars } from './StackedBars';
 import { CveButton, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
 import { VendorButton } from '../../components/VendorLink';
+import { EntityLink } from '../../components/EntityText';
 import { Building2, Search, Skull } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -238,7 +239,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
               <li key={k.cve} className="flex items-baseline gap-2 text-xs">
                 <span className="font-mono text-theme-text-muted w-4 text-right">{i + 1}.</span>
                 <CveButton cve={k.cve} onOpen={onOpenCve} />
-                <span className="font-serif text-theme-text truncate" title={k.name}><VendorButton name={k.vendor} /> {k.product}</span>
+                <span className="font-serif text-theme-text truncate" title={k.name}><EntityLink entity={{ kind: 'vendor', id: k.vendor }}>{k.vendor}</EntityLink> {k.product}</span>
                 <span className="ml-auto font-mono whitespace-nowrap"><EpssValue epss={k.epss} /></span>
                 {k.ransomware && <Skull className="w-3 h-3 text-rose-500 shrink-0" aria-label="Used by ransomware" />}
               </li>
@@ -290,7 +291,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
                 </div>
                 <p className="font-serif text-theme-text">{k.name}</p>
                 <p className="font-mono text-[11px] text-theme-text-muted">
-                  <VendorButton name={k.vendor} /> · added {k.dateAdded}
+                  <EntityLink entity={{ kind: 'vendor', id: k.vendor }}>{k.vendor}</EntityLink> · added {k.dateAdded}
                   {k.dueDate && <> · <span className={k.dueDate >= today && k.dueDate <= in14Days ? 'text-orange-500 font-bold' : ''}>due {k.dueDate}</span></>}
                   {news.get(k.cve)?.length ? ` · ${news.get(k.cve)!.length} articles` : ''}
                 </p>
@@ -318,7 +319,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
                   <td className="py-2 pr-3 text-theme-text">
                     <span className="font-serif">{k.name}</span>
                     {k.ransomware && <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
-                    <span className="block text-[10px] text-theme-text-muted"><VendorButton name={k.vendor} /> · {k.product}</span>
+                    <span className="block text-[10px] text-theme-text-muted"><EntityLink entity={{ kind: 'vendor', id: k.vendor }}>{k.vendor}</EntityLink> · {k.product}</span>
                   </td>
                   <td className="py-2 pr-3"><SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} /></td>
                   <td className="py-2 pr-3"><EpssValue epss={k.epss} /></td>

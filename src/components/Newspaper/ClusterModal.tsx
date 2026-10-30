@@ -3,6 +3,7 @@ import { Article, StoryCluster } from '../../types';
 import { X, ExternalLink, Layers, Shield, Clock, BookOpen } from 'lucide-react';
 import { formatRelativeTime } from '../../utils/date';
 import { SeverityBadge, CveChip } from '../Common/ThreatBadges';
+import { EntityText } from '../EntityText';
 
 interface ClusterModalProps {
   cluster: StoryCluster | null;
@@ -74,7 +75,7 @@ export const ClusterModal: React.FC<ClusterModalProps> = ({
             </h4>
             {cluster.primaryArticle.description && (
               <p className="font-sans text-xs text-theme-text-muted line-clamp-3">
-                {cluster.primaryArticle.description}
+                <EntityText text={cluster.primaryArticle.description} context={cluster.primaryArticle.title} />
               </p>
             )}
             <div className="pt-2 flex items-center justify-between text-xs font-mono text-theme-text-muted">

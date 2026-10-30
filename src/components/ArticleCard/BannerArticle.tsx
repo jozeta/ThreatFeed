@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EntityText } from '../EntityText';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
@@ -97,7 +98,7 @@ export const BannerArticle: React.FC<BannerArticleProps> = ({
 
             {article.description && (
               <p className="font-serif text-base sm:text-lg text-theme-text/90 leading-relaxed mb-4 line-clamp-3 sm:line-clamp-4">
-                {article.description}
+                <EntityText text={article.description} context={article.title} />
               </p>
             )}
           </div>

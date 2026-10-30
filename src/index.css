@@ -217,6 +217,21 @@ body {
   font-size: 0.85em;
 }
 
+/* Vendor, group, actor, malware and CVE names that open their panel: the text's own look until hovered or
+   focused, then an underline in the same colour */
+.entity-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.entity-link:hover,
+.entity-link:focus-visible {
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 3px;
+  outline: none;
+}
+
 /* ─────────────────────────────────────────────────────────────
    GLASS PANELS AND MODALS
    The reference glass: clear and strongly blurred, a faint white tint, a thin bright edge and a soft shadow.

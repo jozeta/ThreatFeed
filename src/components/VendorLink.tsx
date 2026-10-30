@@ -1,12 +1,9 @@
 import React from 'react';
-import { setHashParams } from '../hooks/useHashRoute';
+import { openPanel } from '../hooks/useHashRoute';
 import { canonicalVendor } from '../services/intelligence/vendor';
 
-/**
- * Opens the vendor panel (?vendor=…) over the current page, with a history entry so Back closes it.
- * It takes the place of an open CVE panel: Back returns to that CVE.
- */
-export const openVendor = (name: string) => setHashParams({ vendor: canonicalVendor(name), cve: '' }, true);
+/** Opens the vendor panel (?vendor=…) over the current page and any open panels, with a history entry so Back closes it */
+export const openVendor = (name: string) => openPanel('vendor', canonicalVendor(name));
 
 /** A vendor name that opens its panel; it stops the click so a surrounding row keeps its own action */
 export const VendorButton: React.FC<{ name: string; className?: string; label?: string; children?: React.ReactNode }> = ({ name, className = '', label, children }) => (

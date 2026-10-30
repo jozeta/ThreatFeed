@@ -68,6 +68,35 @@ export function setHashParams(changes: Record<string, string>, push = false) {
   go(buildHash(current.page, current.sub, params), !push);
 }
 
+// The detail panels' parameters, which App opens over any page
+export const PANEL_PARAMS = ['actor', 'malware', 'group', 'vendor', 'cve'] as const;
+export type PanelParam = (typeof PANEL_PARAMS)[number];
+
+/**
+ * Each open panel's place in the stack: the order its parameter comes in the URL, so the panel opened last sits
+ * on top, and a shared or reloaded link stacks the same way whichever panel's data loads first
+ */
+export function panelLevels(params: URLSearchParams): Partial<Record<PanelParam, number>> {
+  const levels: Partial<Record<PanelParam, number>> = {};
+  let level = 0;
+  for (const key of params.keys()) if ((PANEL_PARAMS as readonly string[]).includes(key) && !(key in levels)) levels[key as PanelParam] = level++;
+  return levels;
+}
+
+/** The params with `key` set to `value` and moved to the end, so its panel goes on top of the others */
+export function withPanelOnTop(params: URLSearchParams, key: string, value: string): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.delete(key);
+  next.append(key, value);
+  return next;
+}
+
+/** Opens a panel over the current page and any panels already open, with a history entry so Back closes it */
+export function openPanel(key: PanelParam, value: string) {
+  const current = parseHash(window.location.hash);
+  go(buildHash(current.page, current.sub, withPanelOnTop(current.params, key, value)), false);
+}
+
 /** Rewrites an unknown or removed page's hash in place (no history entry), e.g. #/actors?actor=G0007 to #/?actor=G0007 */
 export function redirectRemovedPage() {
   const hash = canonicalHash(window.location.hash);

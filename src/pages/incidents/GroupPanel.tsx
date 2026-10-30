@@ -9,6 +9,7 @@ import { GroupIntelSection, LeakSiteStatus } from './GroupIntelSection';
 import { activityChange, groupActivity } from '../../services/intelligence/groupActivity';
 import { StackedBars } from '../vulns/StackedBars';
 import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
+import { EntityText } from '../../components/EntityText';
 import { ExternalLink } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -95,7 +96,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile,
         </div>
       )}
 
-      {(intel?.description || profile?.description) && <p className="text-sm font-serif text-theme-text leading-relaxed">{intel?.description || profile?.description}</p>}
+      {(intel?.description || profile?.description) && <p className="text-sm font-serif text-theme-text leading-relaxed"><EntityText text={(intel?.description || profile?.description)!} self={{ kind: 'group', id: group }} /></p>}
       {profile?.url && (
         <a href={profile.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-mono text-theme-accent hover:underline">
           Group profile on Ransomware.live <ExternalLink className="w-3 h-3" />

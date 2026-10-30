@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHash, canonicalHash, parseHash } from './useHashRoute';
+import { buildHash, canonicalHash, panelLevels, parseHash, withPanelOnTop } from './useHashRoute';
 
 describe('hash routes', () => {
   it('parses page, tab and parameters', () => {
@@ -45,5 +45,17 @@ describe('hash routes', () => {
     expect(route.page).toBe('feed');
     expect(route.sub).toBe('vulns');
     expect(buildHash('feed', 'news')).toBe('#/feed/news');
+  });
+
+  it('stacks the panels in the order their parameters come, the last on top', () => {
+    expect(panelLevels(parseHash('#/vulns/kev?kevVendor=X&vendor=Fortinet&q=a&actor=G0007&cve=CVE-2026-1').params)).toEqual({ vendor: 0, actor: 1, cve: 2 });
+    expect(panelLevels(new URLSearchParams())).toEqual({});
+  });
+
+  it('opens a panel on top: its parameter moves to the end, the others stay', () => {
+    const params = parseHash('#/?group=akira&vendor=Fortinet&q=x').params;
+    expect(withPanelOnTop(params, 'group', 'play').toString()).toBe('vendor=Fortinet&q=x&group=play');
+    expect(withPanelOnTop(params, 'actor', 'G0007').toString()).toBe('group=akira&vendor=Fortinet&q=x&actor=G0007');
+    expect(params.toString()).toBe('group=akira&vendor=Fortinet&q=x');
   });
 });

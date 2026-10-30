@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
-import { usePanelLayer } from './panelStack';
+import { READER_LEVEL, usePanelLayer } from './panelStack';
 
 // Close: the backdrop fades out (140 ms), then the panel slides out (220 ms); keep in step with index.css
 const EXIT_MS = 360;
@@ -14,6 +14,12 @@ export function useReducedMotion(): boolean {
 }
 
 const CloseContext = createContext<() => void>(() => {});
+
+/**
+ * Where the panels inside sit among the open panels: App gives each host the place of its hash parameter
+ * (panelLevels), so the one opened last is on top. Without it, panels stack in the order they open.
+ */
+export const PanelLevel = createContext(0);
 
 /** The panel's ✕, closing with the exit animation like Escape and the backdrop do */
 export const PanelCloseButton: React.FC<{ className?: string }> = ({ className = '' }) => (
@@ -28,16 +34,16 @@ interface SidePanelProps {
   title?: string; // accessible name, when no labelledBy
   labelledBy?: string;
   width?: keyof typeof WIDTHS;
-  level?: number; // stacking among panels open together (vendor 1, CVE 2), then open order
   children: React.ReactNode;
 }
 
 /**
  * A detail view on the right in the reference glass. It slides in, then the dark backdrop fades in over the
  * page to its left; Escape (through the panel stack), the backdrop and PanelCloseButton reverse that before
- * calling onClose. Side panels sit at z-60 and up in stack order, under the reader (z-70).
+ * calling onClose. Side panels sit at z-60 and up in stack order, under the reader (z-70) unless opened from it.
  */
-export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, title, labelledBy, width = 'md', level = 0, children }) => {
+export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, title, labelledBy, width = 'md', children }) => {
+  const level = useContext(PanelLevel);
   const reduced = useReducedMotion();
   const [shown, setShown] = useState(open);
   const [closing, setClosing] = useState(false);
@@ -64,7 +70,8 @@ export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, titl
   const position = usePanelLayer(shown && !closing, requestClose, level);
   const lastPosition = useRef(0);
   if (position >= 0) lastPosition.current = position;
-  const z = 60 + Math.min(lastPosition.current, 9);
+  // Panels opened from the reader go over it (z-70), still under the shortcuts modal (z-80)
+  const z = (level > READER_LEVEL ? 71 : 60) + Math.min(lastPosition.current, 8);
 
   // Focus moves into the panel, and back to whatever opened it once it goes
   const panelRef = useRef<HTMLDivElement>(null);

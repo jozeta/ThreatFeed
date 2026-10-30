@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useRansomwareIntel } from '../hooks/useVulns';
-import { setHashParams, useHashRoute } from '../hooks/useHashRoute';
+import { openPanel, useHashRoute } from '../hooks/useHashRoute';
 import { useLeakSiteVictims } from '../hooks/useLeakSiteVictims';
 import { VictimsTab } from './incidents/VictimsTab';
 import { BreachesTab } from './incidents/BreachesTab';
@@ -24,7 +24,7 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
   const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'victims';
   const setTab = (t: Tab) => navigate('ransomware', t === 'victims' ? '' : t);
   // A group opens the app's group panel (?group=<name>), which any page can link to
-  const openGroup = (g: string) => setHashParams({ group: g.toLowerCase() }, true);
+  const openGroup = (g: string) => openPanel('group', g.toLowerCase());
 
   // Structured victims come with the snapshot; without one, they're parsed from the RSS feed
   const { victims, structured } = useLeakSiteVictims();

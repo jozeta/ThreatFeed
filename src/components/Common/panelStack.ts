@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 /**
  * One Escape stack for every panel and modal: each registers while open, and Escape closes only the top entry.
- * Entries sort by level, then open order, so a CVE deep-linked together with its vendor still sits on top.
+ * Entries sort by level, then open order: side panels take their hash parameter's place (PanelLevel), so the
+ * one opened last is on top even when an earlier one's data loads later; the reader and shortcuts sit above.
  */
 
 export interface PanelEntry {

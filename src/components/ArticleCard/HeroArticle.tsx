@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EntityText } from '../EntityText';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
@@ -89,7 +90,7 @@ export const HeroArticle: React.FC<HeroArticleProps> = ({
       {/* Subtitle / Excerpt */}
       {article.description && (
         <p className="font-serif text-base lg:text-lg text-theme-text/90 leading-relaxed mb-4 line-clamp-3">
-          {article.description}
+          <EntityText text={article.description} context={article.title} />
         </p>
       )}
 

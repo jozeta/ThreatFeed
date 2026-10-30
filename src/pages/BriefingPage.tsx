@@ -5,6 +5,7 @@ import { useVulns } from '../hooks/useVulns';
 import { buildHash } from '../hooks/useHashRoute';
 import { useOpenTrending } from '../hooks/useOpenTrending';
 import { useSettings } from '../context/SettingsContext';
+import { EntityLink, EntityText } from '../components/EntityText';
 import { buildBriefing, briefingToMarkdown, BriefingStory } from '../services/intelligence/briefing';
 import { downloadText } from '../services/intelligence/iocExport';
 import { SeverityBadge, CveChip } from '../components/Common/ThreatBadges';
@@ -143,7 +144,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
                         <li key={k.cve} className="py-2">
                           <a href={buildHash('vulnerabilities', 'kev', new URLSearchParams({ cve: k.cve }))} className="font-mono font-bold text-theme-accent hover:underline">{k.cve}</a>
                           <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">added to KEV</span>
-                          <p className="font-serif text-theme-text mt-0.5">{k.name}</p>
+                          <p className="font-serif text-theme-text mt-0.5"><EntityText text={k.name} /></p>
                           <p className="font-mono text-[11px] text-amber-600 dark:text-amber-400">{k.terms.join(', ')}</p>
                         </li>
                       ))}
@@ -151,7 +152,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
                         <li key={r.id} className="py-2">
                           <a href={buildHash('vulnerabilities', 'new', new URLSearchParams({ cve: r.id }))} className="font-mono font-bold text-theme-accent hover:underline">{r.id}</a>
                           <span className="ml-1.5 font-mono text-rose-500 font-bold">CVSS {r.score}</span>
-                          <p className="font-serif text-theme-text mt-0.5 line-clamp-2">{r.description}</p>
+                          <p className="font-serif text-theme-text mt-0.5 line-clamp-2"><EntityText text={r.description ?? ''} /></p>
                           <p className="font-mono text-[11px] text-amber-600 dark:text-amber-400">{r.terms.join(', ')}</p>
                         </li>
                       ))}
@@ -159,7 +160,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
                         <li key={a.id} className="py-2">
                           <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-mono font-bold text-theme-accent hover:underline">{a.id}</a>
                           <span className="ml-1.5 font-mono text-theme-text-muted">{a.severity} · {a.ecosystem}/{a.package}</span>
-                          <p className="font-serif text-theme-text mt-0.5">{a.summary}</p>
+                          <p className="font-serif text-theme-text mt-0.5"><EntityText text={a.summary} /></p>
                           <p className="font-mono text-[11px] text-amber-600 dark:text-amber-400">{a.terms.join(', ')}</p>
                         </li>
                       ))}
@@ -177,7 +178,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
                   {briefing.newKev.map((k) => (
                     <li key={k.cve} className="text-xs font-serif">
                       <div className="flex items-center gap-2"><CveChip cve={k.cve} /><span className="font-mono text-theme-text-muted">added {k.intel.kevDateAdded}</span></div>
-                      {k.intel.kevName && <p className="text-theme-text mt-0.5">{k.intel.kevName}</p>}
+                      {k.intel.kevName && <p className="text-theme-text mt-0.5"><EntityText text={k.intel.kevName} /></p>}
                     </li>
                   ))}
                 </ul>
@@ -189,7 +190,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
               <ul className="space-y-1 text-xs font-mono">
                 {briefing.ransomware.byGroup.slice(0, 10).map(([group, n]) => (
                   <li key={group} className="flex items-center gap-2">
-                    <span className="w-28 truncate text-theme-text">{group}</span>
+                    <span className="w-28 truncate text-theme-text"><EntityLink entity={{ kind: 'group', id: group.toLowerCase() }}>{group}</EntityLink></span>
                     <span className="h-1.5 rounded bg-rose-500/70" style={{ width: `${(n / briefing.ransomware.byGroup[0][1]) * 100}px` }} />
                     <span className="text-theme-text-muted">{n}</span>
                   </li>

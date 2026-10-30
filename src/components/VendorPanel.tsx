@@ -3,7 +3,7 @@ import { Article, MsrcData, VulnData } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { useMsrc, useVulns } from '../hooks/useVulns';
-import { goToPage, setHashParams } from '../hooks/useHashRoute';
+import { goToPage, openPanel, setHashParams } from '../hooks/useHashRoute';
 import { canonicalVendor, fetchWikiSummary, vendorSummary, VendorSummary, WikiSummary } from '../services/intelligence/vendor';
 import { severityFromScore } from '../services/intelligence/vulns';
 import { formatRelativeTime } from '../utils/date';
@@ -11,6 +11,7 @@ import { SectionTitle } from '../pages/incidents/shared';
 import { StackedBars } from '../pages/vulns/StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from '../pages/vulns/shared';
 import { PanelCloseButton, SidePanel } from './Common/SidePanel';
+import { EntityText } from './EntityText';
 import { ExternalLink, Skull, Layers, EyeOff, Building2 } from 'lucide-react';
 
 const NEWS_SHOWN = 10;
@@ -72,7 +73,7 @@ const WikiIntro: React.FC<{ vendor: string }> = ({ vendor }) => {
       {wiki.thumbnail && <img src={wiki.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-16 h-16 object-contain rounded bg-white/80 p-1 shrink-0" />}
       <div className="min-w-0">
         {wiki.description && <p className="text-[11px] font-mono uppercase tracking-wider text-theme-text-muted">{wiki.description}</p>}
-        <p className="text-sm font-serif text-theme-text leading-relaxed line-clamp-6">{wiki.extract}</p>
+        <p className="text-sm font-serif text-theme-text leading-relaxed line-clamp-6"><EntityText text={wiki.extract} self={{ kind: 'vendor', id: vendor }} /></p>
         <a href={wiki.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-mono text-theme-accent hover:underline">
           Wikipedia <ExternalLink className="w-3 h-3" />
         </a>
@@ -97,7 +98,7 @@ interface VendorPanelProps {
 /** One vendor at a glance: what Wikipedia says, its KEV history, new CVEs, news and advisories. */
 export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, inStack, hidden, onToggleStack, onToggleHidden, onOpenCve, onOpenProduct, onOpenArticle, onClose, loading }) => {
   return (
-    <SidePanel onClose={onClose} title={s.name} level={1}>
+    <SidePanel onClose={onClose} title={s.name}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-theme-text-muted flex items-center gap-1"><Building2 className="w-3 h-3" /> Vendor</p>
@@ -210,7 +211,7 @@ export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, inStack, h
                       <SeverityPill severity={c.severity} score={c.score} />
                       <span className="ml-auto text-theme-text-muted">{c.published.slice(0, 10)}</span>
                     </div>
-                    {c.description ? <p className="font-serif text-theme-text line-clamp-2">{c.description}</p> : c.products && <p className="font-mono text-theme-text-muted">{c.products.join(', ')}</p>}
+                    {c.description ? <p className="font-serif text-theme-text line-clamp-2"><EntityText text={c.description} self={{ kind: 'vendor', id: s.name }} /></p> : c.products && <p className="font-mono text-theme-text-muted">{c.products.join(', ')}</p>}
                   </li>
                 ))}
               </ul>
@@ -262,13 +263,13 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
   const { settings, updateSettings } = useSettings();
   const summary = useMemo(() => vendorSummary(vendor, vulns, articles, msrc), [vendor, vulns, articles, msrc]);
 
-  const close = () => setHashParams({ vendor: '', cve: '' });
+  const close = () => setHashParams({ vendor: '' });
 
   const stack = settings.stackKeywords;
   const inStack = stack.some((k) => k.toLowerCase() === summary.name.toLowerCase());
   const hiddenName = summary.kevVendor;
   const hidden = Boolean(hiddenName && settings.hiddenVulnVendors.includes(hiddenName));
-  const read = (a: Article) => { close(); onOpenArticle(a); };
+  const read = (a: Article) => { setHashParams({ vendor: '', cve: '' }); onOpenArticle(a); };
 
   return (
     <VendorPanel
@@ -280,7 +281,7 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
       onToggleHidden={hiddenName ? () => updateSettings({
         hiddenVulnVendors: hidden ? settings.hiddenVulnVendors.filter((v) => v !== hiddenName) : [...settings.hiddenVulnVendors, hiddenName],
       }) : undefined}
-      onOpenCve={(id) => setHashParams({ cve: id }, true)}
+      onOpenCve={(id) => openPanel('cve', id)}
       onOpenProduct={(v, p) => goToPage('vulnerabilities', 'kev', new URLSearchParams({ kevVendor: v, product: `${v} ${p}`, days: '0' }))}
       onOpenArticle={read}
       onClose={close}

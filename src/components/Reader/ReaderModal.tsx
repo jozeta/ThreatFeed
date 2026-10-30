@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Article } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -11,6 +11,7 @@ import { iocLookupLinks } from '../../services/intelligence/iocLinks';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { sanitizeHtml } from '../../services/rss/sanitizer';
 import { READER_LEVEL, usePanelLayer } from '../Common/panelStack';
+import { EntityText, useLinkedHtml } from '../EntityText';
 import {
   X,
   ExternalLink,
@@ -84,6 +85,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
   // Content is sanitized at ingest; sanitizing again at render is cheap insurance for raw HTML
   const safeContent = useMemo(() => sanitizeHtml(article.content || ''), [article.content]);
+  // Names in the article open their panels: linked in the DOM after React has put the sanitized HTML there
+  const contentRef = useRef<HTMLDivElement>(null);
+  useLinkedHtml(contentRef, safeContent);
 
   // Feber feeds (and any feed tagged "swedish") get a one-click English translation
   const isSwedish = useMemo(
@@ -510,12 +514,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           <div className="prose prose-slate dark:prose-invert max-w-none font-serif text-base sm:text-lg text-theme-text/90 leading-relaxed space-y-4 mb-8">
             {article.content ? (
               <div
+                ref={contentRef}
                 dangerouslySetInnerHTML={{ __html: safeContent }}
                 className="space-y-4 overflow-x-auto break-words reader-html-content"
               />
             ) : (
               <p className="whitespace-pre-line leading-relaxed">
-                {article.description}
+                <EntityText text={article.description ?? ''} context={article.title} />
               </p>
             )}
           </div>

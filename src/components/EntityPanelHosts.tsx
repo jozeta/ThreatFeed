@@ -3,7 +3,7 @@ import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useActors, useRansomwareIntel } from '../hooks/useVulns';
 import { useLeakSiteVictims } from '../hooks/useLeakSiteVictims';
-import { setHashParams } from '../hooks/useHashRoute';
+import { openPanel, setHashParams } from '../hooks/useHashRoute';
 import { actorMentions } from '../services/intelligence/actors';
 import { ActorPanel } from '../pages/actors/ActorPanel';
 import { MalwarePanel } from '../pages/actors/MalwarePanel';
@@ -11,12 +11,12 @@ import { GroupPanel } from '../pages/incidents/GroupPanel';
 
 /**
  * The actor (?actor=G0007), malware (?malware=<id>) and ransomware group (?group=<key>) panels, mounted once by
- * the app so any page can open them. An actor and a malware panel replace each other, with a history entry so
- * Back returns to the previous one; a CVE opens on top (the app's CVE host). Reading an article closes them.
+ * the app so any page can open them. What a panel opens (software, a group, a CVE) goes on top of it, with a
+ * history entry so Back returns to the one below. Reading an article closes them.
  */
 const PROFILE_KEYS = { actor: '', malware: '', cve: '' };
-const openProfile = (key: 'actor' | 'malware', id: string) => setHashParams({ ...PROFILE_KEYS, [key]: id }, true);
-const openCve = (cve: string) => setHashParams({ cve }, true);
+const openProfile = (key: 'actor' | 'malware', id: string) => openPanel(key, id);
+const openCve = (cve: string) => openPanel('cve', cve);
 
 type Props = { id: string; onOpenArticle: (article: Article) => void };
 

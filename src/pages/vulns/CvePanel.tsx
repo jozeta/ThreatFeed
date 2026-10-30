@@ -5,7 +5,7 @@ import { fetchCveDescription } from '../../services/intelligence/cvss';
 import { fetchEpssHistory } from '../../services/intelligence/cveWatch';
 import { buildHash } from '../../hooks/useHashRoute';
 import { Sparkline } from '../../components/Common/Sparkline';
-import { VendorButton } from '../../components/VendorLink';
+import { EntityLink, EntityText } from '../../components/EntityText';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
 import { EpssValue, ExploitBadges, SeverityPill, SsvcBadge, vectorText } from './shared';
@@ -85,11 +85,11 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
 
   // Level 2: above the vendor panel it can be opened from, also when both come from one link
   return (
-    <SidePanel onClose={onClose} title={cve} level={2}>
+    <SidePanel onClose={onClose} title={cve}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="font-mono text-2xl font-extrabold text-theme-text">{cve}</h2>
-          {kev && <p className="font-serif text-sm font-bold text-theme-text mt-1">{kev.name}</p>}
+          {kev && <p className="font-serif text-sm font-bold text-theme-text mt-1"><EntityText text={kev.name} /></p>}
           <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] font-mono font-bold uppercase">
             {kev && <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white">Known exploited (CISA KEV)</span>}
             {kev?.ransomware && <span className="px-1.5 py-0.5 rounded bg-theme-text text-theme-bg inline-flex items-center gap-1"><Skull className="w-3 h-3" /> Used by ransomware</span>}
@@ -110,8 +110,8 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
 
       {description === undefined
         ? <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading description from NVD…</p>
-        : description && <p className="text-sm font-serif text-theme-text leading-relaxed">{description}</p>}
-      {kev && <p className="text-xs font-mono text-theme-text-muted"><VendorButton name={kev.vendor} className="font-bold text-theme-text" /> · {kev.product}</p>}
+        : description && <p className="text-sm font-serif text-theme-text leading-relaxed"><EntityText text={description} /></p>}
+      {kev && <p className="text-xs font-mono text-theme-text-muted"><EntityLink entity={{ kind: 'vendor', id: kev.vendor }} className="font-bold text-theme-text">{kev.vendor}</EntityLink> · {kev.product}</p>}
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-mono">
         {facts.map(([label, value]) => (

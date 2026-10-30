@@ -3,6 +3,7 @@ import { ActorProfile, ActorsData, Article } from '../../types';
 import { Mentions } from '../../services/intelligence/actors';
 import { countryFlag, countryName } from '../../utils/countries';
 import { SectionTitle } from '../incidents/shared';
+import { EntityText } from '../../components/EntityText';
 import { Aliases, chipLink, Coverage, CvesAlongside, ExternalLinks, MentionTrend, ProfilePanel } from './shared';
 import { ExternalLink } from 'lucide-react';
 
@@ -42,7 +43,7 @@ export const ActorPanel: React.FC<ActorPanelProps> = ({ actor, data, mentions, o
         <MentionTrend mentions={mentions} width={120} height={24} />
       </div>
 
-      {actor.description && <p className="text-sm font-serif text-theme-text leading-relaxed">{actor.description}</p>}
+      {actor.description && <p className="text-sm font-serif text-theme-text leading-relaxed"><EntityText text={actor.description} self={{ kind: 'actor', id: actor.id }} /></p>}
 
       {actor.techniques.length > 0 && (
         <div>

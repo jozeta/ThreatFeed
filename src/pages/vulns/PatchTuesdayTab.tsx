@@ -5,6 +5,7 @@ import { PatchCve, PatchMonth } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { VendorButton } from '../../components/VendorLink';
+import { EntityText } from '../../components/EntityText';
 import { chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { CveButton, SEVERITY_TEXT, StatCards } from './shared';
 import { ExternalLink, Search } from 'lucide-react';
@@ -198,7 +199,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
                 <ThreatBadges c={c} />
                 {stackHits.has(c.cve) && <StackBadge />}
               </div>
-              <p className="font-serif text-theme-text">{c.title}</p>
+              <p className="font-serif text-theme-text"><EntityText text={c.title} /></p>
               <p className="font-mono text-[11px] text-theme-text-muted">{[c.impact, productList(c.products)].filter(Boolean).join(' · ')}</p>
             </li>
           ))}
@@ -219,7 +220,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
             {filtered.slice(0, visibleCount).map((c) => (
               <tr key={c.cve} className="align-top cursor-pointer hover:bg-theme-surface" onClick={() => onOpenCve(c.cve)}>
                 <td className="py-2 pr-3" onClick={(e) => e.stopPropagation()}><CveButton cve={c.cve} onOpen={onOpenCve} /></td>
-                <td className="py-2 pr-3 font-serif text-theme-text">{c.title}</td>
+                <td className="py-2 pr-3 font-serif text-theme-text"><EntityText text={c.title} /></td>
                 <td className="py-2 pr-3"><MsSeverity severity={c.severity} /></td>
                 <td className="py-2 pr-3 text-theme-text-muted">{c.impact ?? '—'}</td>
                 <td className="py-2 pr-3 text-theme-text">{c.cvss?.toFixed(1) ?? '—'}</td>

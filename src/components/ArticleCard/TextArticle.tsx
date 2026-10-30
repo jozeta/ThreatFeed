@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EntityText } from '../EntityText';
 import { Article } from '../../types';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
@@ -59,7 +60,7 @@ export const TextArticle: React.FC<TextArticleProps> = ({
 
       {article.description && (
         <p className="font-serif text-xs sm:text-sm text-theme-text-muted leading-relaxed line-clamp-2 mb-2">
-          {article.description}
+          <EntityText text={article.description} context={article.title} />
         </p>
       )}
 

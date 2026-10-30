@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { ActorsData, Article, CveIntel, DataSourceStatus, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -16,7 +16,9 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadActors, loadMsrc, loadRansomwareIntel, loadSnapshot, loadTrends, loadVulnData } from '../services/snapshot';
+import { loadActors, loadEntities, loadMsrc, loadRansomwareIntel, loadSnapshot, loadTrends, loadVulnData } from '../services/snapshot';
+import { buildEntityMatcher } from '../services/intelligence/entityLinks';
+import { EntityMatcherContext } from '../hooks/useEntityMatcher';
 import { createSnapshotLoader } from '../services/snapshotLoader';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
@@ -112,6 +114,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [msrc, setMsrc] = useState<MsrcData | null>(null);
   const [actors, setActors] = useState<ActorsData | null>(null);
   const [trends, setTrends] = useState<TrendsData | null>(null);
+  const [entities, setEntities] = useState<EntitiesData | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -698,6 +701,25 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     read: () => getStoredValue<TrendsData>('trends'), save: (data) => saveStoredValue('trends', data),
   }));
 
+  // The names text links to their panels (data/entities.json, about 80 KB): requested once the first paint is
+  // done, and again for each newer snapshot. Until then only CVE ids link
+  const entitiesRef = useRef<EntitiesData | null>(null);
+  entitiesRef.current = entities;
+  const [ensureEntities] = useState(() => createSnapshotLoader<EntitiesData>({
+    ref: entitiesRef, snapshotAt, load: loadEntities, setState: setEntities,
+    read: () => getStoredValue<EntitiesData>('entities'), save: (data) => saveStoredValue('entities', data),
+  }));
+  useEffect(() => {
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const id = idle(() => void ensureEntities(), { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(() => void ensureEntities(), 1500);
+    return () => clearTimeout(id);
+  }, [ensureEntities, snapshotGeneratedAt]);
+  const entityMatcher = useMemo(() => buildEntityMatcher(entities), [entities]);
+
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
   const value = useMemo<FeedContextType>(() => ({
     feeds,
@@ -748,7 +770,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <FeedContext.Provider value={value}>
-      {children}
+      <EntityMatcherContext.Provider value={entityMatcher}>
+        {children}
+      </EntityMatcherContext.Provider>
     </FeedContext.Provider>
   );
 };

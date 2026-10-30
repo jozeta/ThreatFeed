@@ -3,6 +3,7 @@ import { Article } from '../../types';
 import { clusterArticles } from '../../services/articles/clustering';
 import { classifyIncident, isLeakSitePost } from '../../services/intelligence/incidents';
 import { SeverityBadge } from '../../components/Common/ThreatBadges';
+import { EntityText } from '../../components/EntityText';
 import { formatRelativeTime } from '../../utils/date';
 import { chipClass, SectionTitle } from './shared';
 
@@ -39,6 +40,8 @@ export const IncidentNewsTab: React.FC<{ articles: Article[]; groupNames: string
                 <SeverityBadge severity={p.severity} score={p.severityScore} />
                 <button onClick={() => onOpenArticle(p)} className="text-left font-serif font-bold text-sm text-theme-text hover:text-theme-accent leading-snug">{p.title}</button>
               </div>
+              {/* The title opens the article; names in the summary open their panels */}
+              {p.description && <p className="text-xs font-serif text-theme-text-muted mt-0.5 pl-1 line-clamp-2"><EntityText text={p.description} context={p.title} /></p>}
               <p className="text-[11px] font-mono text-theme-text-muted mt-0.5 pl-1">
                 {p.sourceName}{s.clusterSize > 1 && <span className="text-theme-accent"> +{s.clusterSize - 1} sources</span>} · {formatRelativeTime(p.publishedAt)}
               </p>
