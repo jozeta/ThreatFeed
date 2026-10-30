@@ -69,7 +69,7 @@ export const WatchingTab: React.FC<WatchingTabProps> = ({ watched, vulns, cveInt
       {watched.length === 0 ? (
         <p className="text-sm font-serif text-theme-text-muted">
           Watch a CVE (with the star in its panel, or above) to follow it: you'll see when it's added to CISA KEV, when its EPSS score jumps,
-          and when new articles mention it. With watchlist alerts on (Settings), changes also send a desktop notification.
+          and when new articles mention it. With the Watched CVEs rule's 🔔 on (Settings → Alert Rules), changes also send a desktop notification.
         </p>
       ) : (
         <div className="overflow-x-auto">

@@ -235,25 +235,63 @@ export function duplicateRule(rule: AlertRule, s: RuleLists, now: Date, id: stri
   };
 }
 
-const isValidGroup = (g: unknown): boolean =>
-  !!g && typeof g === 'object' && ((g as ConditionGroup<unknown>).op === 'all' || (g as ConditionGroup<unknown>).op === 'any')
-  && Array.isArray((g as ConditionGroup<unknown>).items);
+/** A group with a known op whose items are all valid groups or objects with a string `field` */
+function isValidGroup(g: unknown): boolean {
+  if (!g || typeof g !== 'object') return false;
+  const x = g as ConditionGroup<unknown>;
+  return (x.op === 'all' || x.op === 'any') && Array.isArray(x.items) && x.items.every(isValidItem);
+}
 
-function isValidRule(r: unknown): r is AlertRule {
-  if (!r || typeof r !== 'object') return false;
+function isValidItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object') return false;
+  if ('op' in item || 'items' in item) return isValidGroup(item);
+  return typeof (item as { field?: unknown }).field === 'string';
+}
+
+/**
+ * Validates a rule from outside the app (saved settings, a synced device) and returns a clean copy, or null if
+ * it is malformed. Built-ins are forced back to their canonical name/kind/id and empty root; only enabled/notify
+ * and the timestamps are taken from the data.
+ */
+export function sanitizeRule(r: unknown): AlertRule | null {
+  if (!r || typeof r !== 'object') return null;
   const x = r as Partial<AlertRule>;
-  return typeof x.id === 'string' && typeof x.name === 'string'
-    && (x.kind === 'news' || x.kind === 'vulns')
-    && typeof x.enabled === 'boolean' && typeof x.notify === 'boolean'
-    && isValidGroup(x.root)
-    && (x.builtIn === undefined || BUILT_IN_ORDER.includes(x.builtIn));
+  if (typeof x.id !== 'string' || typeof x.name !== 'string') return null;
+  if (x.kind !== 'news' && x.kind !== 'vulns') return null;
+  if (typeof x.enabled !== 'boolean' || typeof x.notify !== 'boolean') return null;
+  if (x.builtIn !== undefined && !BUILT_IN_ORDER.includes(x.builtIn)) return null;
+  const builtIn = BUILT_IN_ORDER.find(b => b === x.id) ?? x.builtIn;
+  if (!builtIn && !isValidGroup(x.root)) return null;
+  const stamp = new Date(0).toISOString();
+  const createdAt = typeof x.createdAt === 'string' ? x.createdAt : stamp;
+  const updatedAt = typeof x.updatedAt === 'string' ? x.updatedAt : createdAt;
+  if (builtIn) {
+    return {
+      id: builtIn, name: BUILT_IN_NAMES[builtIn], kind: BUILT_IN_KIND[builtIn], enabled: x.enabled, notify: x.notify,
+      root: { op: 'any', items: [] }, builtIn, createdAt, updatedAt,
+    };
+  }
+  return { ...(x as AlertRule), createdAt, updatedAt };
+}
+
+/** Validates, dedupes by id (newer updatedAt wins) and sorts built-ins first, then by createdAt */
+export function cleanRuleList(rules: unknown): AlertRule[] {
+  const byId = new Map<string, AlertRule>();
+  for (const raw of Array.isArray(rules) ? rules : []) {
+    const rule = sanitizeRule(raw);
+    if (!rule) continue;
+    const have = byId.get(rule.id);
+    if (!have || Date.parse(rule.updatedAt) > Date.parse(have.updatedAt)) byId.set(rule.id, rule);
+  }
+  const rank = (r: AlertRule) => (r.builtIn ? BUILT_IN_ORDER.indexOf(r.builtIn) : BUILT_IN_ORDER.length);
+  return [...byId.values()].sort((a, b) => rank(a) - rank(b) || Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
 /** Keeps valid saved rules (dropping malformed ones) and re-adds any missing built-in; first run seeds the built-ins from the old toggle */
 export function migrateAlertRules(saved: Partial<UserSettings>, now: Date): AlertRule[] {
   const builtIns = createBuiltInRules(saved.watchlistNotifications ?? false, now);
   if (!Array.isArray(saved.alertRules)) return builtIns;
-  const kept = saved.alertRules.filter(isValidRule);
+  const kept = cleanRuleList(saved.alertRules);
   const have = new Set(kept.map(r => r.builtIn).filter(Boolean));
   return [...kept, ...builtIns.filter(r => !have.has(r.builtIn))];
 }

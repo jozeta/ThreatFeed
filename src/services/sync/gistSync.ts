@@ -1,3 +1,5 @@
+import { cleanRuleList } from '../intelligence/alertRules';
+import type { AlertRule } from '../../types';
 import { exportAllThreatFeedData, getStoredValue, importThreatFeedData, saveStoredValue } from '../storage/indexeddb';
 
 /**
@@ -27,6 +29,14 @@ const union = (a: unknown, b: unknown) =>
   Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
 
 /**
+ * Merges alert rules by id, newer updatedAt wins. Remote data is untrusted, so every rule is validated;
+ * malformed ones are dropped. Deletes don't propagate: a rule removed on one device returns from the other.
+ */
+export function mergeAlertRules(local: AlertRule[], remote: AlertRule[]): AlertRule[] {
+  return cleanRuleList([...(Array.isArray(local) ? local : []), ...(Array.isArray(remote) ? remote : [])]);
+}
+
+/**
  * Merges two devices' data: per-article state takes whichever side changed it last; feeds and
  * bookmarked articles are unioned (local wins on conflicts); settings stay local except keyword
  * lists, which are unioned so a term added on either device survives.
@@ -52,6 +62,8 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
         mutedKeywords: union(local.settings.mutedKeywords, remote.settings.mutedKeywords),
         savedSearches: union(local.settings.savedSearches, remote.settings.savedSearches),
         bookmarkFolders: union(local.settings.bookmarkFolders, remote.settings.bookmarkFolders),
+        alertRules: mergeAlertRules(local.settings.alertRules, remote.settings.alertRules),
+        alertGapHours: local.settings.alertGapHours,
       }
     : local.settings || remote.settings || null;
 
