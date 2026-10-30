@@ -4,6 +4,7 @@ import { ActiveNavTab } from '../../types';
 import { usePanelLayer } from '../Common/panelStack';
 import { exitTv, leaveFullscreen, TvKind } from './tvRoute';
 import { useTvChrome } from './useTvChrome';
+import TvWall from './TvWall';
 
 const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, global shortcuts wait
 
@@ -34,9 +35,13 @@ export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavT
       data-page={page}
       style={{ cursor: idle ? 'none' : undefined }}
     >
-      <div className="absolute inset-0 flex items-center justify-center font-mono text-sm uppercase tracking-widest" style={{ color: '#5b6572' }}>
-        {kind === 'tv' ? 'TV mode' : 'Dashboard'}
-      </div>
+      {kind === 'tv' ? (
+        <TvWall page={page} />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center font-mono text-sm uppercase tracking-widest" style={{ color: '#5b6572' }}>
+          Dashboard
+        </div>
+      )}
       <button
         type="button"
         onClick={exitTv}
