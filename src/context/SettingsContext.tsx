@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserSettings, NewspaperSectionConfig } from '../types';
 import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexeddb';
+import { ALERT_GAP_OPTIONS, createBuiltInRules, migrateAlertRules } from '../services/intelligence/alertRules';
 import { DEFAULT_WATCHLIST_KEYWORDS, WATCHLIST_DEFAULTS_VERSION, upgradeWatchlistKeywords } from '../services/intelligence/watchlist';
 
 export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
@@ -95,7 +96,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   bookmarkFolders: DEFAULT_BOOKMARK_FOLDERS,
   clusteringEnabled: true,
   sectionsEnabled: true,
-  alertRules: [],
+  alertRules: createBuiltInRules(false, new Date()),
   alertGapHours: 1,
 };
 
@@ -141,6 +142,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           sectionsEnabled: typeof saved.sectionsEnabled === 'boolean' ? saved.sectionsEnabled : true,
           hiddenVulnVendors: Array.isArray(saved.hiddenVulnVendors) ? saved.hiddenVulnVendors.filter((v: unknown) => typeof v === 'string') : [],
           watchedCves: Array.isArray(saved.watchedCves) ? saved.watchedCves.filter((v: unknown) => typeof v === 'string') : [],
+          alertRules: migrateAlertRules(saved, new Date()),
+          alertGapHours: (ALERT_GAP_OPTIONS as readonly number[]).includes(saved.alertGapHours as number) ? saved.alertGapHours : 1,
         };
         setSettings(migrated);
         saveSettingsToDB(migrated);

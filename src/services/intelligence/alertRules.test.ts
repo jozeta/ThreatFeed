@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem } from './alertRules';
-import { ConditionGroup, NewsCondition, VulnCondition, VulnData, KevEntry, CveRecord } from '../../types';
+import {
+  buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem,
+  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules,
+} from './alertRules';
+import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord } from '../../types';
 import { article } from '../../test/fixtures';
 
 const ctx = (overrides: Partial<EvalContext> = {}): EvalContext => ({
@@ -144,5 +147,63 @@ describe('buildVulnItems', () => {
     expect(w).toMatchObject({ publicExploit: true, ransomware: true, isNew: true, cwes: ['CWE-79'], ssvcExploitation: 'poc', cvss: 7.5 });
     expect(items.get('CVE-2026-2')).toMatchObject({ publicExploit: false, ransomware: false, products: ['acme widget'], isNew: true });
     expect(items.get('CVE-2026-1')!.isNew).toBe(true);
+  });
+});
+
+describe('blank values', () => {
+  it('ignores blank and whitespace-only values', () => {
+    expect(matchesVuln(all({ field: 'vendor', values: [''] }), vuln({ vendor: 'Fortinet, Inc.' }), ctx())).toBe(false);
+    expect(matchesNews(newsAll({ field: 'keyword', values: ['  '] }), article('Anything, at all.'), ctx())).toBe(false);
+    expect(matchesNews(newsAll({ field: 'vendor', values: [' '] }), article('Anything, at all.'), ctx())).toBe(false);
+  });
+});
+
+describe('built-in rules', () => {
+  const now = new Date('2026-10-30T12:00:00Z');
+  const byId = (rules: AlertRule[], id: string) => rules.find(r => r.id === id)!;
+
+  it('migrates the old watchlist toggle onto Watchlist and Watched CVEs only', () => {
+    const on = migrateAlertRules({ watchlistNotifications: true }, now);
+    expect(on).toHaveLength(4);
+    expect(on.map(r => [r.id, r.notify])).toEqual([
+      ['watchlist', true], ['stack-news', false], ['stack-vulns', false], ['watched-cves', true],
+    ]);
+    expect(on.every(r => r.enabled)).toBe(true);
+    expect(migrateAlertRules({ watchlistNotifications: false }, now).every(r => !r.notify)).toBe(true);
+  });
+
+  it('keeps saved custom rules and re-adds missing built-ins', () => {
+    const custom: AlertRule = {
+      id: 'c1', name: 'Mine', kind: 'vulns', enabled: true, notify: true,
+      root: { op: 'all', items: [{ field: 'kev' }] }, createdAt: 'x', updatedAt: 'x',
+    };
+    const out = migrateAlertRules({ alertRules: [custom, { bogus: true } as unknown as AlertRule] }, now);
+    expect(out).toHaveLength(5);
+    expect(out).toContainEqual(custom);
+    expect(out.filter(r => r.builtIn)).toHaveLength(4);
+  });
+
+  it('resolves built-in roots from the live lists', () => {
+    const rules = createBuiltInRules(false, now);
+    const s = { watchlistKeywords: ['ransomware'], stackKeywords: ['Fortinet'], watchedCves: [] };
+    expect(resolveRoot(byId(rules, 'stack-vulns'), s)).toEqual({ op: 'any', items: [{ field: 'vendor', values: ['Fortinet'] }] });
+    expect(resolveRoot(byId(rules, 'watchlist'), s)).toEqual({ op: 'any', items: [{ field: 'keyword', values: ['ransomware'] }] });
+    expect(resolveRoot(byId(rules, 'watched-cves'), s)).toEqual({ op: 'any', items: [{ field: 'watched' }] });
+    expect(builtInTerms(byId(rules, 'stack-news'), s)).toEqual(['Fortinet']);
+  });
+
+  it('duplicates as a frozen custom copy', () => {
+    const rules = createBuiltInRules(true, now);
+    const stack = ['Fortinet'];
+    const s = { watchlistKeywords: [], stackKeywords: stack, watchedCves: ['CVE-2026-1'] };
+    const watched = duplicateRule(byId(rules, 'watched-cves'), s, now, 'new1');
+    expect(watched.builtIn).toBeUndefined();
+    expect(watched.id).toBe('new1');
+    expect(watched.name).toBe('Watched CVEs (copy)');
+    expect(watched.notify).toBe(false);
+    expect(watched.root.items).toContainEqual({ field: 'cve', values: ['CVE-2026-1'] });
+    const copy = duplicateRule(byId(rules, 'stack-vulns'), s, now, 'new2');
+    stack.push('Cisco');
+    expect(copy.root).toEqual({ op: 'any', items: [{ field: 'vendor', values: ['Fortinet'] }] });
   });
 });

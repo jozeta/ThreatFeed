@@ -1,5 +1,5 @@
 import {
-  Article, ConditionGroup, CveIntel, CveRecord, NewsCondition, ThreatSeverity, VulnCondition, VulnData,
+  AlertRule, Article, BuiltInRule, ConditionGroup, CveIntel, CveRecord, NewsCondition, ThreatSeverity, UserSettings, VulnCondition, VulnData,
 } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
 import { checkWatchlistMatch } from './watchlist';
@@ -104,7 +104,8 @@ function evalGroup<C>(group: ConditionGroup<C>, test: (c: C) => boolean): boolea
   return group.op === 'all' ? group.items.every(run) : group.items.some(run);
 }
 
-const anyTerm = (text: string, values: string[]) => values.some(v => containsTerm(text, v));
+// A blank value would match at every word boundary, so it is skipped rather than matching everything
+const anyTerm = (text: string, values: string[]) => values.some(v => v.trim() !== '' && containsTerm(text, v));
 const anyEqual = (have: string[], values: string[]) => {
   const want = new Set(values.map(v => v.toLowerCase()));
   return have.some(h => want.has(h.toLowerCase()));
@@ -154,4 +155,105 @@ export function matchesNews(group: ConditionGroup<NewsCondition>, a: Article, ct
 
 export function matchesVuln(group: ConditionGroup<VulnCondition>, v: VulnItem, ctx: EvalContext): boolean {
   return evalGroup(group, c => vulnCondition(c, v, ctx));
+}
+
+export const ALERT_GAP_OPTIONS = [1, 2, 3, 4, 6, 12, 24] as const;
+
+export const BUILT_IN_NAMES: Record<BuiltInRule, string> = {
+  'watchlist': 'Watchlist',
+  'stack-news': 'My Stack (news)',
+  'stack-vulns': 'My Stack (vulns)',
+  'watched-cves': 'Watched CVEs',
+};
+
+const BUILT_IN_ORDER: BuiltInRule[] = ['watchlist', 'stack-news', 'stack-vulns', 'watched-cves'];
+const BUILT_IN_KIND: Record<BuiltInRule, AlertRule['kind']> = {
+  'watchlist': 'news', 'stack-news': 'news', 'stack-vulns': 'vulns', 'watched-cves': 'vulns',
+};
+
+type RuleLists = Pick<UserSettings, 'watchlistKeywords' | 'stackKeywords' | 'watchedCves'>;
+
+/** The four built-in rules; their conditions are derived live from the settings lists, so `root` is stored empty */
+export function createBuiltInRules(watchlistNotifications: boolean, now: Date): AlertRule[] {
+  const stamp = now.toISOString();
+  return BUILT_IN_ORDER.map(builtIn => ({
+    id: builtIn,
+    name: BUILT_IN_NAMES[builtIn],
+    kind: BUILT_IN_KIND[builtIn],
+    enabled: true,
+    notify: watchlistNotifications && (builtIn === 'watchlist' || builtIn === 'watched-cves'),
+    root: { op: 'any', items: [] },
+    builtIn,
+    createdAt: stamp,
+    updatedAt: stamp,
+  }));
+}
+
+/** The live list behind a built-in rule; [] for custom rules */
+export function builtInTerms(rule: AlertRule, s: RuleLists): string[] {
+  switch (rule.builtIn) {
+    case 'watchlist': return s.watchlistKeywords;
+    case 'stack-news':
+    case 'stack-vulns': return s.stackKeywords;
+    case 'watched-cves': return s.watchedCves;
+    default: return [];
+  }
+}
+
+export function resolveRoot(rule: AlertRule, s: RuleLists): AlertRule['root'] {
+  switch (rule.builtIn) {
+    case 'watchlist': return { op: 'any', items: [{ field: 'keyword', values: s.watchlistKeywords }] };
+    case 'stack-news': return { op: 'any', items: [{ field: 'vendor', values: s.stackKeywords }] };
+    case 'stack-vulns': return { op: 'any', items: [{ field: 'vendor', values: s.stackKeywords }] };
+    case 'watched-cves': return { op: 'any', items: [{ field: 'watched' }] };
+    default: return rule.root;
+  }
+}
+
+/** Deep copy; `watched` conditions are frozen into the current CVE list */
+function freeze(node: unknown, watchedCves: string[]): unknown {
+  if (Array.isArray(node)) return node.map(n => freeze(n, watchedCves));
+  if (node && typeof node === 'object') {
+    const obj = node as Record<string, unknown>;
+    if (obj.field === 'watched') return { field: 'cve', values: [...watchedCves] };
+    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, freeze(v, watchedCves)]));
+  }
+  return node;
+}
+
+export function duplicateRule(rule: AlertRule, s: RuleLists, now: Date, id: string): AlertRule {
+  const stamp = now.toISOString();
+  return {
+    ...rule,
+    id,
+    name: `${rule.name} (copy)`,
+    builtIn: undefined,
+    notify: false,
+    root: freeze(resolveRoot(rule, s), s.watchedCves) as AlertRule['root'],
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+}
+
+const isValidGroup = (g: unknown): boolean =>
+  !!g && typeof g === 'object' && ((g as ConditionGroup<unknown>).op === 'all' || (g as ConditionGroup<unknown>).op === 'any')
+  && Array.isArray((g as ConditionGroup<unknown>).items);
+
+function isValidRule(r: unknown): r is AlertRule {
+  if (!r || typeof r !== 'object') return false;
+  const x = r as Partial<AlertRule>;
+  return typeof x.id === 'string' && typeof x.name === 'string'
+    && (x.kind === 'news' || x.kind === 'vulns')
+    && typeof x.enabled === 'boolean' && typeof x.notify === 'boolean'
+    && isValidGroup(x.root)
+    && (x.builtIn === undefined || BUILT_IN_ORDER.includes(x.builtIn));
+}
+
+/** Keeps valid saved rules (dropping malformed ones) and re-adds any missing built-in; first run seeds the built-ins from the old toggle */
+export function migrateAlertRules(saved: Partial<UserSettings>, now: Date): AlertRule[] {
+  const builtIns = createBuiltInRules(saved.watchlistNotifications ?? false, now);
+  if (!Array.isArray(saved.alertRules)) return builtIns;
+  const kept = saved.alertRules.filter(isValidRule);
+  const have = new Set(kept.map(r => r.builtIn).filter(Boolean));
+  return [...kept, ...builtIns.filter(r => !have.has(r.builtIn))];
 }
