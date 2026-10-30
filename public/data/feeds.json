@@ -1,6 +1,6 @@
 {
-  "version": "1.5",
-  "updatedAt": "2026-10-29T19:00:00Z",
+  "version": "1.6",
+  "updatedAt": "2026-10-30T10:00:00Z",
   "_retiredFeedIdsNote": "Default feeds removed for good (broken at the source). The app removes these from existing installs; custom feeds are never touched.",
   "retiredFeedIds": [
     "rapid7-blog",
@@ -1669,6 +1669,546 @@
         "apple",
         "mac",
         "iphone"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "windows-incident-response",
+      "name": "Windows Incident Response (Harlan Carvey)",
+      "url": "https://windowsir.blogspot.com/feeds/posts/default",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "windows",
+        "forensics"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "inversecos",
+      "name": "Inversecos",
+      "url": "https://www.inversecos.com/feeds/posts/default",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "detection",
+        "threat-hunting"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "invictus-ir",
+      "name": "Invictus IR",
+      "url": "https://www.invictus-ir.com/news/rss.xml",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "cloud",
+        "incident-response"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "aboutdfir",
+      "name": "AboutDFIR",
+      "url": "https://aboutdfir.com/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "forensics",
+        "news"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dfir-diva",
+      "name": "DFIR Diva",
+      "url": "https://dfirdiva.com/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "dfir",
+        "forensics",
+        "blog"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "arctic-wolf-labs",
+      "name": "Arctic Wolf Labs",
+      "url": "https://arcticwolf.com/feed/",
+      "category": "Blue Team",
+      "tags": [
+        "incident-response",
+        "mdr",
+        "threat-research"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "sekoia-blog",
+      "name": "Sekoia.io Blog",
+      "url": "https://blog.sekoia.io/feed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-intel",
+        "detection",
+        "malware"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "group-ib-blog",
+      "name": "Group-IB Blog",
+      "url": "https://www.group-ib.com/feed/blogfeed/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-intel",
+        "cybercrime",
+        "apt"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "proofpoint-threat-insight",
+      "name": "Proofpoint Threat Insight",
+      "url": "https://www.proofpoint.com/us/threat-insight-blog.xml",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-intel",
+        "phishing",
+        "email"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "trend-micro-research",
+      "name": "Trend Micro Research",
+      "url": "https://feeds.feedburner.com/TrendMicroResearch",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "malware",
+        "apt"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "bitdefender-labs",
+      "name": "Bitdefender Labs",
+      "url": "https://www.bitdefender.com/blog/api/rss/labs/",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-research",
+        "malware",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "bushidotoken",
+      "name": "BushidoToken",
+      "url": "https://blog.bushidotoken.net/feeds/posts/default",
+      "category": "Threat Intelligence",
+      "tags": [
+        "threat-intel",
+        "cybercrime",
+        "osint"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ncsc-uk-news",
+      "name": "NCSC UK News",
+      "url": "https://www.ncsc.gov.uk/api/1/services/v1/news-rss-feed.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "advisory",
+        "cert",
+        "uk"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cisa-ics-advisories",
+      "name": "CISA ICS Advisories",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml",
+      "category": "Vulnerabilities",
+      "tags": [
+        "ics",
+        "advisory",
+        "cisa"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "wiz-blog",
+      "name": "Wiz Blog",
+      "url": "https://www.wiz.io/feed/rss.xml",
+      "category": "Research",
+      "tags": [
+        "cloud",
+        "research",
+        "vulnerability"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "datadog-security-labs",
+      "name": "Datadog Security Labs",
+      "url": "https://securitylabs.datadoghq.com/rss/feed.xml",
+      "category": "Research",
+      "tags": [
+        "cloud",
+        "research",
+        "detection"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "sysdig-blog",
+      "name": "Sysdig Blog",
+      "url": "https://sysdig.com/feed/",
+      "category": "Research",
+      "tags": [
+        "cloud",
+        "containers",
+        "runtime"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "aws-security-blog",
+      "name": "AWS Security Blog",
+      "url": "https://aws.amazon.com/blogs/security/feed/",
+      "category": "Research",
+      "tags": [
+        "cloud",
+        "aws",
+        "best-practices"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-cloud-security-blog",
+      "name": "Google Cloud Security Blog",
+      "url": "https://cloudblog.withgoogle.com/products/identity-security/rss/",
+      "category": "Research",
+      "tags": [
+        "cloud",
+        "gcp",
+        "best-practices"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cloudflare-blog",
+      "name": "Cloudflare Blog",
+      "url": "https://blog.cloudflare.com/rss/",
+      "category": "Research",
+      "tags": [
+        "ddos",
+        "network",
+        "web"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "malware-traffic-analysis",
+      "name": "Malware Traffic Analysis",
+      "url": "https://www.malware-traffic-analysis.net/blog-entries.rss",
+      "category": "Malware",
+      "tags": [
+        "malware",
+        "pcap",
+        "traffic-analysis"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "didier-stevens",
+      "name": "Didier Stevens",
+      "url": "https://blog.didierstevens.com/feed/",
+      "category": "Malware",
+      "tags": [
+        "malware",
+        "tools",
+        "analysis"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "hexacorn",
+      "name": "Hexacorn",
+      "url": "https://www.hexacorn.com/blog/feed/",
+      "category": "Malware",
+      "tags": [
+        "malware",
+        "windows",
+        "dfir"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "emsisoft-blog",
+      "name": "Emsisoft Blog",
+      "url": "https://www.emsisoft.com/en/blog/feed/",
+      "category": "Malware",
+      "tags": [
+        "malware",
+        "ransomware",
+        "news"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "resilient-cyber",
+      "name": "Resilient Cyber",
+      "url": "https://www.resilientcyber.io/feed",
+      "category": "CISO & Leadership",
+      "tags": [
+        "ciso",
+        "strategy",
+        "supply-chain"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "tldr-sec",
+      "name": "tl;dr sec",
+      "url": "https://tldrsec.com/feed.xml",
+      "category": "CISO & Leadership",
+      "tags": [
+        "newsletter",
+        "appsec",
+        "cloud"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-keyword-blog",
+      "name": "The Keyword (Google Blog)",
+      "url": "https://blog.google/rss/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "google",
+        "announcements",
+        "platform"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "google-workspace-updates",
+      "name": "Google Workspace Updates",
+      "url": "https://workspaceupdates.googleblog.com/feeds/posts/default",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "google",
+        "workspace",
+        "admin"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "android-developers-blog",
+      "name": "Android Developers Blog",
+      "url": "https://android-developers.googleblog.com/feeds/posts/default",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "android",
+        "developer",
+        "platform"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "apple-newsroom",
+      "name": "Apple Newsroom",
+      "url": "https://www.apple.com/newsroom/rss-feed.rss",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "announcements",
+        "platform"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "apple-developer-news",
+      "name": "Apple Developer News",
+      "url": "https://developer.apple.com/news/rss/news.rss",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "developer",
+        "platform"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "eclectic-light-company",
+      "name": "The Eclectic Light Company",
+      "url": "https://eclecticlight.co/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "macos",
+        "apple",
+        "internals"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "michael-tsai",
+      "name": "Michael Tsai",
+      "url": "https://mjtsai.com/blog/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "apple",
+        "macos",
+        "developer"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "windows-blog",
+      "name": "Windows Blog",
+      "url": "https://blogs.windows.com/feed/",
+      "category": "Platform Ecosystems",
+      "tags": [
+        "windows",
+        "microsoft",
+        "platform"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "office-365-for-it-pros",
+      "name": "Office 365 for IT Pros",
+      "url": "https://office365itpros.com/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft-365",
+        "admin",
+        "powershell"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "practical-365",
+      "name": "Practical 365",
+      "url": "https://practical365.com/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft-365",
+        "exchange",
+        "admin"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "borns-tech-windows-world",
+      "name": "Born's Tech and Windows World",
+      "url": "https://borncity.com/win/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "windows",
+        "patches",
+        "microsoft"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "askwoody",
+      "name": "AskWoody",
+      "url": "https://www.askwoody.com/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "windows",
+        "patches",
+        "updates"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "4sysops",
+      "name": "4sysops",
+      "url": "https://4sysops.com/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "windows",
+        "admin",
+        "powershell"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "petri-it-knowledgebase",
+      "name": "Petri IT Knowledgebase",
+      "url": "https://petri.com/feed/",
+      "category": "Microsoft Security",
+      "tags": [
+        "microsoft",
+        "admin",
+        "cloud"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "lwn-net",
+      "name": "LWN.net",
+      "url": "https://lwn.net/headlines/rss",
+      "category": "General Tech",
+      "tags": [
+        "linux",
+        "kernel",
+        "security"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "phoronix",
+      "name": "Phoronix",
+      "url": "https://www.phoronix.com/rss.php",
+      "category": "General Tech",
+      "tags": [
+        "linux",
+        "hardware",
+        "open-source"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "github-blog",
+      "name": "GitHub Blog",
+      "url": "https://github.blog/feed/",
+      "category": "General Tech",
+      "tags": [
+        "github",
+        "developer",
+        "open-source"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "kubernetes-blog",
+      "name": "Kubernetes Blog",
+      "url": "https://kubernetes.io/feed.xml",
+      "category": "General Tech",
+      "tags": [
+        "kubernetes",
+        "containers",
+        "cloud"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "hacker-news-frontpage",
+      "name": "Hacker News (front page)",
+      "url": "https://hnrss.org/frontpage",
+      "category": "General Tech",
+      "tags": [
+        "tech",
+        "news",
+        "community"
       ],
       "enabled": true
     }

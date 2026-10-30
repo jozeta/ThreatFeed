@@ -33,11 +33,16 @@ Inspired by the editorial elegance, typography, and usability of **Newsify for i
 ### 3. Established Security Feeds Configuration
 Pre-configured with curated, verified security feeds organized by category:
 - **Security News**: The Hacker News, Krebs on Security, SANS Internet Storm Center, BleepingComputer, SecurityWeek, Dark Reading, Help Net Security.
-- **Vulnerabilities**: CISA Advisories and Alerts (KEV additions), Google Project Zero, PortSwigger Web Security Research, Exploit-DB, ZDI, MSRC; national CERTs (CERT/CC, CERT-SE, NCSC-NL, CERT-EU, Canadian Centre for Cyber Security, JPCERT/CC); vendor PSIRTs (Cisco, Fortinet, Palo Alto Networks); Ubuntu and Debian security notices, Chrome Releases, Wordfence and Horizon3.ai.
-- **Threat Intelligence**: Cisco Talos, Microsoft Security, SentinelOne Labs, Securelist (Kaspersky).
-- **Malware Research**: Malwarebytes Labs, ESET WeLiveSecurity, Sophos X-Ops.
+- **Vulnerabilities**: CISA Advisories and Alerts (KEV additions), Google Project Zero, PortSwigger Web Security Research, Exploit-DB, ZDI, MSRC; national CERTs (CERT/CC, CERT-SE, NCSC-NL, CERT-EU, Canadian Centre for Cyber Security, JPCERT/CC); vendor PSIRTs (Cisco, Fortinet, Palo Alto Networks); Ubuntu and Debian security notices, Chrome Releases, Wordfence and Horizon3.ai, NCSC UK, CISA ICS Advisories.
+- **Threat Intelligence**: Cisco Talos, Microsoft Security, SentinelOne Labs, Securelist (Kaspersky), Sekoia.io, Group-IB, Proofpoint Threat Insight, Trend Micro Research, Bitdefender Labs, BushidoToken.
+- **Malware Research**: Malwarebytes Labs, ESET WeLiveSecurity, Sophos X-Ops, Malware Traffic Analysis, Didier Stevens, Hexacorn, Emsisoft.
 - **Red Team & Offensive Tradecraft**: SpecterOps, Bishop Fox.
-- **Blue Team & Detection Engineering**: Huntress, Elastic Security Labs.
+- **Blue Team & Detection Engineering**: Huntress, Elastic Security Labs, Windows Incident Response, Inversecos, Invictus IR, AboutDFIR, DFIR Diva, Arctic Wolf Labs.
+- **Cloud & Research**: Wiz, Datadog Security Labs, Sysdig, AWS Security Blog, Google Cloud Security Blog, Cloudflare Blog.
+- **CISO & Leadership**: Resilient Cyber, tl;dr sec.
+- **Platform Ecosystems**: The Keyword (Google), Google Workspace Updates, Android Developers Blog, Apple Newsroom, Apple Developer News, The Eclectic Light Company, Michael Tsai, Windows Blog.
+- **Microsoft Admin & IT**: Office 365 for IT Pros, Practical 365, Born's Tech and Windows World, AskWoody, 4sysops, Petri IT Knowledgebase.
+- **General Tech**: LWN.net, Phoronix, GitHub Blog, Kubernetes Blog, Hacker News front page.
 
 ### 4. Feed Management & OPML Interoperability
 - Add custom RSS 2.0 or Atom XML feeds directly in the UI.
