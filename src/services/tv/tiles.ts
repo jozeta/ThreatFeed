@@ -24,7 +24,7 @@ export interface TvSet {
 }
 
 const HOUR_MS = 60 * 60 * 1000;
-const SET_SIZE = 6;
+const SET_SIZE = 5;
 
 /** Plain text from feed HTML: tags dropped, common entities decoded, whitespace collapsed */
 function plainText(html?: string): string | undefined {
@@ -172,13 +172,18 @@ export function tilesForRansomware(news: Article[], victims: LeakSiteVictim[], g
   return out.slice(0, max);
 }
 
-/** Groups tiles into screens of up to six and sizes each so the 3×2 grid is exactly filled */
+/**
+ * Groups tiles into screens and sizes each so the 3×2 grid is exactly filled. Full screens hold five: the
+ * heaviest tile spans two columns, four are single cells. A leftover of fewer than four is dropped when a full
+ * screen exists (tiles are ranked, so it holds the least important); otherwise the span table below fills the grid.
+ */
 export function chunkSets(tiles: TvTile[]): TvSet[] {
-  const sets: TvSet[] = [];
-  for (let i = 0; i < tiles.length; i += SET_SIZE) {
-    const chunk = tiles.slice(i, i + SET_SIZE);
+  const chunks: TvTile[][] = [];
+  for (let i = 0; i < tiles.length; i += SET_SIZE) chunks.push(tiles.slice(i, i + SET_SIZE));
+  if (chunks.length > 1 && chunks[chunks.length - 1].length < 4) chunks.pop();
+  return chunks.map(chunk => {
+    // The heaviest tile (earliest wins ties) gets the double width: in a full set of 5, or the 4-tile tail's two heaviest
     const wide = chunk.length === 5 ? 1 : chunk.length === 4 ? 2 : 0;
-    // The heaviest tiles (earliest wins ties) get the double-width spans
     const widest = new Set(
       chunk
         .map((t, idx) => ({ idx, w: t.weight }))
@@ -186,7 +191,7 @@ export function chunkSets(tiles: TvTile[]): TvSet[] {
         .slice(0, wide)
         .map(x => x.idx)
     );
-    sets.push({
+    return {
       tiles: chunk.map((t, idx) => {
         let col: 1 | 2 | 3 = 1;
         let row: 1 | 2 = 1;
@@ -196,7 +201,6 @@ export function chunkSets(tiles: TvTile[]): TvSet[] {
         else if (widest.has(idx)) col = 2;
         return { ...t, col, row };
       }),
-    });
-  }
-  return sets;
+    };
+  });
 }

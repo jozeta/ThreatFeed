@@ -90,10 +90,22 @@ describe('tilesForRansomware', () => {
 describe('chunkSets', () => {
   const mk = (n: number) => Array.from({ length: n }, (_, i) => tile(`t${i}`, i));
 
-  it('chunks 14 into 6, 6, 2 with full-width rows at the end', () => {
-    const sets = chunkSets(mk(14));
-    expect(sets.map(s => s.tiles.length)).toEqual([6, 6, 2]);
-    expect(sets[2].tiles.map(t => ({ col: t.col, row: t.row }))).toEqual([{ col: 3, row: 1 }, { col: 3, row: 1 }]);
+  it('chunks 14 into 5, 5, 4', () => {
+    expect(chunkSets(mk(14)).map(s => s.tiles.length)).toEqual([5, 5, 4]);
+  });
+
+  it('drops a tail of fewer than four when a full set exists', () => {
+    expect(chunkSets(mk(12)).map(s => s.tiles.length)).toEqual([5, 5]);
+    expect(chunkSets(mk(6)).map(s => s.tiles.length)).toEqual([5]);
+    expect(chunkSets(mk(8)).map(s => s.tiles.length)).toEqual([5]);
+    expect(chunkSets(mk(9)).map(s => s.tiles.length)).toEqual([5, 4]);
+  });
+
+  it('gives the heaviest tile of every full set the wide span', () => {
+    const sets = chunkSets(mk(10));
+    expect(sets[0].tiles.filter(t => t.col === 2).map(t => t.id)).toEqual(['t4']);
+    expect(sets[1].tiles.filter(t => t.col === 2).map(t => t.id)).toEqual(['t9']);
+    expect(sets[1].tiles.filter(t => t.col === 1 && t.row === 1)).toHaveLength(4);
   });
 
   it('gives only the heaviest of 5 a double width', () => {
@@ -109,12 +121,13 @@ describe('chunkSets', () => {
   it('makes tall columns of 3 and a full screen of 1', () => {
     expect(chunkSets(mk(3))[0].tiles.every(t => t.col === 1 && t.row === 2)).toBe(true);
     expect(chunkSets(mk(1))[0].tiles[0]).toMatchObject({ col: 3, row: 2 });
+    expect(chunkSets(mk(2))[0].tiles.every(t => t.col === 3 && t.row === 1)).toBe(true);
   });
 
   it('returns nothing for no tiles and always fills six cells', () => {
     expect(chunkSets([])).toEqual([]);
-    for (let n = 1; n <= 6; n++) {
-      expect(chunkSets(mk(n))[0].tiles.reduce((s, t) => s + t.col * t.row, 0)).toBe(6);
+    for (let n = 1; n <= 30; n++) {
+      for (const set of chunkSets(mk(n))) expect(set.tiles.reduce((s, t) => s + t.col * t.row, 0)).toBe(6);
     }
   });
 });
