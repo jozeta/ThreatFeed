@@ -12,7 +12,8 @@ import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
 import { CveButton, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
-import { Search, Skull } from 'lucide-react';
+import { VendorButton } from '../../components/VendorLink';
+import { Building2, Search, Skull } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGES = [
@@ -41,11 +42,12 @@ interface KevTabProps {
 }
 
 export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, exploits, cweNames, stackKeywords, onOpenCve }) => {
-  // Filters live in the URL (#/vulns/kev?vendor=…&min=7) so a filtered view can be bookmarked or shared
+  // Filters live in the URL (#/vulns/kev?kevVendor=…&min=7) so a filtered view can be bookmarked or shared;
+  // ?vendor= is the vendor panel, which can open over any page
   const [daysParam, setDaysParam] = useHashParam('days', '90');
   const days = RANGES.some((r) => String(r.days) === daysParam) ? Number(daysParam) : 90;
   const setDays = (d: number) => setDaysParam(String(d));
-  const [vendor, setVendor] = useHashParam('vendor');
+  const [vendor, setVendor] = useHashParam('kevVendor');
   const [product, setProduct] = useHashParam('product');
   const [cwe, setCwe] = useHashParam('cwe');
   const [bandParam, setBand] = useHashParam('cvss');
@@ -236,7 +238,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
               <li key={k.cve} className="flex items-baseline gap-2 text-xs">
                 <span className="font-mono text-theme-text-muted w-4 text-right">{i + 1}.</span>
                 <CveButton cve={k.cve} onOpen={onOpenCve} />
-                <span className="font-serif text-theme-text truncate" title={k.name}>{k.vendor} {k.product}</span>
+                <span className="font-serif text-theme-text truncate" title={k.name}><VendorButton name={k.vendor} /> {k.product}</span>
                 <span className="ml-auto font-mono whitespace-nowrap"><EpssValue epss={k.epss} /></span>
                 {k.ransomware && <Skull className="w-3 h-3 text-rose-500 shrink-0" aria-label="Used by ransomware" />}
               </li>
@@ -249,7 +251,10 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
         <aside className="space-y-6">
           <div>
             <SectionTitle>Vendors</SectionTitle>
-            <BarList rows={vendors.slice(0, 10).map(([v, n]) => ({ key: v, label: v, value: n, active: vendor === v, onClick: () => toggle(vendor, v, setVendor) }))} />
+            <BarList rows={vendors.slice(0, 10).map(([v, n]) => ({
+              key: v, label: v, value: n, active: vendor === v, onClick: () => toggle(vendor, v, setVendor),
+              action: <VendorButton name={v} className="p-0.5 text-theme-text-muted shrink-0"><Building2 className="w-3 h-3" aria-label={`${v} vendor page`} /></VendorButton>,
+            }))} />
           </div>
           <div>
             <SectionTitle>Products</SectionTitle>
@@ -267,7 +272,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
             <SectionTitle>CVSS score</SectionTitle>
             <BarList color="bg-orange-500/70" rows={bands.filter((b) => b.count > 0 || band === b.id).map((b) => ({ key: b.id, label: b.label, value: b.count, active: band === b.id, onClick: () => setBand(band === b.id ? '' : b.id) }))} />
           </div>
-          <p className="text-[10px] font-mono text-theme-text-muted">Click a bar to filter the list; click it again to clear.</p>
+          <p className="text-[10px] font-mono text-theme-text-muted">Click a bar to filter the list; click it again to clear. <Building2 className="w-3 h-3 inline -mt-0.5" /> opens the vendor page.</p>
         </aside>
 
         <div className="lg:col-span-3 overflow-x-auto">
@@ -285,7 +290,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
                 </div>
                 <p className="font-serif text-theme-text">{k.name}</p>
                 <p className="font-mono text-[11px] text-theme-text-muted">
-                  added {k.dateAdded}
+                  <VendorButton name={k.vendor} /> · added {k.dateAdded}
                   {k.dueDate && <> · <span className={k.dueDate >= today && k.dueDate <= in14Days ? 'text-orange-500 font-bold' : ''}>due {k.dueDate}</span></>}
                   {news.get(k.cve)?.length ? ` · ${news.get(k.cve)!.length} articles` : ''}
                 </p>
@@ -313,6 +318,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
                   <td className="py-2 pr-3 text-theme-text">
                     <span className="font-serif">{k.name}</span>
                     {k.ransomware && <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
+                    <span className="block text-[10px] text-theme-text-muted"><VendorButton name={k.vendor} /> · {k.product}</span>
                   </td>
                   <td className="py-2 pr-3"><SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} /></td>
                   <td className="py-2 pr-3"><EpssValue epss={k.epss} /></td>

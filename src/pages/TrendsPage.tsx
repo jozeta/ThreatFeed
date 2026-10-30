@@ -11,6 +11,7 @@ import { groupDisplayName } from '../utils/countries';
 import { Sparkline } from '../components/Common/Sparkline';
 import { SectionTitle } from './incidents/shared';
 import { CvePanelHost } from './vulns/CvePanelHost';
+import { openVendor } from '../components/VendorLink';
 import { TrendingUp, ArrowUp, ArrowDown } from 'lucide-react';
 
 const TOP = 25;
@@ -108,10 +109,11 @@ export const TrendsPage: React.FC<{ onOpenArticle: (article: Article) => void; o
       const group = groupKeys.get(r.name.toLowerCase()) ?? r.name.toLowerCase();
       return navigate('ransomware', 'groups', new URLSearchParams({ group }));
     }
-    // Actors open their profile when one matches; products and vendors search (vendors get a panel later)
+    if (r.kind === 'vendor') return openVendor(r.name);
+    // Actors open their profile when one matches; products search
     void openActor(r);
   };
-  const clickHint = (r: TrendRow) => (r.kind === 'cve' ? 'Open the CVE' : r.kind === 'ransomware' ? 'Open the group' : r.kind === 'actor' ? 'Open the actor profile or search' : 'Search');
+  const clickHint = (r: TrendRow) => (r.kind === 'cve' ? 'Open the CVE' : r.kind === 'ransomware' ? 'Open the group' : r.kind === 'actor' ? 'Open the actor profile or search' : r.kind === 'vendor' ? 'Open the vendor page' : 'Search');
 
   return (
     <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-8">

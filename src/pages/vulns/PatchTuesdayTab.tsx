@@ -4,6 +4,7 @@ import { usePagedCount } from '../../hooks/usePagedCount';
 import { PatchCve, PatchMonth } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
+import { VendorButton } from '../../components/VendorLink';
 import { chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { CveButton, SEVERITY_TEXT, StatCards } from './shared';
 import { ExternalLink, Search } from 'lucide-react';
@@ -119,6 +120,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
+        <VendorButton name="Microsoft" className="font-serif text-lg font-extrabold text-theme-text" />
         <select value={month.id} onChange={(e) => setMonth(e.target.value === months[0].id ? '' : e.target.value)} className={selectClass} aria-label="Patch Tuesday release">
           {months.map((m) => <option key={m.id} value={m.id}>{m.title.replace(/ Security Updates$/, '')} ({m.cves.length})</option>)}
         </select>

@@ -16,7 +16,7 @@ import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
 import { AlertMonitor } from './components/AlertMonitor';
 import { CveWatchMonitor } from './components/CveWatchMonitor';
-import { useHashRoute } from './hooks/useHashRoute';
+import { useHashParam, useHashRoute } from './hooks/useHashRoute';
 
 // Secondary pages load on first visit, keeping the initial bundle to what the front page needs
 const SourcesPage = lazy(() => import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage })));
@@ -29,6 +29,7 @@ const MyFeedPage = lazy(() => import('./pages/MyFeedPage').then((m) => ({ defaul
 const RansomwarePage = lazy(() => import('./pages/RansomwarePage').then((m) => ({ default: m.RansomwarePage })));
 const ActorsPage = lazy(() => import('./pages/ActorsPage').then((m) => ({ default: m.ActorsPage })));
 const VulnerabilitiesPage = lazy(() => import('./pages/VulnerabilitiesPage').then((m) => ({ default: m.VulnerabilitiesPage })));
+const VendorPanelHost = lazy(() => import('./components/VendorPanel'));
 
 export const App: React.FC = () => {
   const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
@@ -39,6 +40,8 @@ export const App: React.FC = () => {
   const [route, navigate] = useHashRoute();
   const activeTab: ActiveNavTab = route.page;
   const setActiveTab = useCallback((tab: ActiveNavTab) => navigate(tab), [navigate]);
+  // A vendor panel (?vendor=Fortinet) can open over any page
+  const [vendor] = useHashParam('vendor');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
@@ -207,6 +210,19 @@ export const App: React.FC = () => {
           )}
         </Suspense>
       </main>
+
+      {/* Vendor panel (?vendor=…), over whichever page opened it */}
+      {vendor && (
+        <Suspense fallback={null}>
+          <VendorPanelHost
+            vendor={vendor}
+            cve={route.params.get('cve') ?? ''}
+            page={activeTab}
+            covered={Boolean(activeArticle)}
+            onOpenArticle={handleOpenArticle}
+          />
+        </Suspense>
+      )}
 
       {/* Reader Modal (Distraction-free article reader) */}
       {activeArticle && (

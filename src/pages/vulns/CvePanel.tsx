@@ -5,6 +5,7 @@ import { fetchCveDescription } from '../../services/intelligence/cvss';
 import { fetchEpssHistory } from '../../services/intelligence/cveWatch';
 import { buildHash } from '../../hooks/useHashRoute';
 import { Sparkline } from '../../components/Common/Sparkline';
+import { VendorButton } from '../../components/VendorLink';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
 import { EpssValue, ExploitBadges, SeverityPill, SsvcBadge, vectorText } from './shared';
@@ -115,7 +116,7 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
         {description === undefined
           ? <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading description from NVD…</p>
           : description && <p className="text-sm font-serif text-theme-text leading-relaxed">{description}</p>}
-        {kev && <p className="text-xs font-mono text-theme-text-muted">{kev.vendor} · {kev.product}</p>}
+        {kev && <p className="text-xs font-mono text-theme-text-muted"><VendorButton name={kev.vendor} className="font-bold text-theme-text" /> · {kev.product}</p>}
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-mono">
           {facts.map(([label, value]) => (

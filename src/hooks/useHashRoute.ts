@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { ActiveNavTab } from '../types';
 
 /**
- * Hash routing: #/<page>[/<sub>][?key=value…], e.g. #/vulns/kev?vendor=Fortinet&cvss=9&cve=CVE-2026-1234.
+ * Hash routing: #/<page>[/<sub>][?key=value…], e.g. #/vulns/kev?kevVendor=Fortinet&cvss=9&cve=CVE-2026-1234.
  * Hashes work on GitHub Pages without server rewrites, and every view can be bookmarked or shared.
  * Page and tab changes add a history entry (so Back works); filter changes replace the current one.
  */
@@ -39,6 +39,20 @@ function go(hash: string, replace: boolean) {
   else window.history.pushState(null, '', url);
   window.dispatchEvent(new Event(ROUTE_EVENT)); // pushState doesn't fire hashchange
 }
+
+/** Sets (or, with an empty value, removes) query parameters of the current route, from outside a component */
+export function setHashParams(changes: Record<string, string>, push = false) {
+  const current = parseHash(window.location.hash);
+  const params = new URLSearchParams(current.params);
+  for (const [key, value] of Object.entries(changes)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  go(buildHash(current.page, current.sub, params), !push);
+}
+
+/** Moves to a page from outside a component (a history entry, like a page change through the navigation) */
+export const goToPage = (page: ActiveNavTab, sub = '', params?: URLSearchParams) => go(buildHash(page, sub, params), false);
 
 function subscribe(onChange: () => void) {
   window.addEventListener('hashchange', onChange);

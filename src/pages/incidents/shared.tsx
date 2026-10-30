@@ -12,7 +12,7 @@ export const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children
 
 /** Horizontal bar list for "top N" breakdowns; rows are optional buttons */
 export const BarList: React.FC<{
-  rows: { key: string; label: React.ReactNode; value: number; active?: boolean; onClick?: () => void }[];
+  rows: { key: string; label: React.ReactNode; value: number; active?: boolean; onClick?: () => void; action?: React.ReactNode }[]; // action: a second control beside the bar
   color?: string;
   format?: (n: number) => string; // e.g. currency; defaults to the plain number
 }> = ({ rows, color = 'bg-rose-500/70', format = String }) => {
@@ -28,7 +28,7 @@ export const BarList: React.FC<{
           </>
         );
         return (
-          <li key={r.key}>
+          <li key={r.key} className={r.action ? 'flex items-center gap-1' : undefined}>
             {r.onClick ? (
               <button onClick={r.onClick} className={`w-full flex items-center gap-2 hover:text-theme-accent ${r.active ? 'text-theme-accent font-bold' : 'text-theme-text'}`}>
                 {content}
@@ -36,6 +36,7 @@ export const BarList: React.FC<{
             ) : (
               <div className="flex items-center gap-2 text-theme-text">{content}</div>
             )}
+            {r.action}
           </li>
         );
       })}
