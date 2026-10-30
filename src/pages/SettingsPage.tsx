@@ -512,6 +512,22 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Reduced motion */}
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.reducedMotion)}
+            onChange={(e) => updateSettings({ reducedMotion: e.target.checked })}
+            className="mt-1 accent-[var(--color-accent)]"
+          />
+          <span>
+            <span className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted">Reduce motion</span>
+            <span className="block text-xs font-serif text-theme-text-muted mt-1">
+              Turns off animations and transitions. Also follows your system's reduced-motion setting.
+            </span>
+          </span>
+        </label>
       </section>
 
       {/* SECTION 4: INGESTION & GATEWAY */}
