@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCvrf, pickPatchMonths, refreshPatchMonths } from './patchTuesday';
+import { decodeMsrc, normalizeCvrf, pickPatchMonths, refreshPatchMonths } from './patchTuesday';
 import { MsrcData } from '../../types';
 
 // Hand-trimmed from the real 2026-Oct CVRF document (api.msrc.microsoft.com/cvrf/v3.0/cvrf/2026-Oct)
@@ -99,13 +99,16 @@ describe('normalizeCvrf', () => {
     expect(month.cves[1].kb).toBeUndefined();
   });
 
-  it('caps products at five', () => {
+  it('keeps every affected product (the stack match needs them all), deduped case-insensitively', () => {
+    const names = Array.from({ length: 8 }, (_, i) => ({ ProductID: String(i), Value: `Product ${i}` }));
     const many = {
       ...doc,
-      ProductTree: { FullProductName: Array.from({ length: 8 }, (_, i) => ({ ProductID: String(i), Value: `Product ${i}` })) },
-      Vulnerability: [{ ...doc.Vulnerability[1], ProductStatuses: [{ ProductID: ['0', '1', '2', '3', '4', '5', '6', '7'], Type: 3 }] }],
+      ProductTree: { FullProductName: [...names, { ProductID: '8', Value: 'Windows 11 Version 26H1' }, { ProductID: '9', Value: 'Windows 11 version 26H1 for x64-based Systems' }] },
+      Vulnerability: [{ ...doc.Vulnerability[1], ProductStatuses: [{ ProductID: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], Type: 3 }] }],
     };
-    expect(normalizeCvrf(many)!.cves[0].products).toHaveLength(5);
+    const products = normalizeCvrf(many)!.cves[0].products;
+    expect(products).toHaveLength(9);
+    expect(products.filter((p) => /26H1/.test(p))).toEqual(['Windows 11 Version 26H1']);
   });
 
   it('rejects documents without an id', () => {
@@ -117,26 +120,27 @@ describe('normalizeCvrf', () => {
 describe('pickPatchMonths', () => {
   it('returns the latest monthly releases first, skipping out-of-band documents', () => {
     const list = { value: [
-      { ID: '2026-Aug', DocumentTitle: 'August 2026 Security Updates', InitialReleaseDate: '2026-08-11T07:00:00Z' },
-      { ID: '2026-Oct', DocumentTitle: 'October 2026 Security Updates', InitialReleaseDate: '2026-10-13T07:00:00Z' },
+      { ID: '2026-Aug', DocumentTitle: 'August 2026 Security Updates', InitialReleaseDate: '2026-08-11T07:00:00Z', CurrentReleaseDate: '2026-10-28T01:45:01Z' },
+      { ID: '2026-Oct', DocumentTitle: 'October 2026 Security Updates', InitialReleaseDate: '2026-10-13T07:00:00Z', CurrentReleaseDate: '2026-10-30T01:45:10Z' },
       { ID: '2026-Oct-OOB', DocumentTitle: 'October 2026 Out-of-Band Updates', InitialReleaseDate: '2026-10-20T07:00:00Z' },
       { ID: '2026-Sep', DocumentTitle: 'September 2026 Security Updates', InitialReleaseDate: '2026-09-08T07:00:00Z' },
       { ID: '2026-Jul', DocumentTitle: 'July 2026 Security Updates', InitialReleaseDate: '2026-07-14T07:00:00Z' },
     ] };
     expect(pickPatchMonths(list, 3)).toEqual([
-      { id: '2026-Oct', released: '2026-10-13T07:00:00Z' },
-      { id: '2026-Sep', released: '2026-09-08T07:00:00Z' },
-      { id: '2026-Aug', released: '2026-08-11T07:00:00Z' },
+      { id: '2026-Oct', released: '2026-10-13T07:00:00Z', revised: '2026-10-30T01:45:10Z' },
+      { id: '2026-Sep', released: '2026-09-08T07:00:00Z', revised: undefined },
+      { id: '2026-Aug', released: '2026-08-11T07:00:00Z', revised: '2026-10-28T01:45:01Z' },
     ]);
     expect(pickPatchMonths(null, 3)).toEqual([]);
   });
 });
 
 describe('refreshPatchMonths', () => {
+  // Sep revised after our last fetch of it (2026-09-12), Aug not
   const list = { value: [
-    { ID: '2026-Aug', DocumentTitle: 'August 2026 Security Updates', InitialReleaseDate: '2026-08-11T07:00:00Z' },
-    { ID: '2026-Sep', DocumentTitle: 'September 2026 Security Updates', InitialReleaseDate: '2026-09-08T07:00:00Z' },
-    { ID: '2026-Oct', DocumentTitle: 'October 2026 Security Updates', InitialReleaseDate: '2026-10-13T07:00:00Z' },
+    { ID: '2026-Aug', DocumentTitle: 'August 2026 Security Updates', InitialReleaseDate: '2026-08-11T07:00:00Z', CurrentReleaseDate: '2026-08-13T00:00:00Z' },
+    { ID: '2026-Sep', DocumentTitle: 'September 2026 Security Updates', InitialReleaseDate: '2026-09-08T07:00:00Z', CurrentReleaseDate: '2026-10-30T01:43:36Z' },
+    { ID: '2026-Oct', DocumentTitle: 'October 2026 Security Updates', InitialReleaseDate: '2026-10-13T07:00:00Z', CurrentReleaseDate: '2026-10-30T01:45:10Z' },
   ] };
   const docFor = (id: string) => ({ ...doc, DocumentTracking: { ...doc.DocumentTracking, Identification: { ID: { Value: id } } } });
   const fakeApi = (fail: string[] = []) => {
@@ -167,24 +171,53 @@ describe('refreshPatchMonths', () => {
   it('carries older months over and refreshes the newest one daily', async () => {
     const api = fakeApi();
     const r = await refreshPatchMonths(previous, api.getJson, now);
-    expect(r.carried).toEqual(['2026-Oct', '2026-Sep', '2026-Aug']); // October fetched 6 hours ago
-    expect(api.calls).toHaveLength(1);
-    const later = await refreshPatchMonths(previous, api.getJson, Date.parse('2026-10-31T07:00:00Z'));
+    // October was fetched 6 hours ago; September was revised since its last fetch, so it is refetched
+    expect(r.carried).toEqual(['2026-Oct', '2026-Aug']);
+    expect(r.fetched).toEqual(['2026-Sep']);
+    expect(api.calls).toHaveLength(2);
+    const later = await refreshPatchMonths(r.data, api.getJson, Date.parse('2026-10-31T07:00:00Z'));
     expect(later.fetched).toEqual(['2026-Oct']);
     expect(later.data.months[0].cves).toHaveLength(2);
   });
 
   it('refreshes the newest month every run in its first three days', async () => {
     const r = await refreshPatchMonths(previous, fakeApi().getJson, Date.parse('2026-10-15T12:00:00Z'));
-    expect(r.fetched).toEqual(['2026-Oct']);
+    expect(r.fetched).toContain('2026-Oct');
+  });
+
+  it('refetches a revised older month at most once a week', async () => {
+    const recent: MsrcData = { ...previous, updates: { ...previous.updates, '2026-Sep': '2026-10-27T00:00:00Z' } };
+    const r = await refreshPatchMonths(recent, fakeApi().getJson, now);
+    expect(r.carried).toContain('2026-Sep'); // revised on the 30th, but last fetched 3 days ago
+    const week = await refreshPatchMonths(recent, fakeApi().getJson, Date.parse('2026-11-03T12:00:00Z'));
+    expect(week.fetched).toContain('2026-Sep');
+    expect(week.carried).toContain('2026-Aug'); // not revised since its last fetch
   });
 
   it('keeps the previous copy when a fetch fails, and everything when the list does', async () => {
-    const r = await refreshPatchMonths(previous, fakeApi(['2026-Oct']).getJson, Date.parse('2026-10-31T07:00:00Z'));
-    expect(r.failed).toEqual([{ id: '2026-Oct', error: 'HTTP 503' }]);
+    const r = await refreshPatchMonths(previous, fakeApi(['2026-Oct', '2026-Sep']).getJson, Date.parse('2026-10-31T07:00:00Z'));
+    expect(r.failed).toEqual([{ id: '2026-Oct', error: 'HTTP 503' }, { id: '2026-Sep', error: 'HTTP 503' }]);
     expect(r.data.months.map((m) => m.id)).toEqual(['2026-Oct', '2026-Sep', '2026-Aug']);
     const down = await refreshPatchMonths(previous, async () => { throw new Error('offline'); }, now);
     expect(down.listError).toBe('offline');
     expect(down.data.months).toBe(previous.months);
+  });
+});
+
+describe('decodeMsrc', () => {
+  it('drops malformed CVE entries and months', () => {
+    const data = decodeMsrc({ months: [
+      { id: '2026-Oct', title: 'October', released: '', cves: [
+        { cve: 'CVE-2026-1', title: 'ok', products: ['Windows'], exploited: true, publiclyDisclosed: false },
+        { cve: 'CVE-2026-2', title: 'no products' },
+        { cve: 'CVE-2026-3', title: 'bad product', products: ['x', 3] },
+        { cve: 4, title: 'bad id', products: [] },
+        null,
+      ] },
+      { id: '2026-Sep', cves: 'nope' },
+    ] })!;
+    expect(data.months).toHaveLength(1);
+    expect(data.months[0].cves.map((c) => c.cve)).toEqual(['CVE-2026-1']);
+    expect(decodeMsrc({})).toBeNull();
   });
 });

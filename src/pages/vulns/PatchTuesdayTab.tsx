@@ -36,6 +36,11 @@ const ThreatBadges: React.FC<{ c: PatchCve }> = ({ c }) => (
 const MsSeverity: React.FC<{ severity?: string }> = ({ severity }) =>
   severity ? <span className={`inline-block px-1.5 rounded border text-[10px] font-bold uppercase ${SEVERITY_COLOR[severity]}`}>{severity}</span> : <span className="text-theme-text-muted">—</span>;
 
+const SHOWN_PRODUCTS = 5; // every product is kept for search and stack matching; this many are listed
+
+const productList = (products: string[]) =>
+  products.slice(0, SHOWN_PRODUCTS).join(', ') + (products.length > SHOWN_PRODUCTS ? ` +${products.length - SHOWN_PRODUCTS} more` : '');
+
 const StackBadge = () => (
   <span className="px-1 rounded bg-theme-accent text-white text-[9px] font-bold uppercase whitespace-nowrap" title="Matches your stack keywords (Settings)">your stack</span>
 );
@@ -192,7 +197,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
                 {stackHits.has(c.cve) && <StackBadge />}
               </div>
               <p className="font-serif text-theme-text">{c.title}</p>
-              <p className="font-mono text-[11px] text-theme-text-muted">{[c.impact, c.products.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</p>
+              <p className="font-mono text-[11px] text-theme-text-muted">{[c.impact, productList(c.products)].filter(Boolean).join(' · ')}</p>
             </li>
           ))}
         </ul>
@@ -218,7 +223,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
                 <td className="py-2 pr-3 text-theme-text">{c.cvss?.toFixed(1) ?? '—'}</td>
                 <td className="py-2 pr-3"><div className="flex flex-col gap-1 items-start"><ThreatBadges c={c} />{stackHits.has(c.cve) && <StackBadge />}</div></td>
                 <td className="py-2 pr-3 text-theme-text-muted" title={c.products.join('\n')}>
-                  {c.products.slice(0, 2).join(', ')}{c.products.length > 2 && ` +${c.products.length - 2}`}
+                  {productList(c.products)}
                 </td>
               </tr>
             ))}

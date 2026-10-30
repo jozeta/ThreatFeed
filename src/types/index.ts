@@ -292,7 +292,7 @@ export interface PatchCve {
   cvss?: number; // highest base score across the affected products
   exploited: boolean; // "Exploited:Yes" in Microsoft's exploitability assessment
   publiclyDisclosed: boolean;
-  products: string[]; // affected product names, max 5
+  products: string[]; // every affected product name (the UI lists five), architecture/install variants merged
   kb?: string[]; // e.g. KB5126836
 }
 

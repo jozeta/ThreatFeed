@@ -1,5 +1,6 @@
 import { Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, MsrcData, RansomwareIntel, VulnData } from '../types';
 import { decodeWatchable } from './intelligence/vulns';
+import { decodeMsrc } from './intelligence/patchTuesday';
 
 export interface FeedSnapshot {
   generatedAt: string;
@@ -68,9 +69,9 @@ export async function loadMsrc(): Promise<MsrcData | null> {
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/msrc.json`, { cache: 'no-cache' });
     if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || !Array.isArray(data.months)) return null;
-    return { generatedAt: data.generatedAt, months: data.months.filter((m: any) => m && typeof m.id === 'string' && Array.isArray(m.cves)) };
+    // Malformed months and CVE entries are dropped, so the tab can't throw on them
+    const data = decodeMsrc(await res.json());
+    return data && { generatedAt: data.generatedAt, months: data.months };
   } catch {
     return null;
   }
