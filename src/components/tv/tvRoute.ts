@@ -45,8 +45,13 @@ export function enterTv(kind: TvKind): void {
 /** Leaves the mode in place (no history entry) and full screen if active */
 export function exitTv(): void {
   setHashParams({ tv: '', dash: '' });
+  leaveFullscreen();
+}
+
+/** Leaves full screen if active; never throws. Shared by exitTv and the shell's unmount (Back, a hash edit) */
+export function leaveFullscreen(): void {
   try {
-    if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+    if (document.fullscreenElement) void document.exitFullscreen?.()?.catch(() => {});
   } catch { /* ignore */ }
 }
 

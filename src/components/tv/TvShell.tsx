@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { usePanelLayer } from '../Common/panelStack';
-import { exitTv, TvKind } from './tvRoute';
+import { exitTv, leaveFullscreen, TvKind } from './tvRoute';
 import { useTvChrome } from './useTvChrome';
 
 const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, global shortcuts wait
@@ -11,6 +11,9 @@ const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, g
 export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavTab }) {
   const { idle } = useTvChrome();
   usePanelLayer(true, exitTv, TV_LEVEL);
+
+  // However the mode ends (Back, a hash edit, another page), the browser leaves full screen with it
+  useEffect(() => leaveFullscreen, []);
 
   // Leaving full screen (Esc, the browser's own control) leaves the mode, but only if we got into it
   const enteredFullscreen = useRef(false);
