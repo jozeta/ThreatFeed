@@ -8,6 +8,7 @@ import { BarList, countBy, SectionTitle } from './shared';
 import { GroupIntelSection, LeakSiteStatus } from './GroupIntelSection';
 import { activityChange, groupActivity } from '../../services/intelligence/groupActivity';
 import { StackedBars } from '../vulns/StackedBars';
+import { CountUp } from '../vulns/shared';
 import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
 import { EntityText } from '../../components/EntityText';
 import { MentionsSection } from '../../components/charts/MentionsArea';
@@ -81,7 +82,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile,
             ].map((s) => (
               <div key={s.label} className="p-2.5 rounded bg-theme-surface border border-theme-border">
                 <span className="block text-[10px] font-mono uppercase text-theme-text-muted">{s.label}</span>
-                <span className="block font-serif text-lg font-bold text-theme-text">{s.value}</span>
+                <span className="block font-serif text-lg font-bold text-theme-text tabular-nums"><CountUp value={s.value} /></span>
                 {s.note && <span className={`block text-[10px] font-mono ${change !== undefined && change > 0 ? 'text-rose-500' : 'text-theme-text-muted'}`}>{s.note}</span>}
               </div>
             ))}
@@ -123,9 +124,9 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ group, victims, profile,
       <div>
         <SectionTitle>In the news ({news.length})</SectionTitle>
         {news.length ? (
-          <ul className="space-y-2">
+          <ul>
             {news.map((a) => (
-              <li key={a.id}>
+              <li key={a.id} className="lift -mx-2 px-2 py-1 rounded">
                 <button onClick={() => onOpenArticle(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent">{a.title}</button>
                 <p className="text-[11px] font-mono text-theme-text-muted">{a.sourceName} · {formatRelativeTime(a.publishedAt)}</p>
               </li>

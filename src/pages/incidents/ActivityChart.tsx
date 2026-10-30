@@ -78,7 +78,7 @@ export const ActivityChart: React.FC<{ victims: LeakSiteVictim[]; historyStart?:
               <title>{`${label}: ${b.count} victim${b.count === 1 ? '' : 's'}`}</title>
               <rect x={left + i * bar} y={0} width={bar} height={height} fill="transparent" />
               <rect x={left + i * bar + 1} y={height - h} width={Math.max(1, bar - 2)} height={Math.max(h, b.count ? 1 : 0)} rx="1.5"
-                className={inRange ? 'fill-rose-500' : 'fill-rose-500/30'} />
+                className={`chart-grow ${inRange ? 'fill-rose-500' : 'fill-rose-500/30'}`} />
             </g>
           );
         })}

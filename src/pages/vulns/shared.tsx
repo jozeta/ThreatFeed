@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { Article, ExploitInfo, SsvcDecision } from '../../types';
 import { ATTACK_VECTORS, parseVector } from '../../services/intelligence/vulns';
 import { TagChip } from '../../components/TagChip';
+import { PanelEntranceDelay, useReducedMotion } from '../../components/Common/SidePanel';
+import { parseCountable, useCountUp } from '../../hooks/useCountUp';
 
 export const SEVERITY_FILL = {
   critical: 'fill-rose-600',
@@ -37,12 +39,21 @@ export const EpssValue: React.FC<{ epss?: number }> = ({ epss }) =>
     </span>
   );
 
+/** A stat that counts up the first time it shows (useCountUp); values that aren't a plain number show as given */
+export const CountUp: React.FC<{ value: React.ReactNode }> = ({ value }) => {
+  const parsed = parseCountable(value);
+  // A placeholder ('—' while loading) waits at zero, so the number still counts up when it arrives
+  const n = useCountUp(parsed?.n ?? 0, useReducedMotion(), useContext(PanelEntranceDelay));
+  if (!parsed) return <>{value}</>;
+  return <>{parsed.prefix}{n.toFixed(parsed.decimals)}{parsed.suffix}</>;
+};
+
 export const StatCards: React.FC<{ stats: { label: string; value: React.ReactNode; note?: string }[]; columns?: string }> = ({ stats, columns = 'md:grid-cols-4' }) => (
   <div className={`grid grid-cols-2 ${columns} gap-4`}>
     {stats.map((s) => (
       <div key={s.label} className="p-4 rounded-lg bg-theme-surface border border-theme-border">
         <span className="font-mono text-xs text-theme-text-muted uppercase">{s.label}</span>
-        <p className="font-serif text-2xl font-bold text-theme-text mt-1 truncate">{s.value}</p>
+        <p className="font-serif text-2xl font-bold text-theme-text mt-1 truncate tabular-nums"><CountUp value={s.value} /></p>
         {s.note && <p className="text-[11px] font-mono text-theme-text-muted">{s.note}</p>}
       </div>
     ))}

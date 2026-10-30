@@ -7,7 +7,7 @@ import { SectionTitle } from '../incidents/shared';
 import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
 import { ExternalLink } from 'lucide-react';
 
-export const chipLink = 'px-2 py-1 rounded border text-xs font-mono hover:underline inline-flex items-center gap-1';
+export const chipLink = 'press px-2 py-1 rounded border text-xs font-mono hover:underline inline-flex items-center gap-1';
 
 /** The actor profile a name (or alias) belongs to, ignoring case */
 export function actorByName(data: ActorsData | null, name: string) {
@@ -69,9 +69,9 @@ export const Coverage: React.FC<{ articles: Article[]; onOpenArticle: (article: 
   <div>
     <SectionTitle>In your feeds, last 30 days ({articles.length})</SectionTitle>
     {articles.length ? (
-      <ul className="space-y-2">
+      <ul>
         {articles.slice(0, 12).map((a) => (
-          <li key={a.id}>
+          <li key={a.id} className="lift -mx-2 px-2 py-1 rounded">
             <button onClick={() => onOpenArticle(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent">{a.title}</button>
             <p className="text-[11px] font-mono text-theme-text-muted">{a.sourceName} · {formatRelativeTime(a.publishedAt)}</p>
           </li>

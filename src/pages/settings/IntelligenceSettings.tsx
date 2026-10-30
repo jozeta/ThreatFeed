@@ -15,7 +15,7 @@ const heading = (icon: React.ReactNode, title: string, text: string) => (
   </div>
 );
 const toggleClass = (on: boolean) =>
-  `px-3 py-1.5 rounded border text-xs font-mono transition-colors ${on ? 'bg-theme-accent text-white border-theme-accent font-bold' : 'bg-theme-card border-theme-border text-theme-text-muted hover:text-theme-text'}`;
+  `press px-3 py-1.5 rounded border text-xs font-mono transition-colors ${on ? 'bg-theme-accent text-white border-theme-accent font-bold' : 'bg-theme-card border-theme-border text-theme-text-muted hover:text-theme-text'}`;
 
 export const IntelligenceSettings: React.FC = () => {
   const { settings, updateSettings } = useSettings();

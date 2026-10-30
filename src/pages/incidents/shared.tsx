@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const chipClass = (on: boolean) =>
-  `px-2.5 py-1.5 rounded border text-xs font-mono transition-colors ${on ? 'bg-theme-accent text-white border-theme-accent font-bold' : 'bg-theme-surface border-theme-border text-theme-text-muted hover:text-theme-text'}`;
+  `press px-2.5 py-1.5 rounded border text-xs font-mono transition-colors ${on ? 'bg-theme-accent text-white border-theme-accent font-bold' : 'bg-theme-surface border-theme-border text-theme-text-muted hover:text-theme-text'}`;
 
 export const selectClass =
   'bg-theme-card border border-theme-border rounded px-2 py-1.5 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent';

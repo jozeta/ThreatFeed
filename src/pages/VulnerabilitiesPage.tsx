@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
+import { useTabInk } from '../hooks/useTabInk';
 import { useMsrc, useVulns } from '../hooks/useVulns';
 import { useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { formatRelativeTime } from '../utils/date';
@@ -32,6 +33,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
   // Tab and open CVE live in the URL (#/vulns/<tab>?cve=…) so a view can be bookmarked or shared
   const [route, navigate] = useHashRoute();
   const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'kev';
+  const ink = useTabInk(tab);
   const setTab = (t: Tab) => navigate('vulnerabilities', t);
   // The CVE panel itself is the app's, over any page
   const [, setCveParam] = useHashParam('cve');
@@ -76,15 +78,15 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
         </p>
       </div>
 
-      <div className="flex gap-1 mt-6 mb-6 border-b border-theme-border overflow-x-auto" role="tablist">
+      <div className="flex gap-1 mt-6 mb-6 border-b border-theme-border overflow-x-auto relative" role="tablist" ref={ink.listRef}>
         {tabs.map((t) => (
           <button
             key={t.id}
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-colors ${
-              tab === t.id ? 'border-theme-accent text-theme-text' : 'border-transparent text-theme-text-muted hover:text-theme-text'
+            className={`flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 border-transparent text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-colors press ${
+              tab === t.id ? 'text-theme-text' : 'text-theme-text-muted hover:text-theme-text'
             }`}
           >
             {t.icon}
@@ -92,6 +94,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
             {t.count !== undefined && <span className="px-1.5 rounded-full bg-theme-surface border border-theme-border text-[10px]">{t.count}</span>}
           </button>
         ))}
+        <span ref={ink.inkRef} className="tab-ink" aria-hidden="true" />
       </div>
 
       {tab === 'kev' && (vulns?.kev.length ? <KevTab kev={kev} hiddenVendorCount={settings.hiddenVulnVendors.length} news={news} exploits={vulns.exploits ?? {}} cweNames={vulns.cweNames ?? {}} stackKeywords={settings.stackKeywords} onOpenCve={openCve} /> : noData('The CISA KEV catalog'))}

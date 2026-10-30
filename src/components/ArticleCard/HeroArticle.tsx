@@ -40,7 +40,7 @@ export const HeroArticle: React.FC<HeroArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`group cursor-pointer flex flex-col transition-all duration-200 border-b border-theme-border pb-6 mb-6 ${
+      className={`lift group cursor-pointer flex flex-col transition-all duration-200 border-b border-theme-border pb-6 mb-6 ${
         article.read ? 'opacity-85' : 'opacity-100'
       }`}
     >

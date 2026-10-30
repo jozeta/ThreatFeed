@@ -44,7 +44,7 @@ export const BannerArticle: React.FC<BannerArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`group cursor-pointer w-full p-5 sm:p-7 rounded-xl bg-theme-surface border border-theme-border hover:border-theme-accent/60 transition-all duration-200 ${
+      className={`lift group cursor-pointer w-full p-5 sm:p-7 rounded-xl bg-theme-surface border border-theme-border hover:border-theme-accent/60 transition-all duration-200 ${
         article.read ? 'opacity-85' : 'opacity-100 shadow-md'
       }`}
     >

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
+import { useTabInk } from '../hooks/useTabInk';
 import { useRansomwareIntel } from '../hooks/useVulns';
 import { openPanel, useHashRoute } from '../hooks/useHashRoute';
 import { useLeakSiteVictims } from '../hooks/useLeakSiteVictims';
@@ -22,6 +23,7 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
   // The tab lives in the URL (#/ransomware/reports) like the Vulns page
   const [route, navigate] = useHashRoute();
   const tab: Tab = (TABS as readonly string[]).includes(route.sub) ? (route.sub as Tab) : 'victims';
+  const ink = useTabInk(tab);
   const setTab = (t: Tab) => navigate('ransomware', t === 'victims' ? '' : t);
   // A group opens the app's group panel (?group=<name>), which any page can link to
   const openGroup = (g: string) => openPanel('group', g.toLowerCase());
@@ -55,15 +57,15 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
         </p>
       </div>
 
-      <div className="flex gap-1 mt-6 mb-6 border-b border-theme-border overflow-x-auto" role="tablist">
+      <div className="flex gap-1 mt-6 mb-6 border-b border-theme-border overflow-x-auto relative" role="tablist" ref={ink.listRef}>
         {tabs.map((t) => (
           <button
             key={t.id}
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-colors ${
-              tab === t.id ? 'border-theme-accent text-theme-text' : 'border-transparent text-theme-text-muted hover:text-theme-text'
+            className={`flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 border-transparent text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-colors press ${
+              tab === t.id ? 'text-theme-text' : 'text-theme-text-muted hover:text-theme-text'
             }`}
           >
             {t.icon}
@@ -71,6 +73,7 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
             {t.count !== undefined && <span className="px-1.5 rounded-full bg-theme-surface border border-theme-border text-[10px]">{t.count}</span>}
           </button>
         ))}
+        <span ref={ink.inkRef} className="tab-ink" aria-hidden="true" />
       </div>
 
       {tab === 'victims' && (

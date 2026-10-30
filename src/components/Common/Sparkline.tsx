@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** Tiny inline trend line for per-day counts (oldest first). Inherits colour via currentColor. */
+/** Tiny inline trend line for per-day counts (oldest first). Inherits colour via currentColor; draws in from the left. */
 export const Sparkline: React.FC<{ values: number[]; width?: number; height?: number; className?: string }> = ({
   values,
   width = 56,
@@ -13,7 +13,7 @@ export const Sparkline: React.FC<{ values: number[]; width?: number; height?: nu
   const points = values.map((v, i) => `${(i * step).toFixed(1)},${(height - 1 - (v / max) * (height - 2)).toFixed(1)}`).join(' ');
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={className} aria-hidden="true">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={points} pathLength={1} className="chart-draw" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 };

@@ -178,9 +178,9 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
       <div>
         <SectionTitle>In the news ({news.length})</SectionTitle>
         {news.length ? (
-          <ul className="space-y-2">
+          <ul>
             {news.slice(0, 15).map((a) => (
-              <li key={a.id}>
+              <li key={a.id} className="lift -mx-2 px-2 py-1 rounded">
                 <button onClick={() => onOpenArticle(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent">{a.title}</button>
                 <p className="text-[11px] font-mono text-theme-text-muted">{a.sourceName} · {formatRelativeTime(a.publishedAt)}</p>
               </li>

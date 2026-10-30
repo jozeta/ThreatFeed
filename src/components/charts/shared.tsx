@@ -24,6 +24,26 @@ export const SEVERITY_STROKE: Record<Severity, string> = {
 };
 export const SEVERITY_LABEL: Record<Severity, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', unscored: 'Unscored' };
 
+const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const luminance = (rgb: number[]) => {
+  const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a: number[], b: number[]) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+/**
+ * White or black text, whichever reads better (WCAG contrast) on `fill` (#rrggbb) laid at `alpha` over `bg`.
+ * For the shaded heatmap cells, whose colour depends on the theme's background as much as on the share.
+ */
+export function inkOn(fill: string, alpha: number, bg: string): 'white' | 'black' {
+  const f = channels(fill);
+  const mixed = channels(bg).map((v, i) => f[i] * alpha + v * (1 - alpha));
+  return contrast(mixed, [255, 255, 255]) >= contrast(mixed, [0, 0, 0]) ? 'white' : 'black';
+}
+
 export const severityOf = (cvss: number | undefined): Severity =>
   cvss === undefined || !(cvss > 0) ? 'unscored' : cvss >= 9 ? 'critical' : cvss >= 7 ? 'high' : cvss >= 4 ? 'medium' : 'low';
 

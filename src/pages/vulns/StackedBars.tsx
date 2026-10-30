@@ -33,11 +33,14 @@ export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; un
               <title>{`${b.label}: ${format(totals[i])} ${unit}${b.segments.length > 1 ? ` (${b.segments.filter((s) => s.value).map((s) => `${format(s.value)} ${s.name}`).join(', ')})` : ''}`}</title>
               {/* Transparent full-height hit area so thin bars still show their tooltip */}
               <rect x={i * bar} y={0} width={bar} height={height} fill="transparent" />
-              {b.segments.map((s) => {
-                const h = (s.value / max) * (height - 4);
-                y -= h;
-                return s.value > 0 ? <rect key={s.name} x={i * bar + 1} y={y} width={Math.max(1, bar - 2)} height={Math.max(h, 1)} className={s.className} /> : null;
-              })}
+              {/* The segments grow up together from the baseline (.chart-grow scales the group from its bottom) */}
+              <g className="chart-grow">
+                {b.segments.map((s) => {
+                  const h = (s.value / max) * (height - 4);
+                  y -= h;
+                  return s.value > 0 ? <rect key={s.name} x={i * bar + 1} y={y} width={Math.max(1, bar - 2)} height={Math.max(h, 1)} className={s.className} /> : null;
+                })}
+              </g>
             </g>
           );
         })}

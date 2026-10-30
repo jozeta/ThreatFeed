@@ -21,7 +21,7 @@ const NEWS_SHOWN = 10;
 const NEW_CVES_SHOWN = 10;
 
 const toggleClass = (on: boolean) =>
-  `flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono font-bold transition-colors ${on ? 'bg-theme-accent/15 border-theme-accent/40 text-theme-accent' : 'border-theme-border text-theme-text-muted hover:text-theme-text'}`;
+  `press flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono font-bold transition-colors ${on ? 'bg-theme-accent/15 border-theme-accent/40 text-theme-accent' : 'border-theme-border text-theme-text-muted hover:text-theme-text'}`;
 
 /** KEV entries per CVSS band as horizontal bars, in the severity colours used across the Vulnerabilities page */
 const BandChart: React.FC<{ bands: VendorSummary['cvssBands'] }> = ({ bands }) => {
@@ -51,9 +51,9 @@ const BandChart: React.FC<{ bands: VendorSummary['cvssBands'] }> = ({ bands }) =
 };
 
 const ArticleList: React.FC<{ articles: Article[]; onOpen: (a: Article) => void }> = ({ articles, onOpen }) => (
-  <ul className="space-y-2">
+  <ul>
     {articles.map((a) => (
-      <li key={a.id}>
+      <li key={a.id} className="lift -mx-2 px-2 py-1 rounded">
         <button onClick={() => onOpen(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent">{a.title}</button>
         <p className="text-[11px] font-mono text-theme-text-muted">{a.sourceName} · {formatRelativeTime(a.publishedAt)}</p>
       </li>
@@ -181,7 +181,7 @@ export const VendorPanel: React.FC<VendorPanelProps> = ({ summary: s, mentions =
                       key={`${p.vendor} ${p.product}`}
                       onClick={() => onOpenProduct(p.vendor, p.product)}
                       title={`Show ${p.vendor} ${p.product} in the KEV list`}
-                      className="px-2 py-1 rounded border border-theme-border bg-theme-surface text-xs font-mono text-theme-text hover:border-theme-accent hover:text-theme-accent"
+                      className="press px-2 py-1 rounded border border-theme-border bg-theme-surface text-xs font-mono text-theme-text hover:border-theme-accent hover:text-theme-accent"
                     >
                       {/* Products matched through NVD under another catalog vendor (e.g. Android's kernel for Linux) say whose */}
                       {p.vendor.toLowerCase() === s.name.toLowerCase() ? p.product : `${p.vendor} ${p.product}`} <span className="text-theme-text-muted">{p.count}</span>

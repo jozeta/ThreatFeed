@@ -409,20 +409,21 @@ button.tag-chip {
 /* ─────────────────────────────────────────────────────────────
    PANEL CHARTS (src/components/charts)
    Entrances only, in transform and opacity: scatter dots pop in left to right (their delay is set inline),
-   lines draw (pathLength=1) and areas and heatmap cells fade in. Charts leave the classes off under reduced
-   motion; the rules below cover the system setting too.
+   lines draw (pathLength=1) and areas and heatmap cells fade in. Inside a side panel they wait for the panel's
+   entrance (--chart-delay). Charts leave the classes off under reduced motion; the rules below cover the
+   system setting too.
    ───────────────────────────────────────────────────────────── */
 .chart-pop {
   transform-box: fill-box;
   transform-origin: center;
-  animation: chart-pop 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: chart-pop 260ms cubic-bezier(0.22, 1, 0.36, 1) var(--chart-delay, 0ms) both;
 }
 .chart-fade {
-  animation: chart-fade 400ms ease-out both;
+  animation: chart-fade 400ms ease-out var(--chart-delay, 0ms) both;
 }
 .chart-draw {
   stroke-dasharray: 1;
-  animation: chart-draw 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: chart-draw 600ms cubic-bezier(0.22, 1, 0.36, 1) var(--chart-delay, 0ms) both;
 }
 .chart-tooltip {
   /* Opaque, unlike cards on the glass, so the dots under it don't show through the text */
@@ -451,6 +452,151 @@ button.tag-chip {
   .chart-draw,
   .chart-tooltip {
     animation: none !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MICRO-ANIMATIONS
+   Transform and opacity only, 120–200 ms, all off under reduced motion (the rules at the end of the block).
+   .lift      cards and list rows rise a pixel on hover; the stronger shadow is a layer whose opacity fades in
+   .press     buttons and chips settle to 0.97 while pressed
+   .fade-up   one element fades up into place; .stagger does that to its children, 40 ms apart (6 at most).
+              A side panel staggers its sections after its slide-in
+   .badge-pop NEW and count badges pop in from 0.9
+   .tab-ink   the underline that slides to the active tab (useTabInk)
+   .chart-grow bars grow up from their baseline (the other chart entrances are in PANEL CHARTS below)
+   ───────────────────────────────────────────────────────────── */
+/* :where keeps position at zero specificity, so a card that is absolute or sticky stays so */
+:where(.lift) {
+  position: relative;
+}
+.lift {
+  transition-property: transform, color, background-color, border-color;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lift::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+}
+.light .lift::after {
+  box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.22);
+}
+.lift:hover {
+  transform: translateY(-1px);
+}
+.lift:hover::after {
+  opacity: 1;
+}
+
+.press {
+  transition-property: transform, color, background-color, border-color, opacity;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Fill-mode backwards only: a transform left on after the entrance would trap fixed-position children */
+.fade-up,
+.stagger > * {
+  animation: fade-up 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.stagger > * {
+  animation-delay: calc(var(--stagger-base, 0ms) + var(--stagger-i, 5) * 40ms);
+}
+.stagger > :nth-child(1) { --stagger-i: 0; }
+.stagger > :nth-child(2) { --stagger-i: 1; }
+.stagger > :nth-child(3) { --stagger-i: 2; }
+.stagger > :nth-child(4) { --stagger-i: 3; }
+.stagger > :nth-child(5) { --stagger-i: 4; }
+/* Sections start as the panel's slide (280 ms) settles; charts inside wait until their section is in */
+.side-panel.stagger {
+  --stagger-base: 160ms;
+  --chart-delay: 320ms;
+}
+/* A closing panel leaves its sections as they are */
+.side-panel[data-state='closed'].stagger > * {
+  animation: none;
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+:where(.badge-pop) {
+  display: inline-block;
+}
+.badge-pop {
+  animation: badge-pop 160ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes badge-pop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* A 1px bar scaled to the active tab's width; useTabInk sets the transform and adds data-ready after placing
+   it once, so the first placement doesn't slide in from the left */
+.tab-ink {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 2px;
+  transform-origin: left;
+  background-color: var(--color-accent);
+  pointer-events: none;
+}
+.tab-ink[data-ready] {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tab-ink[data-hidden] {
+  opacity: 0;
+}
+
+.chart-grow {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: chart-grow 260ms cubic-bezier(0.22, 1, 0.36, 1) var(--chart-delay, 0ms) backwards;
+}
+@keyframes chart-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+.reduce-motion :is(.fade-up, .stagger > *, .badge-pop, .chart-grow) {
+  animation: none !important;
+}
+.reduce-motion :is(.lift, .press, .tab-ink),
+.reduce-motion .lift::after {
+  transition: none !important;
+}
+.reduce-motion :is(.lift:hover, .press:active) {
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .stagger > *,
+  .badge-pop,
+  .chart-grow {
+    animation: none !important;
+  }
+  .lift,
+  .lift::after,
+  .press,
+  .tab-ink {
+    transition: none !important;
+  }
+  .lift:hover,
+  .press:active {
+    transform: none !important;
   }
 }
 

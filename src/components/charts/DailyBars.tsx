@@ -35,7 +35,7 @@ export const DailyBars: React.FC<{ values: number[]; ariaLabel: string; unit: st
               <title>{`${dayLabel(dayAt(i))}: ${n} ${unit}`}</title>
               {/* Full-height hit area so short bars still show their tooltip */}
               <rect x={i * slot} y={0} width={slot} height={height} fill="transparent" />
-              <rect x={i * slot + gap / 2} y={height - h} width={Math.max(0.5, slot - gap)} height={h} rx={Math.min(1.5, slot / 4)} className={className} opacity={n ? (i === values.length - 1 ? 1 : 0.8) : 0.25} />
+              <rect x={i * slot + gap / 2} y={height - h} width={Math.max(0.5, slot - gap)} height={h} rx={Math.min(1.5, slot / 4)} className={`chart-grow ${className}`} opacity={n ? (i === values.length - 1 ? 1 : 0.8) : 0.25} />
             </g>
           );
         })}

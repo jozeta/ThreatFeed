@@ -31,7 +31,7 @@ export const TrendingStrip: React.FC<{ articles: Article[]; stackKeywords: strin
           key={`${t.kind}:${t.name}`}
           onClick={() => void open(t)}
           title={`${t.count} articles this week${t.previous ? `, ${t.previous} the week before` : ''}. Click to ${clickHint(t)}.`}
-          className="flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded bg-theme-surface border border-theme-border hover:border-theme-accent text-theme-text transition-colors"
+          className="press flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded bg-theme-surface border border-theme-border hover:border-theme-accent text-theme-text transition-colors"
         >
           <span>{t.name}</span>
           <Sparkline values={t.daily} width={36} height={12} className="text-theme-accent" />

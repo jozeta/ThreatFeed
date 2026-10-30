@@ -31,7 +31,7 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
     return (
       <article
         onClick={onOpen}
-        className={`group cursor-pointer flex flex-row gap-3 py-3 transition-all duration-200 ${
+        className={`lift group cursor-pointer flex flex-row gap-3 py-3 transition-all duration-200 ${
           showBorder ? 'border-b border-theme-border/60' : ''
         } ${article.read ? 'opacity-85' : 'opacity-100'}`}
       >
@@ -87,7 +87,7 @@ export const ThumbnailArticle: React.FC<ThumbnailArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`group cursor-pointer flex flex-col sm:flex-row gap-4 p-4 rounded-lg bg-theme-surface border border-theme-border hover:border-theme-accent/50 transition-all duration-200 ${
+      className={`lift group cursor-pointer flex flex-col sm:flex-row gap-4 p-4 rounded-lg bg-theme-surface border border-theme-border hover:border-theme-accent/50 transition-all duration-200 ${
         article.read ? 'opacity-85' : 'opacity-100 shadow-sm'
       }`}
     >

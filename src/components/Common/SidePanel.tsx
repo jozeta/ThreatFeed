@@ -21,6 +21,10 @@ const CloseContext = createContext<() => void>(() => {});
  */
 export const PanelLevel = createContext(0);
 
+/** How long a panel's entrance holds back motion inside it (its stat tiles count up once they've faded in) */
+export const PanelEntranceDelay = createContext(0);
+const ENTRANCE_MS = 240;
+
 /** The panel's ✕, closing with the exit animation like Escape and the backdrop do */
 export const PanelCloseButton: React.FC<{ className?: string }> = ({ className = '' }) => (
   <button onClick={useContext(CloseContext)} className={`p-1 text-theme-text-muted hover:text-theme-text shrink-0 ${className}`} aria-label="Close">
@@ -39,7 +43,7 @@ interface SidePanelProps {
 
 /**
  * A detail view on the right in the reference glass. It slides in, then the dark backdrop fades in over the
- * page to its left; Escape (through the panel stack), the backdrop and PanelCloseButton reverse that before
+ * page to its left, and its sections fade up one after another (.stagger); Escape (through the panel stack), the backdrop and PanelCloseButton reverse that before
  * calling onClose. Side panels sit at z-60 and up in stack order, under the reader (z-70) unless opened from it.
  */
 export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, title, labelledBy, width = 'md', children }) => {
@@ -97,9 +101,9 @@ export const SidePanel: React.FC<SidePanelProps> = ({ open = true, onClose, titl
           aria-label={labelledBy ? undefined : title}
           aria-labelledby={labelledBy}
           data-state={state}
-          className="side-panel glass-panel p-6 space-y-6 outline-none"
+          className="side-panel glass-panel stagger p-6 space-y-6 outline-none"
         >
-          {children}
+          <PanelEntranceDelay.Provider value={reduced ? 0 : ENTRANCE_MS}>{children}</PanelEntranceDelay.Provider>
         </div>
       </div>
     </CloseContext.Provider>

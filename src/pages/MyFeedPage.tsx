@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Article, VulnData } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
+import { useTabInk } from '../hooks/useTabInk';
 import { useVulns } from '../hooks/useVulns';
 import { AlertRow, useAlertFeed } from '../hooks/useAlertFeed';
 import { buildHash, useHashParam, useHashRoute } from '../hooks/useHashRoute';
@@ -22,7 +23,7 @@ type Sub = (typeof SUBS)[number];
 const PAGE_SIZE = 50;
 
 const NewTag: React.FC = () => (
-  <span className="px-1.5 py-0.5 rounded bg-theme-accent text-white text-[10px] font-mono font-bold uppercase tracking-wider flex-shrink-0">New</span>
+  <span className="badge-pop px-1.5 py-0.5 rounded bg-theme-accent text-white text-[10px] font-mono font-bold uppercase tracking-wider flex-shrink-0">New</span>
 );
 
 /** Names of the rules behind a row, as small labels */
@@ -89,6 +90,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
   // Sub-tab, rule filter and open CVE live in the URL (#/feed/vulns?rule=…&cve=…)
   const [route, navigate] = useHashRoute();
   const sub: Sub = (SUBS as readonly string[]).includes(route.sub) ? (route.sub as Sub) : 'news';
+  const ink = useTabInk(sub);
   const [ruleParam, setRuleParam] = useHashParam('rule');
   // The CVE panel itself is the app's, over any page
   const [, setCveParam] = useHashParam('cve');
@@ -117,7 +119,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
     { id: 'vulns', label: 'Vulns', icon: <ShieldAlert className="w-4 h-4" /> },
   ];
   const chipClass = (active: boolean) =>
-    `px-2.5 py-1 rounded-lg text-xs font-mono transition-all flex-shrink-0 ${
+    `press px-2.5 py-1 rounded-lg text-xs font-mono transition-all flex-shrink-0 ${
       active ? 'bg-theme-accent text-white font-bold shadow-sm' : 'bg-theme-surface text-theme-text-muted hover:text-theme-text border border-theme-border'
     }`;
 
@@ -150,22 +152,23 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
         </div>
       </div>
 
-      <div className="flex gap-1 mt-6 mb-4 border-b border-theme-border overflow-x-auto" role="tablist">
+      <div className="flex gap-1 mt-6 mb-4 border-b border-theme-border overflow-x-auto relative" role="tablist" ref={ink.listRef}>
         {subTabs.map((t) => (
           <button
             key={t.id}
             role="tab"
             aria-selected={sub === t.id}
             onClick={() => navigate('feed', t.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-colors ${
-              sub === t.id ? 'border-theme-accent text-theme-text' : 'border-transparent text-theme-text-muted hover:text-theme-text'
+            className={`flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 border-transparent text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap transition-colors press ${
+              sub === t.id ? 'text-theme-text' : 'text-theme-text-muted hover:text-theme-text'
             }`}
           >
             {t.icon}
             <span>{t.label}</span>
-            {feed.newCount[t.id] > 0 && <span className="px-1.5 rounded-full bg-theme-accent text-white text-[10px]">{feed.newCount[t.id]} new</span>}
+            {feed.newCount[t.id] > 0 && <span key={feed.newCount[t.id]} className="badge-pop px-1.5 rounded-full bg-theme-accent text-white text-[10px]">{feed.newCount[t.id]} new</span>}
           </button>
         ))}
+        <span ref={ink.inkRef} className="tab-ink" aria-hidden="true" />
       </div>
 
       {chips.length > 1 && (

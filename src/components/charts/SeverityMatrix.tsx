@@ -1,9 +1,17 @@
 import React from 'react';
 import { SeverityImpactMatrix } from '../../services/intelligence/patchTuesday';
 import { useReducedMotion } from '../Common/SidePanel';
+import { inkOn } from './shared';
 
 // Microsoft's scale in the colours of the CVSS bands it roughly corresponds to
 const ROW_FILL: Record<string, string> = { Critical: 'bg-rose-600', Important: 'bg-orange-500', Moderate: 'bg-amber-400', Low: 'bg-emerald-500' };
+// The same colours in hex, and the themes' card backgrounds, to pick the count's text colour per cell
+const ROW_HEX: Record<string, string> = { Critical: '#e11d48', Important: '#f97316', Moderate: '#fbbf24', Low: '#10b981' };
+const LIGHT_BG = '#ffffff';
+const DARK_BG = '#151a21';
+/** The count's colour on its shaded cell, in each theme: black on the light fills, white on the deep ones */
+export const cellInk = (severity: string, opacity: number) =>
+  `${inkOn(ROW_HEX[severity], opacity, LIGHT_BG) === 'white' ? 'text-white' : 'text-black'} ${inkOn(ROW_HEX[severity], opacity, DARK_BG) === 'white' ? 'dark:text-white' : 'dark:text-black'}`;
 const ROW_TEXT: Record<string, string> = {
   Critical: 'text-rose-600 dark:text-rose-400', Important: 'text-orange-600 dark:text-orange-400', Moderate: 'text-amber-600 dark:text-amber-300', Low: 'text-emerald-600 dark:text-emerald-400',
 };
@@ -61,11 +69,12 @@ export const SeverityMatrix: React.FC<{
             {m.impacts.map((i, col) => {
               const n = m.counts[row][col];
               const share = m.max ? Math.sqrt(n / m.max) : 0;
+              const fill = 0.12 + share * 0.78;
               const on = severity === s && impact === i;
               const dim = filtering && !on && !(severity === s && !impact) && !(impact === i && !severity);
               // The entrance fades a wrapper, so its fill-mode doesn't override the dimming of the cell inside
               return (
-                <span key={i} className={reduced ? 'contents' : 'chart-fade'} style={reduced ? undefined : { animationDelay: `${(row + col) * 30}ms` }}>
+                <span key={i} className={reduced ? 'contents' : 'chart-fade'} style={reduced ? undefined : { animationDelay: `calc(var(--chart-delay, 0ms) + ${(row + col) * 30}ms)` }}>
                   <button
                     onClick={() => toggle(s, i)}
                     disabled={!n}
@@ -73,8 +82,8 @@ export const SeverityMatrix: React.FC<{
                     aria-pressed={on}
                     className={`relative h-9 rounded overflow-hidden border text-xs font-mono font-bold transition-transform duration-150 enabled:hover:scale-[1.04] enabled:active:scale-[0.98] disabled:cursor-default ${on ? 'border-theme-text ring-1 ring-theme-text' : 'border-black/10 dark:border-white/10'} w-full ${dim ? 'opacity-40' : ''}`}
                   >
-                    {n > 0 && <span aria-hidden="true" className={`absolute inset-0 ${ROW_FILL[s]}`} style={{ opacity: 0.12 + share * 0.78 }} />}
-                    <span className={`relative ${n === 0 ? 'text-theme-text-muted opacity-50 font-normal' : share > 0.55 ? 'text-white' : 'text-theme-text'}`}>{n || '·'}</span>
+                    {n > 0 && <span aria-hidden="true" className={`absolute inset-0 ${ROW_FILL[s]}`} style={{ opacity: fill }} />}
+                    <span className={`relative ${n === 0 ? 'text-theme-text-muted opacity-50 font-normal' : `${cellInk(s, fill)} [text-shadow:none]`}`}>{n || '·'}</span>
                   </button>
                 </span>
               );

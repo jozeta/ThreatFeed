@@ -16,7 +16,7 @@ const PAGE = 15;
 
 /** Shows `PAGE` rows, then a page more per click */
 const MoreButton: React.FC<{ remaining: number; onClick: () => void }> = ({ remaining, onClick }) => (
-  <button onClick={onClick} className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded border border-theme-border bg-theme-surface text-[11px] font-mono font-bold text-theme-text hover:border-theme-accent hover:text-theme-accent transition-colors">
+  <button onClick={onClick} className="press mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded border border-theme-border bg-theme-surface text-[11px] font-mono font-bold text-theme-text hover:border-theme-accent hover:text-theme-accent transition-colors">
     <ChevronDown className="w-3.5 h-3.5 text-theme-accent" /> Show {Math.min(PAGE, remaining)} more · {remaining} left
   </button>
 );
@@ -27,7 +27,7 @@ const ArticleRows: React.FC<{ articles: Article[]; onOpen: (a: Article) => void 
     <>
       <ul className="divide-y divide-theme-border/60">
         {articles.slice(0, shown).map((a) => (
-          <li key={a.id} className="py-2.5 space-y-0.5">
+          <li key={a.id} className="lift -mx-2 px-2 py-2.5 rounded space-y-0.5">
             <div className="flex items-start gap-2">
               <SeverityBadge severity={a.severity} score={a.severityScore} className="shrink-0 mt-0.5" />
               <button onClick={() => onOpen(a)} className="text-left font-serif text-sm font-bold text-theme-text hover:text-theme-accent leading-snug">{a.title}</button>
@@ -49,7 +49,7 @@ const VulnRows: React.FC<{ vulns: TagVuln[]; onOpenCve: (cve: string) => void }>
     <>
       <ul className="divide-y divide-theme-border/60 text-xs">
         {vulns.slice(0, shown).map((v) => (
-          <li key={v.cve} className="py-2 space-y-0.5">
+          <li key={v.cve} className="lift -mx-2 px-2 py-2 rounded space-y-0.5">
             <div className="flex flex-wrap items-center gap-2 font-mono">
               <CveButton cve={v.cve} onOpen={onOpenCve} />
               <SeverityPill severity={v.severity} score={v.score} />

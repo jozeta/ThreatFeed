@@ -5,6 +5,7 @@ import { useFeeds } from '../../context/FeedContext';
 import { useFilter } from '../../context/FilterContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useAlertFeed } from '../../hooks/useAlertFeed';
+import { useTabInk } from '../../hooks/useTabInk';
 import {
   Newspaper,
   Clock,
@@ -105,6 +106,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
   const moreActive = mobileMore.some((t) => t.id === activeTab);
   const moreBadge = mobileMore.reduce((sum, t) => sum + (t.badge ?? 0), 0);
   const [moreOpen, setMoreOpen] = useState(false);
+  const ink = useTabInk(activeTab);
   useEffect(() => {
     if (!moreOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMoreOpen(false);
@@ -133,8 +135,9 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
         <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           {/* Left: Navigation Tabs. Ten don't fit beside the category and watchlist controls below xl, so
               there only the active tab shows its label (the others have it as a tooltip); the row scrolls
-              rather than overflow if it still doesn't fit */}
-          <div className="flex items-center space-x-1 min-w-0 overflow-x-auto scrollbar-none">
+              rather than overflow if it still doesn't fit. The underline (useTabInk) slides to the active tab
+              and scrolls with the row */}
+          <div ref={ink.listRef} className="relative flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-none">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -144,9 +147,9 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
                   title={tab.label}
                   aria-label={tab.badge !== undefined ? `${tab.label} (${tab.badge})` : tab.label}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`px-3 py-2.5 font-mono text-xs font-semibold tracking-wider uppercase transition-colors relative flex items-center gap-1.5 border-b-2 whitespace-nowrap flex-shrink-0 ${
+                  className={`press px-3 py-2.5 font-mono text-xs font-semibold tracking-wider uppercase transition-colors relative flex items-center gap-1.5 border-b-2 whitespace-nowrap flex-shrink-0 ${
                     isActive
-                      ? 'border-theme-accent text-theme-accent'
+                      ? 'border-transparent text-theme-accent'
                       : 'border-transparent text-theme-text-muted hover:text-theme-text hover:border-theme-border'
                   }`}
                 >
@@ -154,7 +157,8 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
                   <span className={isActive ? undefined : 'hidden xl:inline'}>{tab.label}</span>
                   {tab.badge !== undefined && (
                     <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-tight ${tab.badgeColor}`}
+                      key={tab.badge}
+                      className={`badge-pop text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-tight ${tab.badgeColor}`}
                     >
                       {tab.badge}
                     </span>
@@ -162,6 +166,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
                 </button>
               );
             })}
+            <span ref={ink.inkRef} className="tab-ink" aria-hidden="true" />
           </div>
 
           {/* Right: Category Dropdown & Watchlist Button */}
@@ -275,14 +280,14 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
                   <li key={tab.id}>
                     <button
                       onClick={() => { setMoreOpen(false); onSelectTab(tab.id); }}
-                      className={`w-full flex flex-col items-center gap-1 py-3 rounded border text-xs font-mono uppercase tracking-wider ${
+                      className={`press w-full flex flex-col items-center gap-1 py-3 rounded border text-xs font-mono uppercase tracking-wider ${
                         activeTab === tab.id ? 'border-theme-accent text-theme-accent' : 'border-theme-border text-theme-text'
                       }`}
                     >
                       <span className="relative">
                         {tab.icon}
                         {tab.badge !== undefined && (
-                          <span className={`absolute -top-1.5 -right-3 text-[9px] px-1 rounded-full font-bold ${tab.badgeColor}`}>{tab.badge > 99 ? '99+' : tab.badge}</span>
+                          <span className={`badge-pop absolute -top-1.5 -right-3 text-[9px] px-1 rounded-full font-bold ${tab.badgeColor}`}>{tab.badge > 99 ? '99+' : tab.badge}</span>
                         )}
                       </span>
                       <span className="text-[10px]">{tab.label}</span>
@@ -310,12 +315,12 @@ const MobileNavButton: React.FC<{
   <button
     onClick={onClick}
     aria-expanded={ariaExpanded}
-    className={`flex flex-col items-center justify-center p-1 relative flex-1 min-w-0 ${active ? 'text-theme-accent' : 'text-theme-text-muted'}`}
+    className={`press flex flex-col items-center justify-center p-1 relative flex-1 min-w-0 ${active ? 'text-theme-accent' : 'text-theme-text-muted'}`}
   >
     <div className="relative">
       {icon}
       {badge !== undefined && (
-        <span className={`absolute -top-1.5 -right-2.5 text-[9px] px-1 rounded-full font-bold ${badgeColor}`}>
+        <span key={badge} className={`badge-pop absolute -top-1.5 -right-2.5 text-[9px] px-1 rounded-full font-bold ${badgeColor}`}>
           {badge > 99 ? '99+' : badge}
         </span>
       )}

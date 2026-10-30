@@ -170,14 +170,18 @@ export const SeverityScatter: React.FC<{ points: VendorPoint[]; months?: number;
           {order.map((i) => {
             const p = placed[i];
             const on = i === active;
-            const delay = reduced ? undefined : `${Math.round(((p.x - M.left) / plotW) * STAGGER_MS)}ms`;
+            // After the panel's own entrance (--chart-delay), left to right
+            const delay = reduced ? undefined : `calc(var(--chart-delay, 0ms) + ${Math.round(((p.x - M.left) / plotW) * STAGGER_MS)}ms)`;
             return (
-              <g key={p.cve} className={reduced ? undefined : 'chart-pop'} style={delay ? { animationDelay: delay } : undefined} opacity={a && !on ? 0.55 : 1}>
-                {p.kev && <circle cx={p.x} cy={p.y} r={p.r + 2.4} fill="none" className={SEVERITY_STROKE[p.severity]} strokeWidth={1.2} strokeOpacity={0.9} />}
-                <circle cx={p.x} cy={p.y} r={on ? p.r + 1.5 : p.r} className={`${SEVERITY_DOT[p.severity]} stroke-theme-card`} strokeWidth={0.8} fillOpacity={p.severity === 'unscored' ? 0.7 : 0.92} />
-                {p.ransomware && (
-                  <rect x={p.x + p.r * 0.7 - 2.25} y={p.y - p.r * 0.7 - 2.25 - 2} width={4.5} height={4.5} transform={`rotate(45 ${p.x + p.r * 0.7} ${p.y - p.r * 0.7 - 2})`} className="fill-theme-text stroke-theme-card" strokeWidth={0.8} />
-                )}
+              // The dimming sits on an outer group: the pop's fill-mode would hold the inner one at opacity 1
+              <g key={p.cve} opacity={a && !on ? 0.55 : 1}>
+                <g className={reduced ? undefined : 'chart-pop'} style={delay ? { animationDelay: delay } : undefined}>
+                  {p.kev && <circle cx={p.x} cy={p.y} r={p.r + 2.4} fill="none" className={SEVERITY_STROKE[p.severity]} strokeWidth={1.2} strokeOpacity={0.9} />}
+                  <circle cx={p.x} cy={p.y} r={on ? p.r + 1.5 : p.r} className={`${SEVERITY_DOT[p.severity]} stroke-theme-card`} strokeWidth={0.8} fillOpacity={p.severity === 'unscored' ? 0.7 : 0.92} />
+                  {p.ransomware && (
+                    <rect x={p.x + p.r * 0.7 - 2.25} y={p.y - p.r * 0.7 - 2.25 - 2} width={4.5} height={4.5} transform={`rotate(45 ${p.x + p.r * 0.7} ${p.y - p.r * 0.7 - 2})`} className="fill-theme-text stroke-theme-card" strokeWidth={0.8} />
+                  )}
+                </g>
               </g>
             );
           })}
