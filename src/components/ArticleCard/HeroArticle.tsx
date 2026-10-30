@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { EntityText } from '../EntityText';
+import { TagChip } from '../TagChip';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
@@ -103,12 +104,13 @@ export const HeroArticle: React.FC<HeroArticleProps> = ({
             </span>
           )}
           {article.tags.slice(0, 4).map((tag) => (
-            <span
+            <TagChip
               key={tag}
+              tag={tag}
               className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-theme-card text-theme-text-muted border border-theme-border/60 hover:border-theme-accent hover:text-theme-accent transition-colors"
             >
               #{tag}
-            </span>
+            </TagChip>
           ))}
           {article.cves && article.cves.slice(0, 3).map((cve) => (
             <CveChip key={cve} cve={cve} />

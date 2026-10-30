@@ -6,6 +6,7 @@ import { containsTerm } from '../../utils/textMatch';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { VendorButton } from '../../components/VendorLink';
 import { EntityText } from '../../components/EntityText';
+import { TagChip } from '../../components/TagChip';
 import { chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { CveButton, SEVERITY_TEXT, StatCards } from './shared';
 import { ExternalLink, Search } from 'lucide-react';
@@ -200,7 +201,10 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
                 {stackHits.has(c.cve) && <StackBadge />}
               </div>
               <p className="font-serif text-theme-text"><EntityText text={c.title} /></p>
-              <p className="font-mono text-[11px] text-theme-text-muted">{[c.impact, productList(c.products)].filter(Boolean).join(' · ')}</p>
+              <p className="font-mono text-[11px] text-theme-text-muted">
+                {c.impact && <TagChip tag={c.impact} className="hover:text-theme-accent">{c.impact}</TagChip>}
+                {c.impact && c.products.length > 0 && ' · '}{productList(c.products)}
+              </p>
             </li>
           ))}
         </ul>
@@ -222,7 +226,7 @@ export const PatchTuesdayTab: React.FC<{ months: PatchMonth[]; stackKeywords: st
                 <td className="py-2 pr-3" onClick={(e) => e.stopPropagation()}><CveButton cve={c.cve} onOpen={onOpenCve} /></td>
                 <td className="py-2 pr-3 font-serif text-theme-text"><EntityText text={c.title} /></td>
                 <td className="py-2 pr-3"><MsSeverity severity={c.severity} /></td>
-                <td className="py-2 pr-3 text-theme-text-muted">{c.impact ?? '—'}</td>
+                <td className="py-2 pr-3 text-theme-text-muted">{c.impact ? <TagChip tag={c.impact} className="text-left hover:text-theme-accent">{c.impact}</TagChip> : '—'}</td>
                 <td className="py-2 pr-3 text-theme-text">{c.cvss?.toFixed(1) ?? '—'}</td>
                 <td className="py-2 pr-3"><div className="flex flex-col gap-1 items-start"><ThreatBadges c={c} />{stackHits.has(c.cve) && <StackBadge />}</div></td>
                 <td className="py-2 pr-3 text-theme-text-muted" title={c.products.join('\n')}>

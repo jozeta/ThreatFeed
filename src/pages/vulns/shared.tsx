@@ -1,6 +1,7 @@
 import React from 'react';
 import { Article, ExploitInfo, SsvcDecision } from '../../types';
 import { ATTACK_VECTORS, parseVector } from '../../services/intelligence/vulns';
+import { TagChip } from '../../components/TagChip';
 
 export const SEVERITY_FILL = {
   critical: 'fill-rose-600',
@@ -61,6 +62,17 @@ export function articlesByCve(articles: Article[]): Map<string, Article[]> {
   for (const list of map.values()) list.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   return map;
 }
+
+/** A weakness (CWE-79) as a chip that opens the list of every CVE with it; `name` is its tooltip */
+export const CweChip: React.FC<{ cwe: string; name?: string }> = ({ cwe, name }) => (
+  <TagChip
+    tag={cwe}
+    title={`${cwe}${name ? ` ${name}` : ''}: every CVE with this weakness`}
+    className="inline-block px-1 rounded border border-sky-500/30 bg-sky-500/10 text-[10px] font-mono font-semibold text-sky-600 dark:text-sky-400 hover:border-sky-500 whitespace-nowrap"
+  >
+    {cwe}
+  </TagChip>
+);
 
 export const CveButton: React.FC<{ cve: string; onOpen: (cve: string) => void }> = ({ cve, onOpen }) => (
   <button onClick={() => onOpen(cve)} className="font-mono font-bold text-theme-accent hover:underline whitespace-nowrap">{cve}</button>

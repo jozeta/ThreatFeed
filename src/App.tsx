@@ -35,6 +35,7 @@ const CvePanelHost = lazy(() => import('./pages/vulns/CvePanelHost').then((m) =>
 const ActorPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.ActorPanelHost })));
 const MalwarePanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.MalwarePanelHost })));
 const GroupPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.GroupPanelHost })));
+const TagPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.TagPanelHost })));
 
 export const App: React.FC = () => {
   const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
@@ -47,9 +48,9 @@ export const App: React.FC = () => {
   const setActiveTab = useCallback((tab: ActiveNavTab) => navigate(tab), [navigate]);
   // Old links to removed pages (#/trends, #/actors?actor=G0007) become the newspaper's, keeping their panel
   useEffect(redirectRemovedPage);
-  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…) open over any page
+  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…, ?tag=…) open over any page
   const panel = (key: string) => route.params.get(key) ?? '';
-  const [vendor, cve, actor, malware, group] = ['vendor', 'cve', 'actor', 'malware', 'group'].map(panel);
+  const [vendor, cve, actor, malware, group, tag] = ['vendor', 'cve', 'actor', 'malware', 'group', 'tag'].map(panel);
   const levels = usePanelLevels(route.params, Boolean(activeArticle));
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
@@ -225,6 +226,7 @@ export const App: React.FC = () => {
         {malware && <PanelLevel.Provider value={levels.malware ?? 0}><MalwarePanelHost key={malware} id={malware} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
         {group && <PanelLevel.Provider value={levels.group ?? 0}><GroupPanelHost key={group} id={group} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
         {vendor && <PanelLevel.Provider value={levels.vendor ?? 0}><VendorPanelHost key={vendor} vendor={vendor} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
+        {tag && <PanelLevel.Provider value={levels.tag ?? 0}><TagPanelHost key={tag} id={tag} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
         {cve && (
           <PanelLevel.Provider value={levels.cve ?? 0}>
             <CvePanelHost

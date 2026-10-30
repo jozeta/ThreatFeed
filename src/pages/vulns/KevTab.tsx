@@ -11,7 +11,7 @@ import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
-import { CveButton, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
+import { CveButton, CweChip, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
 import { VendorButton } from '../../components/VendorLink';
 import { EntityLink } from '../../components/EntityText';
 import { Building2, Search, Skull } from 'lucide-react';
@@ -292,6 +292,7 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
                 <p className="font-serif text-theme-text">{k.name}</p>
                 <p className="font-mono text-[11px] text-theme-text-muted">
                   <EntityLink entity={{ kind: 'vendor', id: k.vendor }}>{k.vendor}</EntityLink> · added {k.dateAdded}
+                  {k.cwes.map((c) => <React.Fragment key={c}> <CweChip cwe={c} name={cweNames[c]} /></React.Fragment>)}
                   {k.dueDate && <> · <span className={k.dueDate >= today && k.dueDate <= in14Days ? 'text-orange-500 font-bold' : ''}>due {k.dueDate}</span></>}
                   {news.get(k.cve)?.length ? ` · ${news.get(k.cve)!.length} articles` : ''}
                 </p>
@@ -319,7 +320,10 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
                   <td className="py-2 pr-3 text-theme-text">
                     <span className="font-serif">{k.name}</span>
                     {k.ransomware && <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">ransomware</span>}
-                    <span className="block text-[10px] text-theme-text-muted"><EntityLink entity={{ kind: 'vendor', id: k.vendor }}>{k.vendor}</EntityLink> · {k.product}</span>
+                    <span className="block text-[10px] text-theme-text-muted">
+                      <EntityLink entity={{ kind: 'vendor', id: k.vendor }}>{k.vendor}</EntityLink> · {k.product}
+                      {k.cwes.map((c) => <React.Fragment key={c}> <CweChip cwe={c} name={cweNames[c]} /></React.Fragment>)}
+                    </span>
                   </td>
                   <td className="py-2 pr-3"><SeverityPill severity={k.cvss === undefined ? undefined : severityFromScore(k.cvss)} score={k.cvss} /></td>
                   <td className="py-2 pr-3"><EpssValue epss={k.epss} /></td>

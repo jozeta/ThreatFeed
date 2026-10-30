@@ -3,6 +3,7 @@ import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings, DEFAULT_BOOKMARK_FOLDERS } from '../context/SettingsContext';
 import { ThumbnailArticle } from '../components/ArticleCard/ThumbnailArticle';
+import { TagChip } from '../components/TagChip';
 import {
   Bookmark,
   Search,
@@ -316,6 +317,16 @@ export const BookmarksPage: React.FC<BookmarksPageProps> = ({ onOpenArticle }) =
 
                   {/* Bookmark Folder & Notes Bar */}
                   <div className="px-4 py-3 bg-theme-surface/70 border-t border-theme-border/60 space-y-2.5 text-xs font-mono">
+                    {/* The user's own tags, each opening everything tagged the same */}
+                    {article.customTags && article.customTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {article.customTags.map((tag) => (
+                          <TagChip key={tag} tag={tag} className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-theme-accent-subtle text-theme-accent border border-theme-accent/30 hover:border-theme-accent font-semibold">
+                            +{tag}
+                          </TagChip>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       {/* Folder Dropdown */}
                       <div className="flex items-center gap-1.5">

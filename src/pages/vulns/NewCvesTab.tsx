@@ -6,7 +6,7 @@ import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, SectionTitle } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
-import { CveButton, cweLabel, EpssValue, ExploitBadges, SEVERITY_FILL, SeverityPill, SsvcBadge, StatCards, vectorText } from './shared';
+import { CveButton, CweChip, cweLabel, EpssValue, ExploitBadges, SEVERITY_FILL, SeverityPill, SsvcBadge, StatCards, vectorText } from './shared';
 import { Search } from 'lucide-react';
 
 interface NewCvesTabProps {
@@ -123,7 +123,7 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
                 </div>
                 <p className="font-serif text-theme-text">{r.description}</p>
                 <p className="font-mono text-[11px] text-theme-text-muted">
-                  {formatRelativeTime(r.published)}{r.assigner && ` · ${r.assigner}`}{r.cwe && ` · ${r.cwe}`}{news.get(r.id)?.length ? ` · ${news.get(r.id)!.length} articles` : ''}
+                  {formatRelativeTime(r.published)}{r.assigner && ` · ${r.assigner}`}{r.cwe && <> · <CweChip cwe={r.cwe} name={cweNames[r.cwe]} /></>}{news.get(r.id)?.length ? ` · ${news.get(r.id)!.length} articles` : ''}
                 </p>
               </li>
             ))}
@@ -153,7 +153,9 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
                     {r.description}
                     {(r.assigner || r.cwe || r.vector) && (
                       <span className="block font-mono text-[10px] text-theme-text-muted">
-                        {[r.assigner, r.cwe && `${r.cwe}${cweNames[r.cwe] ? ` ${cweNames[r.cwe]}` : ''}`, vectorText(r.vector)].filter(Boolean).join(' · ')}
+                        {r.assigner}
+                        {r.cwe && <>{r.assigner && ' · '}<CweChip cwe={r.cwe} name={cweNames[r.cwe]} />{cweNames[r.cwe] && ` ${cweNames[r.cwe]}`}</>}
+                        {vectorText(r.vector) && <>{(r.assigner || r.cwe) && ' · '}{vectorText(r.vector)}</>}
                       </span>
                     )}
                   </td>

@@ -3,6 +3,7 @@ import { Article, Feed } from '../../types';
 import { clusterArticles } from '../../services/articles/clustering';
 import { SeverityBadge } from '../../components/Common/ThreatBadges';
 import { formatRelativeTime } from '../../utils/date';
+import { TagChip } from '../../components/TagChip';
 import { chipClass, SectionTitle } from '../incidents/shared';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,6 +58,13 @@ export const VulnNewsTab: React.FC<{ articles: Article[]; feeds: Feed[]; kevIds:
                 {p.sourceName}{s.clusterSize > 1 && <span className="text-theme-accent"> +{s.clusterSize - 1} sources</span>} · {formatRelativeTime(p.publishedAt)}
                 {p.cves?.some((c) => kevIds.has(c)) && <span className="ml-1.5 px-1 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">KEV</span>}
               </p>
+              {p.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1 pl-1">
+                  {p.tags.slice(0, 3).map((tag) => (
+                    <TagChip key={tag} tag={tag} className="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded bg-theme-card text-theme-text-muted hover:text-theme-accent">#{tag}</TagChip>
+                  ))}
+                </div>
+              )}
             </li>
           );
         })}

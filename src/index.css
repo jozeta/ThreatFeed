@@ -237,6 +237,32 @@ body {
   border-radius: 2px;
 }
 
+/* Tag chips (TagChip) keep each place's look and open the tag's panel: on hover or focus they lift a pixel
+   and grow a touch (160 ms, transform only); pressing settles them back */
+button.tag-chip {
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms, border-color 150ms, background-color 150ms;
+}
+.tag-chip:hover,
+.tag-chip:focus-visible {
+  transform: translateY(-1px) scale(1.04);
+}
+.tag-chip:active {
+  transform: translateY(0) scale(0.98);
+}
+.tag-chip:focus-visible {
+  outline: 1px solid color-mix(in srgb, currentColor 50%, transparent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag-chip:is(:hover, :focus-visible, :active) {
+    transform: none;
+  }
+}
+.reduce-motion .tag-chip:is(:hover, :focus-visible, :active) {
+  transform: none;
+}
+
 /* ─────────────────────────────────────────────────────────────
    GLASS PANELS AND MODALS
    The reference glass: clear and strongly blurred, a faint white tint, a thin bright edge and a soft shadow.

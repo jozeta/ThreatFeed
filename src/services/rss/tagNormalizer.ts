@@ -70,6 +70,11 @@ const KNOWN_TAGS_MAP: Record<string, string> = {
   'leak': 'Data Breach'
 };
 
+/** The threat topic a tag or keyword stands for ("trojan" and "Malware" are both Malware), if it is one */
+export function threatTopic(raw: string): string | undefined {
+  return KNOWN_TAGS_MAP[raw.trim().toLowerCase()];
+}
+
 function normalizeTag(raw: string): string | null {
   const clean = raw.trim();
   if (!clean) return null;

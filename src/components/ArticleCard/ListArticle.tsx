@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Article } from '../../types';
+import { TagChip } from '../TagChip';
 import { ArticleActions } from '../Common/ArticleActions';
 import { formatRelativeTime } from '../../utils/date';
 import { SeverityBadge, WatchlistBadge, ClusterPill, StackBadge } from '../Common/ThreatBadges';
@@ -77,7 +78,9 @@ export const ListArticle: React.FC<ListArticleProps> = ({
         <div className="hidden md:flex items-center gap-2 text-xs font-mono text-theme-text-muted flex-shrink-0 max-w-[200px] truncate">
           <span className="text-theme-accent truncate">{article.sourceName}</span>
           <span className="text-theme-border">·</span>
-          <span className="truncate">{article.categories[0] || 'Security'}</span>
+          {article.categories[0]
+            ? <TagChip tag={article.categories[0]} className="truncate hover:text-theme-accent">{article.categories[0]}</TagChip>
+            : <span className="truncate">Security</span>}
         </div>
       </div>
 

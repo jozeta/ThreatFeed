@@ -1,16 +1,17 @@
 import React, { useMemo } from 'react';
 import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
-import { useActors, useRansomwareIntel } from '../hooks/useVulns';
+import { useActors, useRansomwareIntel, useVulns } from '../hooks/useVulns';
 import { useLeakSiteVictims } from '../hooks/useLeakSiteVictims';
 import { openPanel, setHashParams } from '../hooks/useHashRoute';
 import { actorMentions } from '../services/intelligence/actors';
 import { ActorPanel } from '../pages/actors/ActorPanel';
 import { MalwarePanel } from '../pages/actors/MalwarePanel';
 import { GroupPanel } from '../pages/incidents/GroupPanel';
+import { TagPanel } from './TagPanel';
 
 /**
- * The actor (?actor=G0007), malware (?malware=<id>) and ransomware group (?group=<key>) panels, mounted once by
+ * The actor (?actor=G0007), malware (?malware=<id>), ransomware group (?group=<key>) and tag (?tag=Ransomware) panels, mounted once by
  * the app so any page can open them. What a panel opens (software, a group, a CVE) goes on top of it, with a
  * history entry so Back returns to the one below. Reading an article closes them.
  */
@@ -74,6 +75,22 @@ export const GroupPanelHost: React.FC<Props> = ({ id: param, onOpenArticle }) =>
       articles={articles}
       onOpenArticle={(a) => { setHashParams({ group: '' }); onOpenArticle(a); }}
       onClose={() => setHashParams({ group: '' })}
+    />
+  );
+};
+
+/** `id` is the tag as its chip shows it; matching ignores case */
+export const TagPanelHost: React.FC<Props> = ({ id, onOpenArticle }) => {
+  const { articles } = useFeeds();
+  const vulns = useVulns();
+  return (
+    <TagPanel
+      tag={id}
+      articles={articles}
+      vulns={vulns}
+      onOpenArticle={(a) => { setHashParams({ tag: '' }); onOpenArticle(a); }}
+      onOpenCve={openCve}
+      onClose={() => setHashParams({ tag: '' })}
     />
   );
 };

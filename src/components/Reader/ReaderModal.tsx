@@ -12,6 +12,7 @@ import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { sanitizeHtml } from '../../services/rss/sanitizer';
 import { panelStack, READER_LEVEL, usePanelLayer } from '../Common/panelStack';
 import { EntityText, useLinkedHtml } from '../EntityText';
+import { TagChip } from '../TagChip';
 import {
   X,
   ExternalLink,
@@ -537,22 +538,24 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 THREAT TAGS:
               </span>
               {article.tags.map((tag) => (
-                <span
+                <TagChip
                   key={tag}
-                  className="font-mono text-[11px] uppercase tracking-wider px-2 py-0.5 rounded bg-theme-card text-theme-text border border-theme-border"
+                  tag={tag}
+                  className="font-mono text-[11px] uppercase tracking-wider px-2 py-0.5 rounded bg-theme-card text-theme-text border border-theme-border hover:border-theme-accent hover:text-theme-accent"
                 >
                   #{tag}
-                </span>
+                </TagChip>
               ))}
 
               {/* User Custom Tags */}
               {article.customTags && article.customTags.map((tag) => (
-                <span
+                <TagChip
                   key={tag}
-                  className="font-mono text-[11px] uppercase tracking-wider px-2 py-0.5 rounded bg-theme-accent-subtle text-theme-accent border border-theme-accent/30 font-semibold"
+                  tag={tag}
+                  className="font-mono text-[11px] uppercase tracking-wider px-2 py-0.5 rounded bg-theme-accent-subtle text-theme-accent border border-theme-accent/30 hover:border-theme-accent font-semibold"
                 >
                   +{tag}
-                </span>
+                </TagChip>
               ))}
 
               {/* Add Custom Tag Form */}

@@ -69,7 +69,7 @@ export function setHashParams(changes: Record<string, string>, push = false) {
 }
 
 // The detail panels' parameters, which App opens over any page
-export const PANEL_PARAMS = ['actor', 'malware', 'group', 'vendor', 'cve'] as const;
+export const PANEL_PARAMS = ['actor', 'malware', 'group', 'vendor', 'cve', 'tag'] as const;
 export type PanelParam = (typeof PANEL_PARAMS)[number];
 
 /**

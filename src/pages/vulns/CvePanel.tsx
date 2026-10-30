@@ -8,7 +8,7 @@ import { Sparkline } from '../../components/Common/Sparkline';
 import { EntityLink, EntityText } from '../../components/EntityText';
 import { formatRelativeTime } from '../../utils/date';
 import { SectionTitle } from '../incidents/shared';
-import { EpssValue, ExploitBadges, SeverityPill, SsvcBadge, vectorText } from './shared';
+import { CweChip, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, vectorText } from './shared';
 import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
 import { ExternalLink, Skull, Star } from 'lucide-react';
 
@@ -75,7 +75,7 @@ export const CvePanel: React.FC<CvePanelProps> = ({ cve, vulns, news, watched, o
       ['Federal due date', kev.dueDate ?? '—'] as [string, React.ReactNode],
     ] : []),
     ...(cwes.length ? [['Weakness', <span>{cwes.map((c) => (
-      <span key={c} className="block">{c}{vulns?.cweNames?.[c] && <span className="text-theme-text-muted"> {vulns.cweNames[c]}</span>}</span>
+      <span key={c} className="block"><CweChip cwe={c} name={vulns?.cweNames?.[c]} />{vulns?.cweNames?.[c] && <span className="text-theme-text-muted"> {vulns.cweNames[c]}</span>}</span>
     ))}</span>] as [string, React.ReactNode]] : []),
     ...(vectorText(vector) ? [['Attack', <span title={vector}>{vectorText(vector)}</span>] as [string, React.ReactNode]] : []),
     ...(ssvc ? [['CISA SSVC', <span className="inline-flex flex-wrap items-center gap-1"><SsvcBadge ssvc={ssvc} inKev={Boolean(kev)} />{ssvc.impact && <span className="text-theme-text-muted">impact: {ssvc.impact}</span>}</span>] as [string, React.ReactNode]] : []),

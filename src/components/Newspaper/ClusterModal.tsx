@@ -4,6 +4,7 @@ import { X, ExternalLink, Layers, Shield, Clock, BookOpen } from 'lucide-react';
 import { formatRelativeTime } from '../../utils/date';
 import { SeverityBadge, CveChip } from '../Common/ThreatBadges';
 import { EntityText } from '../EntityText';
+import { TagChip } from '../TagChip';
 
 interface ClusterModalProps {
   cluster: StoryCluster | null;
@@ -95,6 +96,24 @@ export const ClusterModal: React.FC<ClusterModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* The story's tags, across every source's article */}
+          {(() => {
+            const tags = [...new Set(allArticles.flatMap((a) => a.tags))].slice(0, 10);
+            return tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag) => (
+                  <TagChip
+                    key={tag}
+                    tag={tag}
+                    className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-theme-card text-theme-text-muted border border-theme-border/60 hover:border-theme-accent hover:text-theme-accent"
+                  >
+                    #{tag}
+                  </TagChip>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Shared Disclosed CVEs */}
           {cluster.sharedCVEs && cluster.sharedCVEs.length > 0 && (

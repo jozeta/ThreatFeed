@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { EntityText } from '../EntityText';
+import { TagChip } from '../TagChip';
 import { Article } from '../../types';
 import { ArticleImage } from '../Common/ArticleImage';
 import { ArticleActions } from '../Common/ArticleActions';
@@ -71,9 +72,11 @@ export const QuarterBriefArticle: React.FC<QuarterBriefArticleProps> = ({
       )}
 
       <div className="mt-auto pt-2 border-t border-theme-border/40 flex items-center justify-between gap-1">
-        <span className="font-mono text-[9px] uppercase px-1 rounded bg-theme-card text-theme-text-muted truncate max-w-[80px]">
-          {article.tags[0] ? `#${article.tags[0]}` : article.categories[0]}
-        </span>
+        {article.tags[0] || article.categories[0] ? (
+          <TagChip tag={article.tags[0] || article.categories[0]} className="font-mono text-[9px] uppercase px-1 rounded bg-theme-card text-theme-text-muted hover:text-theme-accent truncate max-w-[80px]">
+            {article.tags[0] ? `#${article.tags[0]}` : article.categories[0]}
+          </TagChip>
+        ) : <span />}
         <ArticleActions article={article} compact onOpenReader={onOpen} />
       </div>
     </article>
