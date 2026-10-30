@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertRule, AlertRuleKind, UserSettings } from '../../types';
 import { resolveRoot } from '../../services/intelligence/alertRules';
 import {
-  FormGroup, containsField, describeCondition, groupFromForm, groupToForm, hasEmptyGroup, nextKey, newCondition,
+  FormGroup, containsField, describeCondition, groupFromForm, groupToForm, hasEmptyGroup, hasInvalidCondition, nextKey, newCondition,
 } from '../../services/intelligence/ruleForm';
 import { ConditionGroupBuilder } from './ConditionBuilder';
 
@@ -11,6 +11,7 @@ type RuleLists = Pick<UserSettings, 'watchlistKeywords' | 'stackKeywords' | 'wat
 interface RuleEditorProps {
   rule: AlertRule;
   isNew: boolean;
+  kindLocked?: boolean; // a duplicate keeps its original's kind
   lists: RuleLists;
   onSave: (rule: AlertRule) => void;
   onCancel: () => void;
@@ -44,7 +45,7 @@ const BuiltInView: React.FC<{ rule: AlertRule; lists: RuleLists; onCancel: () =>
   );
 };
 
-export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, lists, onSave, onCancel, preview, previewLoading, onDuplicate, requestNotify }) => {
+export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, kindLocked, lists, onSave, onCancel, preview, previewLoading, onDuplicate, requestNotify }) => {
   const [name, setName] = useState(rule.name);
   const [kind, setKind] = useState<AlertRuleKind>(rule.kind);
   const [notify, setNotify] = useState(rule.notify);
@@ -56,7 +57,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, lists, onSa
   );
   const eventDriven = containsField(draft.root, 'watched');
   const lowCvss = containsField(draft.root, 'cvss', c => (c.min as number) < 7);
-  const invalid = hasEmptyGroup(draft.root);
+  const invalid = hasEmptyGroup(draft.root) || hasInvalidCondition(kind, form);
   const count = useMemo(() => (eventDriven || invalid || previewLoading ? 0 : preview(draft)), [draft, eventDriven, invalid, previewLoading, preview]);
 
   if (rule.builtIn) return <BuiltInView rule={rule} lists={lists} onCancel={onCancel} onDuplicate={onDuplicate} />;
@@ -86,9 +87,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, lists, onSa
             <button
               key={k}
               type="button"
-              disabled={!isNew}
+              disabled={!isNew || kindLocked}
               onClick={() => changeKind(k)}
-              className={`px-3 py-1.5 rounded border text-xs font-mono ${kind === k ? 'bg-theme-accent text-white border-theme-accent font-bold' : 'bg-theme-card border-theme-border text-theme-text-muted'} disabled:cursor-default ${!isNew && kind !== k ? 'opacity-40' : ''}`}
+              className={`px-3 py-1.5 rounded border text-xs font-mono ${kind === k ? 'bg-theme-accent text-white border-theme-accent font-bold' : 'bg-theme-card border-theme-border text-theme-text-muted'} disabled:cursor-default ${(!isNew || kindLocked) && kind !== k ? 'opacity-40' : ''}`}
             >
               {k === 'news' ? 'News' : 'Vulns'}
             </button>
@@ -111,7 +112,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, isNew, lists, onSa
           ? 'Matches on changes to your watched CVEs'
           : kind === 'vulns' && previewLoading
             ? 'Loading vulnerability data…'
-            : invalid ? 'Fix empty groups to see a preview.' : `Matches ${count} current items`}
+            : invalid ? 'Fix the highlighted conditions to see a preview.' : `Matches ${count} current items`}
       </p>
 
       <div className="flex gap-2">

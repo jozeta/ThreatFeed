@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertRuleKind } from '../../types';
 import {
-  FormCondition, FormGroup, SEVERITIES, defaultText, fieldDef, fieldsFor, isFormGroup, newCondition, nextKey,
+  FormCondition, FormGroup, SEVERITIES, conditionIssue, defaultText, fieldDef, fieldsFor, isFormGroup, newCondition, nextKey,
 } from '../../services/intelligence/ruleForm';
 
 const inputClass = 'bg-theme-bg border border-theme-border rounded px-2 py-1 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent';
@@ -17,6 +17,7 @@ interface ConditionRowProps {
 const ConditionRow: React.FC<ConditionRowProps> = ({ kind, condition, onChange, onRemove }) => {
   const def = fieldDef(kind, condition.field);
   const set = (text: string) => onChange({ ...condition, text });
+  const issue = conditionIssue(kind, condition);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
@@ -46,6 +47,7 @@ const ConditionRow: React.FC<ConditionRowProps> = ({ kind, condition, onChange, 
         <input aria-label="Days" type="number" min={1} step={1} className={`${inputClass} w-20`} value={condition.text} onChange={e => set(e.target.value)} />
       )}
       <button type="button" aria-label="Remove condition" className={smallButton} onClick={onRemove}>✕</button>
+      {issue && <span className="basis-full text-xs font-serif text-rose-500">{issue}</span>}
     </div>
   );
 };

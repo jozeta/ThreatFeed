@@ -1,6 +1,7 @@
+import { AlertRule } from '../../types';
 import { describe, expect, it } from 'vitest';
 import {
-  conditionFromForm, containsField, groupFromForm, groupToForm, hasEmptyGroup, newCondition, parseList,
+  applyRuleEdit, conditionFromForm, conditionIssue, containsField, hasInvalidCondition, groupFromForm, groupToForm, hasEmptyGroup, newCondition, parseList,
 } from './ruleForm';
 
 describe('ruleForm', () => {
@@ -43,5 +44,35 @@ describe('ruleForm', () => {
 
   it('newCondition seeds sensible defaults', () => {
     expect(newCondition('vulns', 'cvss').text).toBe('7');
+  });
+
+  it('flags blank lists and non-numeric numbers', () => {
+    const c = (field: string, text: string) => ({ key: 'x', field, text });
+    expect(conditionIssue('vulns', c('vendor', ''))).not.toBeNull();
+    expect(conditionIssue('vulns', c('vendor', ' , '))).not.toBeNull();
+    expect(conditionIssue('vulns', c('vendor', 'Fortinet'))).toBeNull();
+    expect(conditionIssue('vulns', c('cvss', ''))).not.toBeNull();
+    expect(conditionIssue('vulns', c('epss', 'abc'))).not.toBeNull();
+    expect(conditionIssue('vulns', c('cvss', '7.5'))).toBeNull();
+    expect(conditionIssue('vulns', c('kev', ''))).toBeNull();
+    const g = { key: 'g', op: 'all' as const, items: [{ key: 'y', op: 'any' as const, items: [c('cve', '')] }] };
+    expect(hasInvalidCondition('vulns', g)).toBe(true);
+  });
+
+  const rule = (over: Partial<AlertRule>): AlertRule => ({
+    id: 'a', name: 'A', kind: 'vulns', enabled: true, notify: false, root: { op: 'all', items: [{ field: 'kev' }] },
+    createdAt: 't0', updatedAt: 't0', ...over,
+  });
+
+  it('applyRuleEdit keeps live toggles and merges only edited fields', () => {
+    const live = rule({ enabled: false });
+    const edited = rule({ name: 'B', notify: true, updatedAt: 't1', enabled: true });
+    const out = applyRuleEdit([live], edited, false)!;
+    expect(out[0]).toMatchObject({ name: 'B', notify: true, updatedAt: 't1', enabled: false });
+  });
+
+  it('applyRuleEdit drops a save for a deleted rule but appends a new one', () => {
+    expect(applyRuleEdit([], rule({}), false)).toBeNull();
+    expect(applyRuleEdit([], rule({}), true)).toHaveLength(1);
   });
 });

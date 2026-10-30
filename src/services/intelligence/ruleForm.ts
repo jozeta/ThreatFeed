@@ -1,4 +1,4 @@
-import { AlertRuleKind, ConditionGroup, NewsCondition, ThreatSeverity, VulnCondition } from '../../types';
+import { AlertRule, AlertRuleKind, ConditionGroup, NewsCondition, ThreatSeverity, VulnCondition } from '../../types';
 
 export type ValueKind = 'list' | 'severity' | 'cvss' | 'epss' | 'days' | 'none';
 export interface FieldDef { field: string; label: string; value: ValueKind; operator: string }
@@ -123,4 +123,31 @@ export function describeCondition(kind: AlertRuleKind, c: AnyCondition): string 
     case 'epss': return `${def.label} ${def.operator} ${f.text}`;
     default: return `${def.label} ${def.operator} ${f.text || '(none)'}`;
   }
+}
+
+/** Why a condition can't be saved (no values, or a number that isn't one), or null when it is fine */
+export function conditionIssue(kind: AlertRuleKind, c: FormCondition): string | null {
+  switch (fieldDef(kind, c.field).value) {
+    case 'list': return parseList(c.text).length === 0 ? 'Enter at least one value.' : null;
+    case 'cvss':
+    case 'epss':
+    case 'days': return c.text.trim() === '' || !Number.isFinite(Number(c.text)) ? 'Enter a number.' : null;
+    default: return null;
+  }
+}
+
+/** True when any condition in the form tree has an issue */
+export function hasInvalidCondition(kind: AlertRuleKind, g: FormGroup): boolean {
+  return g.items.some(i => (isFormGroup(i) ? hasInvalidCondition(kind, i) : conditionIssue(kind, i) !== null));
+}
+
+/**
+ * Applies an editor save onto the CURRENT rules: only the edited fields replace the live rule, so list toggles made
+ * while the editor was open survive. Returns null when a previously saved rule was deleted meanwhile.
+ */
+export function applyRuleEdit(rules: AlertRule[], edited: AlertRule, isNew: boolean): AlertRule[] | null {
+  const current = rules.find(r => r.id === edited.id);
+  if (!current) return isNew ? [...rules, edited] : null;
+  const merged: AlertRule = { ...current, name: edited.name, kind: edited.kind, notify: edited.notify, root: edited.root, updatedAt: edited.updatedAt };
+  return rules.map(r => (r.id === edited.id ? merged : r));
 }

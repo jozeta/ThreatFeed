@@ -7,7 +7,7 @@ import { AlertRule, BuiltInRule } from '../../types';
 import {
   ALERT_GAP_OPTIONS, buildVulnItems, builtInTerms, duplicateRule, matchesNews, matchesVuln, resolveRoot,
 } from '../../services/intelligence/alertRules';
-import { containsField } from '../../services/intelligence/ruleForm';
+import { applyRuleEdit, containsField } from '../../services/intelligence/ruleForm';
 import { notificationsSupported, requestNotificationPermission } from '../../services/notifications';
 import { RuleEditor } from './RuleEditor';
 
@@ -28,7 +28,7 @@ export const AlertRulesSettings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { feeds, articles, cveIntel } = useFeeds();
   const vulns = useVulns();
-  const [editing, setEditing] = useState<{ rule: AlertRule; isNew: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ rule: AlertRule; isNew: boolean; kindLocked?: boolean } | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [permissionNote, setPermissionNote] = useState('');
 
@@ -78,13 +78,14 @@ export const AlertRulesSettings: React.FC = () => {
   };
 
   const duplicate = (rule: AlertRule) => {
+    // Opens unsaved: Cancel leaves nothing behind
     const copy = duplicateRule(rule, lists, new Date(), crypto.randomUUID());
-    setRules([...rules, copy]);
-    setEditing({ rule: copy, isNew: false });
+    setEditing({ rule: copy, isNew: true, kindLocked: true });
   };
 
   const save = (rule: AlertRule) => {
-    setRules(rules.some(r => r.id === rule.id) ? rules.map(r => (r.id === rule.id ? rule : r)) : [...rules, rule]);
+    const next = applyRuleEdit(rules, rule, !!editing?.isNew);
+    if (next) setRules(next);
     setEditing(null);
   };
 
@@ -173,6 +174,7 @@ export const AlertRulesSettings: React.FC = () => {
           key={editing.rule.id}
           rule={editing.rule}
           isNew
+          kindLocked={editing.kindLocked}
           lists={lists}
           onSave={save}
           onCancel={() => setEditing(null)}
