@@ -128,26 +128,31 @@ export function buildActorProfiles(bundle: any): ActorProfile[] {
   return actors.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Malpedia families by every normalized name; with several platform variants (win.x, elf.x), the best-documented one */
-function malpediaIndex(families: Record<string, any> | null): Map<string, [string, any]> {
-  const index = new Map<string, [string, any]>();
-  for (const [id, f] of Object.entries(families ?? {})) {
-    if (!f || typeof f.common_name !== 'string') continue;
-    for (const n of [f.common_name, ...strings(f.alt_names)]) {
-      const key = nameKey(n);
-      const existing = index.get(key);
-      if (key.length >= 3 && (!existing || strings(f.urls).length > strings(existing[1].urls).length)) index.set(key, [id, f]);
-    }
-  }
-  return index;
+interface Family { id: string; f: any; common: string; keys: string[]; urls: number }
+
+/** Malpedia's families with their normalized name keys (common name first) */
+function malpediaFamilies(families: Record<string, any> | null): Family[] {
+  return Object.entries(families ?? {})
+    .filter(([, f]) => f && typeof f.common_name === 'string' && nameKey(f.common_name).length >= 3)
+    .map(([id, f]) => ({
+      id, f,
+      common: nameKey(f.common_name),
+      keys: [...new Set([f.common_name, ...strings(f.alt_names)].map(nameKey).filter(k => k.length >= 3))],
+      urls: strings(f.urls).length,
+    }));
 }
 
 const malpediaUrl = (id: string) => `${MALPEDIA}details/${encodeURIComponent(id)}`;
 
 /**
- * Malware and tools: ATT&CK software (with the groups using it) merged with the Malpedia family of the
- * same name or alias. Malpedia lists thousands more families, so those only come in when the articles
- * mention them; everything else would be dead weight in the file.
+ * Malware and tools: ATT&CK software (with the groups using it) merged with its Malpedia family. Malpedia lists
+ * thousands more families, so those only come in when the articles mention them; everything else would be dead
+ * weight in the file.
+ *
+ * Merging: an ATT&CK name equal to a family's common name is a match (with several platform variants, win.x and
+ * elf.x, the best-documented one). Otherwise aliases may match, but only when they point at a single family and
+ * no other ATT&CK entry claims it: Malpedia's EternalPetya lists both NotPetya and BadRabbit, and neither should
+ * inherit the other's names. A family sharing any name with ATT&CK software never becomes a profile of its own.
  */
 export function buildMalwareProfiles(bundle: any, malpedia: Record<string, any> | null, articles: Article[]): MalwareProfile[] {
   const objects = bundleObjects(bundle);
@@ -157,8 +162,33 @@ export function buildMalwareProfiles(bundle: any, malpedia: Record<string, any> 
     if (o?.type !== 'intrusion-set' || !usable(o) || typeof o.name !== 'string') continue;
     for (const t of uses.get(o.id) ?? []) if (isSoftware(t)) usedBy.set(t.id, [...(usedBy.get(t.id) ?? []), o.name]);
   }
-  const index = malpediaIndex(malpedia);
-  const matched = new Set<string>();
+  const families = malpediaFamilies(malpedia);
+  // Variants share a common name; the best-documented one stands for them all
+  const byCommon = new Map<string, Family>();
+  for (const fam of families) {
+    const best = byCommon.get(fam.common);
+    if (!best || fam.urls > best.urls) byCommon.set(fam.common, fam);
+  }
+  const commonsByKey = new Map<string, Set<string>>();
+  for (const fam of families) for (const k of fam.keys) commonsByKey.set(k, (commonsByKey.get(k) ?? new Set()).add(fam.common));
+
+  const software = objects.filter(o => isSoftware(o) && usable(o) && typeof o.name === 'string' && typeof attackRef(o).external_id === 'string');
+  const attackKeys = new Set<string>();
+  const ownKeys = new Map<any, Set<string>>();
+  const claims = new Map<any, { common: string; strong: boolean }>();
+  // How many ATT&CK entries share any name with each family: an alias match only counts when it's one
+  const contenders = new Map<string, number>();
+  for (const o of software) {
+    const keys = new Set([o.name, ...strings(o.x_mitre_aliases)].map(nameKey).filter(k => k.length >= 3));
+    ownKeys.set(o, keys);
+    keys.forEach(k => attackKeys.add(k));
+    const candidates = new Set([...keys].flatMap(k => [...(commonsByKey.get(k) ?? [])]));
+    candidates.forEach(c => contenders.set(c, (contenders.get(c) ?? 0) + 1));
+    if (byCommon.has(nameKey(o.name))) claims.set(o, { common: nameKey(o.name), strong: true });
+    else if (candidates.size === 1) claims.set(o, { common: [...candidates][0], strong: false });
+  }
+  const strongClaims = new Set([...claims.values()].filter(c => c.strong).map(c => c.common));
+
   const result: MalwareProfile[] = [];
   const ids = new Set<string>();
   const uniqueId = (name: string, fallback: string) => {
@@ -168,45 +198,48 @@ export function buildMalwareProfiles(bundle: any, malpedia: Record<string, any> 
     return id;
   };
 
-  for (const o of objects) {
-    if (!isSoftware(o) || !usable(o) || typeof o.name !== 'string') continue;
+  for (const o of software) {
     const { external_id: attackId, url } = attackRef(o);
-    if (typeof attackId !== 'string') continue;
-    const names = [o.name, ...strings(o.x_mitre_aliases)];
-    const hit = names.map(n => index.get(nameKey(n))).find(Boolean);
-    if (hit) matched.add(hit[0]);
-    const family = hit?.[1];
+    const claim = claims.get(o);
+    // A contested alias match is dropped: to the entry named like the family when there is one, else to nobody
+    const merged = claim && (claim.strong || (contenders.get(claim.common) === 1 && !strongClaims.has(claim.common))) ? byCommon.get(claim.common) : undefined;
+    const family = merged?.f;
+    // Malpedia names that are another ATT&CK entry's name or alias stay with that entry
+    const own = ownKeys.get(o)!;
+    const imported = family ? [family.common_name.trim(), ...strings(family.alt_names)].filter(n => own.has(nameKey(n)) || !attackKeys.has(nameKey(n))) : [];
     result.push({
       id: uniqueId(o.name, attackId),
       name: o.name,
-      aliases: aliasList(o.name, strings(o.x_mitre_aliases), strings(family?.alt_names)),
+      aliases: aliasList(o.name, strings(o.x_mitre_aliases), imported),
       description: clip(firstParagraph(o.description) || firstParagraph(family?.description), MAX_MALWARE_DESCRIPTION),
       kind: o.type,
       attackId,
       actors: actorNames(usedBy.get(o.id) ?? [], strings(family?.attribution)),
-      ...(hit ? { malpediaUrl: malpediaUrl(hit[0]) } : {}),
+      ...(merged ? { malpediaUrl: malpediaUrl(merged.id) } : {}),
       url: typeof url === 'string' && url.startsWith(ATTACK) ? url : `${ATTACK}software/${attackId}`,
     });
   }
 
-  // Malpedia-only families, one per name (the best-documented variant), when the news names them
-  const extra = new Map<string, MalwareProfile>();
-  for (const [id, f] of new Set(index.values())) {
-    if (matched.has(id)) continue;
-    const key = slug(f.common_name);
-    if (!key || extra.has(key) || ids.has(key)) continue;
-    extra.set(key, {
-      id: key,
-      name: f.common_name.trim(),
-      aliases: aliasList(f.common_name.trim(), strings(f.alt_names)),
-      description: clip(firstParagraph(f.description), MAX_MALWARE_DESCRIPTION),
-      kind: 'malware',
-      actors: actorNames([], strings(f.attribution)),
-      malpediaUrl: malpediaUrl(id),
-    });
-  }
+  // Malpedia-only families the news names, one per name: a family sharing a name with ATT&CK software or with
+  // a better-documented family already added is left out, so a name never resolves to two profiles
+  const candidates = [...byCommon.values()].filter(fam => !fam.keys.some(k => attackKeys.has(k)) && !ids.has(slug(fam.f.common_name)) && slug(fam.f.common_name));
+  const extra = new Map(candidates.map(fam => [fam, {
+    id: slug(fam.f.common_name),
+    name: fam.f.common_name.trim(),
+    aliases: aliasList(fam.f.common_name.trim(), strings(fam.f.alt_names)),
+    description: clip(firstParagraph(fam.f.description), MAX_MALWARE_DESCRIPTION),
+    kind: 'malware' as const,
+    actors: actorNames([], strings(fam.f.attribution)),
+    malpediaUrl: malpediaUrl(fam.id),
+  }]));
   const mentioned = actorMentions(articles, [...extra.values()], Infinity);
-  for (const m of extra.values()) if (mentioned.has(m.id)) result.push(m);
+  const taken = new Set<string>();
+  for (const [fam, m] of [...extra].filter(([, m]) => mentioned.has(m.id)).sort((a, b) => b[0].urls - a[0].urls)) {
+    if (taken.has(m.id) || fam.keys.some(k => taken.has(k))) continue;
+    fam.keys.forEach(k => taken.add(k));
+    taken.add(m.id);
+    result.push(m);
+  }
 
   return result.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -225,34 +258,53 @@ export interface Mentions {
   articles: Article[]; // newest first
 }
 
-// Software and alias names that are everyday words or Windows commands: they'd match far more than the malware
-const GENERIC_TERMS = new Set([
+// Windows commands that ATT&CK lists as tools: never counted, they're in every how-to article
+const COMMAND_TERMS = new Set([
   'ping', 'route', 'expand', 'systeminfo', 'ipconfig', 'netstat', 'whoami', 'schtasks', 'tasklist', 'nltest', 'forfiles', 'wevtutil',
-  'xcopy', 'msiexec', 'powershell', 'esentutl', 'certutil', 'netsh', 'nbtstat', 'dsquery', 'rundll32', 'regsvr32', 'wmic', 'telnet',
-  'curl', 'wget', 'cuba', 'royal', 'play', 'prestige', 'explosive', 'chaos', 'rover', 'equation', 'silence', 'machete', 'inception',
-  'patchwork', 'cleaver', 'axiom', 'lead', 'zinc', 'nickel', 'mercury', 'platinum', 'gold', 'iron', 'cobalt', 'copper', 'radium',
-  // Malpedia families seen matching ordinary news (checked against a month of articles)
-  'nexus', 'rock', 'dark', 'leverage', 'milan', 'global', 'glasses', 'sage', 'resident', 'anchor', 'stop', 'chromium', 'bluesky', 'james', 'saga',
-  'lorem ipsum', 'red alert',
+  'xcopy', 'msiexec', 'powershell', 'esentutl', 'certutil', 'netsh', 'nbtstat', 'dsquery', 'rundll32', 'regsvr32', 'wmic', 'telnet', 'curl', 'wget',
 ]);
-const countable = (term: string) => term.length >= 4 && !GENERIC_TERMS.has(term.toLowerCase());
+// Real threat names that are also everyday words, places or products: counted only right next to a threat
+// word ("Play ransomware", "Royal group", "Cuba ransomware gang"), never just anywhere in a security story
+const AMBIGUOUS_TERMS = new Set([
+  'cuba', 'royal', 'play', 'prestige', 'explosive', 'chaos', 'rover', 'equation', 'silence', 'machete', 'inception', 'patchwork',
+  'cleaver', 'axiom', 'lead', 'zinc', 'nickel', 'mercury', 'platinum', 'gold', 'iron', 'cobalt', 'copper', 'radium',
+  // Malpedia families seen matching ordinary news (checked against a month of articles)
+  'nexus', 'rock', 'dark', 'leverage', 'milan', 'global', 'glasses', 'sage', 'resident', 'anchor', 'stop', 'chromium', 'bluesky',
+  'james', 'saga', 'lorem ipsum', 'red alert',
+]);
+const countable = (term: string) => term.length >= 4 && !COMMAND_TERMS.has(term.toLowerCase());
 const firstWord = (term: string) => term.toLowerCase().match(/\w+/)?.[0];
 // "APT28", "Fancy Bear", "ShinyHunters" are unmistakable; a plain word like "Carbon" or "Sofacy" also
 // needs the article to be about threats, or every carbon-price story would count for Turla's backdoor
 const distinctive = (term: string) => /\d|[\s-]|[a-z][A-Z]/.test(term);
-const THREAT_CONTEXT = /malware|ransomware|backdoor|trojan|stealer|loader|botnet|\bRATs?\b|implant|spyware|wiper|rootkit|dropper|hack(?:er|ed|ing)|threat (?:actor|group)|\bAPTs?\b|espionage|state-sponsored|nation-state/i;
+const THREAT_WORDS = 'malware|ransomware|backdoors?|trojans?|(?:info)?stealers?|loaders?|botnets?|RATs?|spyware|wipers?|rootkits?|droppers?|hack(?:er|ers|ed|ing)|threat (?:actor|group)s?|APTs?|espionage|state-sponsored|nation-state';
+const THREAT_CONTEXT = new RegExp(`\\b(?:${THREAT_WORDS})\\b`, 'i');
+// What may sit right after an ambiguous name ("Play ransomware", "Royal group") or right before it ("the ransomware Play")
+const AFTER = `(?:${THREAT_WORDS}|gang|group|operators?|affiliates?|crew|actors?)`;
+const BEFORE = '(?:ransomware|malware|backdoor|trojan|stealer|botnet|APT|group)';
+const adjacentCache = new Map<string, RegExp>();
+function adjacentToThreat(text: string, term: string): boolean {
+  let re = adjacentCache.get(term);
+  if (!re) {
+    const t = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    re = new RegExp(`(?<!\\w)${t}(?:'s)?\\s+${AFTER}\\b|\\b${BEFORE}\\s+${t}(?!\\w)`, 'i');
+    adjacentCache.set(term, re);
+  }
+  return re.test(text);
+}
 
 /**
  * How often each profile's name or aliases appear in the articles (title and summary, whole words,
- * ignoring case) in the last `days` days; plain one-word names also need a threat word (malware, hackers, APT…) in the same text. Terms are indexed by their first word so each article is
- * only checked against the few profiles it could match. Leak-site victim posts aren't coverage.
+ * ignoring case) in the last `days` days. Plain one-word names also need a threat word (malware, hackers,
+ * APT…) in the same text, and everyday-word names one right next to them. Terms are indexed by their first
+ * word so each article is only checked against the few profiles it could match. Leak-site victim posts aren't coverage.
  */
 export function actorMentions(articles: Article[], profiles: Mentionable[], days = 30, now = Date.now()): Map<string, Mentions> {
-  const byWord = new Map<string, { id: string; term: string; needsContext: boolean }[]>();
+  const byWord = new Map<string, { id: string; term: string; needsContext: boolean; ambiguous: boolean }[]>();
   for (const p of profiles) {
     for (const term of new Set([p.name, ...p.aliases])) {
       const word = countable(term) ? firstWord(term) : undefined;
-      if (word) byWord.set(word, [...(byWord.get(word) ?? []), { id: p.id, term, needsContext: !distinctive(term) }]);
+      if (word) byWord.set(word, [...(byWord.get(word) ?? []), { id: p.id, term, needsContext: !distinctive(term), ambiguous: AMBIGUOUS_TERMS.has(term.toLowerCase()) }]);
     }
   }
   const start = now - days * DAY_MS;
@@ -268,7 +320,7 @@ export function actorMentions(articles: Article[], profiles: Mentionable[], days
     for (const word of new Set(text.toLowerCase().match(/\w+/g) ?? [])) {
       for (const c of byWord.get(word) ?? []) {
         if (hits.has(c.id) || !containsTerm(text, c.term)) continue;
-        if (c.needsContext && !(threat ??= THREAT_CONTEXT.test(text))) continue;
+        if (c.ambiguous ? !adjacentToThreat(text, c.term) : c.needsContext && !(threat ??= THREAT_CONTEXT.test(text))) continue;
         hits.add(c.id);
       }
     }
@@ -283,15 +335,20 @@ export function actorMentions(articles: Article[], profiles: Mentionable[], days
   return result;
 }
 
-/** The actor (or else malware) profile a name or alias belongs to, ignoring case */
+/** The actor (or else malware) profile a name or alias belongs to, ignoring case; names before aliases */
 export function findProfile(data: Pick<ActorsData, 'actors' | 'malware'> | null, name: string): { kind: 'actor' | 'malware'; id: string } | null {
   const key = name.trim().toLowerCase();
   if (!data || !key) return null;
-  const matches = (p: { name: string; aliases: string[] }) => p.name.toLowerCase() === key || p.aliases.some(a => a.toLowerCase() === key);
-  const actor = data.actors.find(matches);
-  if (actor) return { kind: 'actor', id: actor.id };
-  const malware = data.malware.find(matches);
-  return malware ? { kind: 'malware', id: malware.id } : null;
+  // A profile by that name beats one that only lists it as an alias (ATT&CK itself has a few shared aliases)
+  const named = (p: { name: string }) => p.name.toLowerCase() === key;
+  const aliased = (p: { aliases: string[] }) => p.aliases.some(a => a.toLowerCase() === key);
+  for (const match of [named, aliased]) {
+    const actor = data.actors.find(match);
+    if (actor) return { kind: 'actor', id: actor.id };
+    const malware = data.malware.find(match);
+    if (malware) return { kind: 'malware', id: malware.id };
+  }
+  return null;
 }
 
 // ---------- The file (snapshot and app) ----------

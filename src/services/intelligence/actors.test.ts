@@ -128,6 +128,46 @@ describe('buildMalwareProfiles', () => {
     expect(byName.has('Unseen Loader')).toBe(false);
   });
 
+  it('keeps a family whose alias is an ATT&CK name out of the Malpedia-only list', () => {
+    // ATT&CK Qilin merges with elf.qilin by common name; win.agendacrypt also lists "Qilin" as an alias
+    const qilin = { objects: [{ type: 'malware', id: 'malware--qilin', name: 'Qilin', x_mitre_aliases: ['Qilin', 'Agenda'], description: 'Ransomware.', external_references: ref('S1242', 'software') }] };
+    const families = {
+      'elf.qilin': { common_name: 'Qilin', alt_names: [], attribution: [], urls: ['a'] },
+      'win.agendacrypt': { common_name: 'AgendaCrypt', alt_names: ['Agenda', 'Qilin'], attribution: [], urls: ['a', 'b', 'c'] },
+    };
+    const result = buildMalwareProfiles(qilin, families, [article('q', 'AgendaCrypt and Qilin ransomware hit hospitals', 1)]);
+    expect(result.map(m => m.name)).toEqual(['Qilin']);
+    expect(result[0].malpediaUrl).toBe('https://malpedia.caad.fkie.fraunhofer.de/details/elf.qilin');
+    expect(findProfile({ actors: [], malware: result }, 'qilin')).toEqual({ kind: 'malware', id: 'qilin' });
+  });
+
+  it('adds one Malpedia-only profile when two mentioned families share an alias', () => {
+    const families = {
+      'win.foostealer': { common_name: 'FooStealer', alt_names: ['Foo'], attribution: [], urls: ['a', 'b'] },
+      'win.foo_v2': { common_name: 'Foo v2', alt_names: ['FooStealer'], attribution: [], urls: ['a'] },
+    };
+    const result = buildMalwareProfiles({ objects: [] }, families, [article('f', 'FooStealer and Foo v2 malware spread', 1)]);
+    expect(result.map(m => m.name)).toEqual(['FooStealer']);
+  });
+
+  it('merges by alias only when one ATT&CK entry claims the family', () => {
+    // Malpedia's EternalPetya lists both NotPetya and BadRabbit; neither ATT&CK entry is named EternalPetya
+    const two = { objects: [
+      { type: 'malware', id: 'm1', name: 'NotPetya', x_mitre_aliases: ['NotPetya', 'ExPetr'], description: 'Wiper.', external_references: ref('S0368', 'software') },
+      { type: 'malware', id: 'm2', name: 'Bad Rabbit', x_mitre_aliases: ['Bad Rabbit', 'Win32/Diskcoder.D'], description: 'Ransomware.', external_references: ref('S0606', 'software') },
+      { type: 'malware', id: 'm3', name: 'Ursnif', x_mitre_aliases: ['Ursnif', 'Gozi-ISFB'], description: 'Banker.', external_references: ref('S0386', 'software') },
+    ] };
+    const families = {
+      'win.eternal_petya': { common_name: 'EternalPetya', alt_names: ['NotPetya', 'Nyetya', 'BadRabbit'], attribution: ['Sandworm'], urls: ['a'] },
+      'win.isfb': { common_name: 'ISFB', alt_names: ['Gozi ISFB', 'Ursnif'], attribution: [], urls: ['a'] },
+    };
+    const byName = new Map(buildMalwareProfiles(two, families, []).map(m => [m.name, m]));
+    expect(byName.get('Bad Rabbit')).toMatchObject({ aliases: ['Win32/Diskcoder.D'], actors: [] });
+    expect(byName.get('Bad Rabbit')?.malpediaUrl).toBeUndefined();
+    expect(byName.get('NotPetya')?.malpediaUrl).toBeUndefined(); // contested, and not its common name either
+    expect(byName.get('Ursnif')).toMatchObject({ malpediaUrl: 'https://malpedia.caad.fkie.fraunhofer.de/details/win.isfb', aliases: ['Gozi-ISFB', 'ISFB', 'Gozi ISFB'] });
+  });
+
   it('works without Malpedia', () => {
     expect(buildMalwareProfiles(bundle, null, articles).map(m => m.name)).toEqual(['Mimikatz', 'Net', 'X-Agent']);
   });
@@ -161,6 +201,37 @@ describe('actorMentions', () => {
     const carbon = [{ id: 'carbon', name: 'Carbon', aliases: [] }];
     const hits = actorMentions([article('c1', 'Carbon prices climb', 1), article('c2', 'Turla deploys Carbon backdoor', 1)], carbon, 30, NOW);
     expect(hits.get('carbon')?.articles.map(a => a.id)).toEqual(['c2']);
+  });
+
+  it('counts ambiguous names only right next to a threat word', () => {
+    const play = [{ id: 'play', name: 'Play', aliases: [] }, { id: 'royal', name: 'Royal', aliases: [] }, { id: 'cuba', name: 'Cuba', aliases: [] }];
+    const hits = actorMentions([
+      article('p1', 'Play ransomware hits city council', 1),
+      article('p2', 'Hackers play the long game', 1), // a threat word, but not next to the name
+      article('r1', 'Royal Mail outage blamed on malware', 1),
+      article('r2', 'Royal group resurfaces as BlackSuit', 1),
+      article('c1', 'Cuba ransomware gang targets US firms', 1),
+      article('c2', 'Hackers in Cuba?', 1),
+    ], play, 30, NOW);
+    expect(hits.get('play')?.articles.map(a => a.id)).toEqual(['p1']);
+    expect(hits.get('royal')?.articles.map(a => a.id)).toEqual(['r2']);
+    expect(hits.get('cuba')?.articles.map(a => a.id)).toEqual(['c1']);
+  });
+
+  it('never counts Windows command names', () => {
+    expect(actorMentions([article('w', 'Ping backdoor abuses ping for C2', 1)], [{ id: 'ping', name: 'Ping', aliases: [] }], 30, NOW).size).toBe(0);
+  });
+
+  it('counts distinctive names without context, and threat words only as whole words', () => {
+    const profiles = [{ id: 'sh', name: 'ShinyHunters', aliases: [] }, { id: 'carbon', name: 'Carbon', aliases: [] }];
+    const hits = actorMentions([
+      article('s', 'ShinyHunters leaks retailer data', 1),
+      article('d', 'Carbon fibre downloader app review', 1), // "downloader" is not "loader"
+      article('i', 'Carbon implants for knees', 1), // "implant" is too medical to count as context
+      article('b', 'Carbon backdoor spotted', 1),
+    ], profiles, 30, NOW);
+    expect(hits.get('sh')?.count).toBe(1);
+    expect(hits.get('carbon')?.articles.map(a => a.id)).toEqual(['b']);
   });
 
   it('spreads the counts over a per-day series, oldest first', () => {
@@ -231,5 +302,13 @@ describe('findProfile', () => {
     expect(findProfile(data, 'CHOPSTICK')).toEqual({ kind: 'malware', id: 'x-agent' });
     expect(findProfile(data, 'Nobody')).toBeNull();
     expect(findProfile(null, 'APT28')).toBeNull();
+  });
+
+  it('prefers a profile named like the term over one that only has it as an alias', () => {
+    const malware = [
+      { id: 'more-eggs', name: 'More_eggs', aliases: ['SpicyOmelette'], description: '', kind: 'malware' as const, actors: [] },
+      { id: 'spicyomelette', name: 'SpicyOmelette', aliases: [], description: '', kind: 'malware' as const, actors: [] },
+    ];
+    expect(findProfile({ actors: [], malware }, 'spicyomelette')).toEqual({ kind: 'malware', id: 'spicyomelette' });
   });
 });
