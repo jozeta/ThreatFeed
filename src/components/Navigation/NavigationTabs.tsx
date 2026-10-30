@@ -4,6 +4,7 @@ import { ActiveNavTab } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
 import { useFilter } from '../../context/FilterContext';
 import { useSettings } from '../../context/SettingsContext';
+import { useAlertFeed } from '../../hooks/useAlertFeed';
 import {
   Newspaper,
   Clock,
@@ -43,6 +44,8 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
   const { feeds, articles } = useFeeds();
   const { filters, updateFilter } = useFilter();
   const { settings } = useSettings();
+  const { newCount } = useAlertFeed();
+  const feedNewCount = newCount.news + newCount.vulns;
 
   const unreadCount = articles.filter((a) => !a.read).length;
   const bookmarkedCount = articles.filter((a) => a.bookmarked).length;
@@ -75,6 +78,13 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       badgeColor: 'bg-theme-accent text-white',
     },
     { id: 'briefing', label: 'Briefing', icon: <ClipboardList className="w-4 h-4" /> },
+    {
+      id: 'feed',
+      label: 'My Feed',
+      icon: <Inbox className="w-4 h-4" />,
+      badge: feedNewCount > 0 ? feedNewCount : undefined,
+      badgeColor: 'bg-theme-accent text-white',
+    },
     { id: 'ransomware', label: 'Ransomware', icon: <Skull className="w-4 h-4" /> },
     { id: 'vulnerabilities', label: 'Vulns', icon: <ShieldAlert className="w-4 h-4" /> },
     {

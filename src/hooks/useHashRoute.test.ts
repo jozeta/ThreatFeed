@@ -22,4 +22,11 @@ describe('hash routes', () => {
     expect(buildHash('newspaper')).toBe('#/');
     expect(buildHash('bookmarks')).toBe('#/saved');
   });
+
+  it('routes My Feed with its News / Vulns sub-tab', () => {
+    const route = parseHash('#/feed/vulns');
+    expect(route.page).toBe('feed');
+    expect(route.sub).toBe('vulns');
+    expect(buildHash('feed', 'news')).toBe('#/feed/news');
+  });
 });
