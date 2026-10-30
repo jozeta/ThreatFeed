@@ -68,7 +68,7 @@ Two full-screen modes:
   If there are no stories at all, show a calm "No new stories" screen with the time.
 
 ### Content per page
-- **Latest:** the top stories from the last 24 h, ranked by the same importance score the newspaper
+- **Latest / front page:** (both the `newspaper` and `latest` tabs) the top stories from the last 24 h, ranked by the same importance score the newspaper
   layout already uses (`calculateImportance` in `NewspaperView.tsx`; extract it to a shared, testable
   module). Up to ~30 stories. Respects the user's current source/filter settings.
 - **Briefing:** tiles built client-side from `buildBriefing()` (`src/services/intelligence/briefing.ts`,
@@ -108,7 +108,10 @@ updates).
 
 ### Ransomware dashboard
 - Top row: victims 24 h (vs previous 24 h), victims 7 d (vs previous 7 d), active groups 7 d
-  (with "N new this week"), most-hit **country** (share %) — victim data has no sector field (owner approved the swap).
+  (with "N new this week"), most-hit sector (share %). *(Correction after checking: the leak-site victims in `snapshot.json`
+  `incidents.victims` — ~30 days, ~900 rows — carry `sector` on ~85% of rows. The "no sector" finding
+  came from `ransomware.json` public reports, a different list. So the original sector card stays and
+  victim counts come from `incidents.victims`.)*
 - Panels: top groups (7 d, horizontal bars), victims per day (30 d area), top countries (7 d),
   latest victims list.
 
