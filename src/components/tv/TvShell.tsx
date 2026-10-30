@@ -5,6 +5,8 @@ import { usePanelLayer } from '../Common/panelStack';
 import { exitTv, leaveFullscreen, TvKind } from './tvRoute';
 import { useTvChrome } from './useTvChrome';
 import TvWall from './TvWall';
+import VulnDashboard from './VulnDashboard';
+import RansomDashboard from './RansomDashboard';
 
 const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, global shortcuts wait
 
@@ -46,9 +48,7 @@ export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavT
       {kind === 'tv' ? (
         <TvWall page={page} />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center font-mono text-sm uppercase tracking-widest" style={{ color: '#5b6572' }}>
-          Dashboard
-        </div>
+        page === 'ransomware' ? <RansomDashboard /> : <VulnDashboard />
       )}
       <button
         type="button"
