@@ -69,6 +69,9 @@ export function handleEscapeKey(e: KeyboardEvent, stack: PanelStack = panelStack
   e.stopPropagation();
 }
 
+/** The app's single-key shortcuts (r, f, /, ?) wait while a modal (isModalOpen) or any panel is open */
+export const shortcutsBlocked = (isModalOpen: boolean, stack: PanelStack = panelStack) => isModalOpen || stack.size() > 0;
+
 // Capture phase on window: runs before any other keydown listener, so nothing underneath sees the key.
 // Removed again when Vite hot-swaps this module, so edits don't stack up listeners
 const onKeyDown = (e: KeyboardEvent) => handleEscapeKey(e);

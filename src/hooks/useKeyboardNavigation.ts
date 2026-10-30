@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useFeeds } from '../context/FeedContext';
+import { shortcutsBlocked } from '../components/Common/panelStack';
 
 interface UseKeyboardNavigationProps {
   onOpenShortcuts: () => void;
@@ -32,8 +33,8 @@ export function useKeyboardNavigation({
         return;
       }
 
-      // If modal is open, modal handles its own Escape / navigation
-      if (isModalOpen && e.key !== 'Escape') {
+      // If a modal or side panel is open, it handles its own Escape / navigation
+      if (shortcutsBlocked(isModalOpen) && e.key !== 'Escape') {
         return;
       }
 

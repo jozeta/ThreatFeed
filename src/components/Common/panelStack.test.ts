@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPanelStack, handleEscapeKey } from './panelStack';
+import { createPanelStack, handleEscapeKey, shortcutsBlocked } from './panelStack';
 
 const key = (k: string, target: EventTarget | null = document.body) => {
   const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
@@ -83,5 +83,17 @@ describe('Escape key', () => {
     handleEscapeKey(key('Enter'), stack);
     handleEscapeKey(key('Escape', document.createElement('input')), stack);
     expect(close).not.toHaveBeenCalled();
+  });
+});
+
+describe('global shortcuts', () => {
+  it('are held back while any panel or modal is open, so f and / do not reach the search behind it', () => {
+    const stack = createPanelStack();
+    expect(shortcutsBlocked(false, stack)).toBe(false);
+    expect(shortcutsBlocked(true, stack)).toBe(true);
+    const panel = stack.push(() => {});
+    expect(shortcutsBlocked(false, stack)).toBe(true);
+    stack.remove(panel);
+    expect(shortcutsBlocked(false, stack)).toBe(false);
   });
 });
