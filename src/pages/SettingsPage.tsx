@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useSettings, DEFAULT_NEWSPAPER_SECTIONS } from '../context/SettingsContext';
 import { useFeeds } from '../context/FeedContext';
 import { WATCHLIST_PRESETS } from '../services/intelligence/watchlist';
+import { AlertRulesSettings } from './settings/AlertRulesSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { VulnVendorSettings } from './settings/VulnVendorSettings';
 import { SyncSettings } from './settings/SyncSettings';
@@ -712,7 +713,7 @@ export const SettingsPage: React.FC = () => {
       </section>
 
       {/* SECTION 5: THREAT WATCHLIST & KEYWORD ALERTS */}
-      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+      <section id="watchlist-settings" className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
         <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
           <Target className="w-5 h-5 text-amber-500" />
           <div>
@@ -798,6 +799,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
+      <AlertRulesSettings />
       <IntelligenceSettings />
       <VulnVendorSettings />
 

@@ -1,9 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useFeeds } from '../../context/FeedContext';
-import { notificationsSupported, requestNotificationPermission } from '../../services/notifications';
 import { KeywordListEditor } from './KeywordListEditor';
-import { Database, Bell, Server, EyeOff } from 'lucide-react';
+import { Database, Server, EyeOff } from 'lucide-react';
 
 const sectionClass = 'bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6';
 const heading = (icon: React.ReactNode, title: string, text: string) => (
@@ -21,24 +20,7 @@ const toggleClass = (on: boolean) =>
 export const IntelligenceSettings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { feeds, cveIntel } = useFeeds();
-  const [permissionNote, setPermissionNote] = useState('');
   const categories = useMemo(() => Array.from(new Set(feeds.map((f) => f.category))).filter(Boolean).sort(), [feeds]);
-
-  const toggleNotifications = async () => {
-    if (settings.watchlistNotifications) {
-      updateSettings({ watchlistNotifications: false });
-      return;
-    }
-    const permission = await requestNotificationPermission();
-    if (permission === 'granted') {
-      updateSettings({ watchlistNotifications: true });
-      setPermissionNote('');
-    } else {
-      setPermissionNote(permission === 'denied'
-        ? 'Notifications are blocked for this site. Allow them in your browser\'s site settings, then try again.'
-        : 'Notification permission was not granted.');
-    }
-  };
 
   const toggleCategory = (category: string) => {
     const hidden = settings.frontPageHiddenCategories;
@@ -65,22 +47,7 @@ export const IntelligenceSettings: React.FC = () => {
         </p>
       </section>
 
-      <section className={sectionClass}>
-        {heading(<Bell className="w-5 h-5 text-amber-500" />, 'Watchlist Alerts', 'Desktop notifications when new articles match your watchlist.')}
-        <div className="flex items-center gap-3">
-          <button className={toggleClass(settings.watchlistNotifications)} onClick={toggleNotifications} disabled={!notificationsSupported()}>
-            {settings.watchlistNotifications ? 'Alerts on' : 'Alerts off'}
-          </button>
-          <span className="text-xs font-serif text-theme-text-muted">
-            {notificationsSupported()
-              ? 'One summary notification per refresh, for matches published in the last 24 hours. ThreatFeed must be open in a tab.'
-              : 'This browser does not support notifications.'}
-          </span>
-        </div>
-        {permissionNote && <p className="text-xs font-serif text-rose-500">{permissionNote}</p>}
-      </section>
-
-      <section className={sectionClass}>
+      <section id="stack-settings" className={sectionClass}>
         {heading(<Server className="w-5 h-5 text-sky-500" />, 'My Stack', 'Products and vendors you actually run. Matching stories get a "Your stack" badge, rank higher, and get their own briefing section.')}
         <KeywordListEditor
           label="Products in your stack"
