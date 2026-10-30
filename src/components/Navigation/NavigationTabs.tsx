@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ActiveNavTab } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
@@ -15,6 +15,7 @@ import {
   Skull,
   ShieldAlert,
   Crosshair,
+  MoreHorizontal,
 } from 'lucide-react';
 
 const ORDERED_PRIMARY_CATEGORIES = [
@@ -35,6 +36,9 @@ const ORDERED_PRIMARY_CATEGORIES = [
   'Privacy & Policy',
   'Swedish (Feber)',
 ];
+
+// The phone's bottom bar has room for five; every other tab (including ones added later) goes under "More"
+const MOBILE_PRIMARY: ActiveNavTab[] = ['newspaper', 'briefing', 'feed', 'vulnerabilities'];
 
 interface NavigationTabsProps {
   activeTab: ActiveNavTab;
@@ -97,6 +101,18 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       badgeColor: 'bg-theme-card text-theme-text border border-theme-border',
     },
   ];
+
+  const mobilePrimary = MOBILE_PRIMARY.map((id) => tabs.find((t) => t.id === id)).filter((t): t is (typeof tabs)[number] => Boolean(t));
+  const mobileMore = tabs.filter((t) => !MOBILE_PRIMARY.includes(t.id));
+  const moreActive = mobileMore.some((t) => t.id === activeTab);
+  const moreBadge = mobileMore.reduce((sum, t) => sum + (t.badge ?? 0), 0);
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMoreOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [moreOpen]);
 
   const handleCategoryChange = (cat: string) => {
     updateFilter('selectedCategory', cat === 'All' ? null : cat);
@@ -233,34 +249,74 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
       {/* Mobile Bottom Navigation Bar. Rendered into <body>: inside the header, whose backdrop blur and
           collapse transform make `position: fixed` relative to the header, it would sit under it instead
           of at the bottom of the screen. */}
-      {createPortal(<nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-theme-surface/95 backdrop-blur-md border-t border-theme-border flex items-center justify-around py-1.5 px-2 safe-area-pb">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center p-1 relative flex-1 ${
-                isActive ? 'text-theme-accent' : 'text-theme-text-muted'
-              }`}
-            >
-              <div className="relative">
-                {tab.icon}
-                {tab.badge !== undefined && (
-                  <span
-                    className={`absolute -top-1.5 -right-2.5 text-[9px] px-1 rounded-full font-bold ${tab.badgeColor}`}
-                  >
-                    {tab.badge > 99 ? '99+' : tab.badge}
-                  </span>
-                )}
-              </div>
-              <span className="font-mono text-[9px] uppercase tracking-wider mt-0.5">
-                {tab.label}
-              </span>
-            </button>
-          );
-        })}
-      </nav>, document.body)}
+      {createPortal(<>
+        <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-theme-surface/95 backdrop-blur-md border-t border-theme-border flex items-center justify-around py-1.5 px-2 safe-area-pb">
+          {mobilePrimary.map((tab) => (
+            <MobileNavButton key={tab.id} label={tab.label} icon={tab.icon} badge={tab.badge} badgeColor={tab.badgeColor} active={activeTab === tab.id} onClick={() => onSelectTab(tab.id)} />
+          ))}
+          <MobileNavButton
+            label="More"
+            icon={<MoreHorizontal className="w-4 h-4" />}
+            badge={moreBadge > 0 ? moreBadge : undefined}
+            badgeColor="bg-theme-accent text-white"
+            active={moreActive || moreOpen}
+            onClick={() => setMoreOpen(!moreOpen)}
+            ariaExpanded={moreOpen}
+          />
+        </nav>
+        {moreOpen && (
+          <div className="sm:hidden fixed inset-0 z-50 flex items-end modal-backdrop" onClick={() => setMoreOpen(false)} role="dialog" aria-modal="true" aria-label="More pages">
+            <div className="w-full modal-glass [--glass-base:var(--color-surface)] rounded-t-xl !border-x-0 !border-b-0 p-3 pb-6 safe-area-pb" onClick={(e) => e.stopPropagation()}>
+              <ul className="grid grid-cols-3 gap-2">
+                {mobileMore.map((tab) => (
+                  <li key={tab.id}>
+                    <button
+                      onClick={() => { setMoreOpen(false); onSelectTab(tab.id); }}
+                      className={`w-full flex flex-col items-center gap-1 py-3 rounded border text-xs font-mono uppercase tracking-wider ${
+                        activeTab === tab.id ? 'border-theme-accent text-theme-accent' : 'border-theme-border text-theme-text'
+                      }`}
+                    >
+                      <span className="relative">
+                        {tab.icon}
+                        {tab.badge !== undefined && (
+                          <span className={`absolute -top-1.5 -right-3 text-[9px] px-1 rounded-full font-bold ${tab.badgeColor}`}>{tab.badge > 99 ? '99+' : tab.badge}</span>
+                        )}
+                      </span>
+                      <span className="text-[10px]">{tab.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </>, document.body)}
     </>
   );
 };
+
+const MobileNavButton: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+  badgeColor?: string;
+  active: boolean;
+  onClick: () => void;
+  ariaExpanded?: boolean;
+}> = ({ label, icon, badge, badgeColor, active, onClick, ariaExpanded }) => (
+  <button
+    onClick={onClick}
+    aria-expanded={ariaExpanded}
+    className={`flex flex-col items-center justify-center p-1 relative flex-1 min-w-0 ${active ? 'text-theme-accent' : 'text-theme-text-muted'}`}
+  >
+    <div className="relative">
+      {icon}
+      {badge !== undefined && (
+        <span className={`absolute -top-1.5 -right-2.5 text-[9px] px-1 rounded-full font-bold ${badgeColor}`}>
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+    </div>
+    <span className="font-mono text-[9px] uppercase tracking-wider mt-0.5 truncate max-w-full">{label}</span>
+  </button>
+);

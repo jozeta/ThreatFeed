@@ -704,7 +704,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!data) return actorsRef.current;
           actorsRef.current = data;
           setActors(data);
-          await saveStoredValue('actors', data);
+          // The offline copy is a convenience: a full or blocked IndexedDB mustn't fail the load
+          await saveStoredValue('actors', data).catch(() => undefined);
           return data;
         })
         .finally(() => { actorsRequest.current = null; });
