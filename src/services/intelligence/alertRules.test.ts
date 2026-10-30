@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem,
-  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule,
+  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, alertSettingsFrom,
 } from './alertRules';
-import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord } from '../../types';
+import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord, UserSettings } from '../../types';
 import { article } from '../../test/fixtures';
 
 const ctx = (overrides: Partial<EvalContext> = {}): EvalContext => ({
@@ -252,5 +252,30 @@ describe('sanitizeRule condition shapes', () => {
       expect(() => matchesNews(g, article('Cisco'), ctx())).not.toThrow();
       expect(matchesNews(g, article('Cisco'), ctx())).toBe(false);
     }
+  });
+});
+
+describe('alertSettingsFrom', () => {
+  const now = new Date('2026-10-30T12:00:00Z');
+  const memory = {
+    alertRules: createBuiltInRules(false, now), watchlistKeywords: ['a'], stackKeywords: ['b'], watchedCves: ['CVE-1'], alertGapHours: 1,
+  };
+
+  it('prefers what another tab saved, so the alert tab runs current rules and lists', () => {
+    const custom: AlertRule = {
+      id: 'c1', name: 'New', kind: 'vulns', enabled: true, notify: true, root: { op: 'all', items: [{ field: 'kev' }] }, createdAt: 't', updatedAt: 't',
+    };
+    const out = alertSettingsFrom(memory, {
+      alertRules: [custom], watchlistKeywords: ['x'], stackKeywords: [], watchedCves: ['CVE-2'], alertGapHours: 6,
+    }, now);
+    expect(out.alertRules.map(r => r.id)).toContain('c1');
+    expect(out.alertRules.filter(r => r.builtIn)).toHaveLength(4);
+    expect(out).toMatchObject({ watchlistKeywords: ['x'], stackKeywords: [], watchedCves: ['CVE-2'], alertGapHours: 6 });
+  });
+
+  it('falls back to memory for anything missing or malformed', () => {
+    expect(alertSettingsFrom(memory, null, now)).toEqual(memory);
+    const out = alertSettingsFrom(memory, { alertGapHours: 5, watchedCves: 'CVE-9' } as unknown as Partial<UserSettings>, now);
+    expect(out).toEqual(memory);
   });
 });

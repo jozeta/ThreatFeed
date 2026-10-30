@@ -318,3 +318,23 @@ export function migrateAlertRules(saved: Partial<UserSettings>, now: Date): Aler
   const have = new Set(kept.map(r => r.builtIn).filter(Boolean));
   return [...kept, ...builtIns.filter(r => !have.has(r.builtIn))];
 }
+
+export type AlertSettings = RuleLists & Pick<UserSettings, 'alertRules' | 'alertGapHours'>;
+
+const stringList = (v: unknown): string[] | undefined =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
+
+/**
+ * The alert settings to check with: what is saved in IndexedDB (possibly by another tab) wins over this tab's
+ * in-memory copy, field by field, so the one tab running checks picks up rules edited elsewhere.
+ */
+export function alertSettingsFrom(memory: AlertSettings, saved: Partial<UserSettings> | null, now: Date): AlertSettings {
+  if (!saved) return memory;
+  return {
+    alertRules: Array.isArray(saved.alertRules) ? migrateAlertRules(saved, now) : memory.alertRules,
+    watchlistKeywords: stringList(saved.watchlistKeywords) ?? memory.watchlistKeywords,
+    stackKeywords: stringList(saved.stackKeywords) ?? memory.stackKeywords,
+    watchedCves: stringList(saved.watchedCves) ?? memory.watchedCves,
+    alertGapHours: (ALERT_GAP_OPTIONS as readonly number[]).includes(saved.alertGapHours as number) ? saved.alertGapHours! : memory.alertGapHours,
+  };
+}
