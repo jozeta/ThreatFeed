@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, StatsData, TrendsData, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
   saveArticlesToDB,
@@ -16,7 +16,7 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadActors, loadEntities, loadMsrc, loadRansomwareIntel, loadSnapshot, loadTrends, loadVulnData } from '../services/snapshot';
+import { loadActors, loadEntities, loadMsrc, loadRansomwareIntel, loadSnapshot, loadStats, loadTrends, loadVulnData } from '../services/snapshot';
 import { buildEntityMatcher } from '../services/intelligence/entityLinks';
 import { EntityMatcherContext } from '../hooks/useEntityMatcher';
 import { createSnapshotLoader } from '../services/snapshotLoader';
@@ -65,6 +65,8 @@ interface FeedContextType {
   actors: ActorsData | null; // threat actor and malware profiles (ATT&CK, Malpedia)
   ensureActors: () => Promise<ActorsData | null>; // like ensureMsrc, for data/actors.json; resolves to the loaded data
   trends: TrendsData | null; // daily mention counts per entity, up to 730 days (older weeks rolled up)
+  stats: StatsData | null; // daily counts for the dashboards, up to 400 days
+  ensureStats: () => Promise<StatsData | null>; // like ensureTrends, for data/stats.json; use the useStats hook
   ensureTrends: () => Promise<TrendsData | null>; // like ensureMsrc, for data/trends.json; use the useTrends hook
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
@@ -114,6 +116,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [msrc, setMsrc] = useState<MsrcData | null>(null);
   const [actors, setActors] = useState<ActorsData | null>(null);
   const [trends, setTrends] = useState<TrendsData | null>(null);
+  const [stats, setStats] = useState<StatsData | null>(null);
   const [entities, setEntities] = useState<EntitiesData | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
@@ -687,6 +690,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   actorsRef.current = actors;
   const trendsRef = useRef<TrendsData | null>(null);
   trendsRef.current = trends;
+  const statsRef = useRef<StatsData | null>(null);
+  statsRef.current = stats;
   const snapshotAt = () => snapshotAtRef.current;
   const [ensureMsrc] = useState(() => createSnapshotLoader<MsrcData>({
     ref: msrcRef, snapshotAt, load: loadMsrc, setState: setMsrc,
@@ -699,6 +704,11 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [ensureTrends] = useState(() => createSnapshotLoader<TrendsData>({
     ref: trendsRef, snapshotAt, load: loadTrends, setState: setTrends,
     read: () => getStoredValue<TrendsData>('trends'), save: (data) => saveStoredValue('trends', data),
+  }));
+
+  const [ensureStats] = useState(() => createSnapshotLoader<StatsData>({
+    ref: statsRef, snapshotAt, load: loadStats, setState: setStats,
+    read: () => getStoredValue<StatsData>('stats'), save: (data) => saveStoredValue('stats', data),
   }));
 
   // The names text links to their panels (data/entities.json, about 80 KB): requested once the first paint is
@@ -737,6 +747,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ensureActors,
     trends,
     ensureTrends,
+    stats,
+    ensureStats,
     articles,
     feedHealth,
     isRefreshing,
@@ -762,7 +774,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

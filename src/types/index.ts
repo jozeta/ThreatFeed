@@ -361,6 +361,25 @@ export interface TrendsData {
   weeks?: TrendDays; // older days summed per Monday-to-Sunday week (keyed by the Monday), two years back
 }
 
+/** One UTC day of the dashboards' counts: CVE and victim ids (so merging runs is a set union), and victim tallies */
+export interface StatsDay {
+  crit: string[]; // CVSS 9+ CVEs published that day
+  high: string[]; // CVSS 7-8.9
+  kev: string[]; // CVEs added to the KEV catalog
+  exploits: string[]; // CVEs first seen that day with a Metasploit module, Nuclei template or GitHub PoC
+  victims: string[]; // leak-site victim ids discovered that day
+  groups: Record<string, number>;
+  countries: Record<string, number>;
+  sectors: Record<string, number>;
+}
+
+/** data/stats.json: daily counts, up to 400 days */
+export interface StatsData {
+  version: 1;
+  generatedAt: string;
+  days: Record<string, StatsDay>; // keyed YYYY-MM-DD (UTC)
+}
+
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
 export interface ExtractedIOC {

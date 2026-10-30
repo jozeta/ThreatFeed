@@ -129,12 +129,12 @@ export function mergeTrends(previous: TrendsData | null, recent: TrendDays, now 
 /**
  * Which history this run builds on: the newer of the Action cache's copy and the published file. With
  * neither, a read failure (anything but a 404) means the history exists but couldn't be read: nothing may
- * be written then, or the next deploy would replace it with a few days.
+ * be written then, or the next deploy would replace it with a few days. Also used for stats.json.
  */
-export function pickPreviousTrends(
-  cached: TrendsData | null,
-  published: { data: TrendsData | null; error?: string }
-): { base: TrendsData | null; write: boolean; source: 'cache' | 'published' | 'none' } {
+export function pickPreviousTrends<T extends { generatedAt?: string }>(
+  cached: T | null,
+  published: { data: T | null; error?: string }
+): { base: T | null; write: boolean; source: 'cache' | 'published' | 'none' } {
   const p = published.data;
   if (cached && (!p || (cached.generatedAt ?? '') > (p.generatedAt ?? ''))) return { base: cached, write: true, source: 'cache' };
   if (p) return { base: p, write: true, source: 'published' };
