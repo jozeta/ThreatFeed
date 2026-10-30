@@ -122,11 +122,11 @@ export function HBarList({ label, data, color, format, span = 2 }: {
 export const chartReady = (points: number[][]) => points.filter(p => p.some(v => v > 0)).length >= 2;
 
 export function WeeklyBarsLine({ label, weekly, span = 2, tall = false }: {
-  label: string; weekly: { week: string; critical: number; kev: number }[]; span?: 1 | 2 | 4; tall?: boolean;
+  label: string; weekly: { week: string; critical: number | null; kev: number }[]; span?: 1 | 2 | 4; tall?: boolean;
 }) {
-  const ready = chartReady(weekly.map(w => [w.critical, w.kev]));
+  const ready = chartReady(weekly.map(w => [w.critical ?? 0, w.kev]));
   const W = 200, H = 80, n = weekly.length;
-  const max = Math.max(1, ...weekly.map(w => Math.max(w.critical, w.kev)));
+  const max = Math.max(1, ...weekly.map(w => Math.max(w.critical ?? 0, w.kev)));
   const slot = n ? W / n : W;
   const x = (i: number) => slot * i + slot / 2;
   const y = (v: number) => H - 2 - (v / max) * (H - 6);
@@ -136,7 +136,7 @@ export function WeeklyBarsLine({ label, weekly, span = 2, tall = false }: {
         <>
           <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="tv-chart" role="img" aria-label={label}>
             <g fill="#ef4444" opacity=".85">
-              {weekly.map((w, i) => <rect key={w.week} x={slot * i + slot * 0.15} y={y(w.critical)} width={slot * 0.7} height={H - 2 - y(w.critical)} />)}
+              {weekly.map((w, i) => w.critical === null ? null : <rect key={w.week} x={slot * i + slot * 0.15} y={y(w.critical)} width={slot * 0.7} height={H - 2 - y(w.critical)} />)}
             </g>
             <path d={monotonePath(weekly.map((w, i) => [x(i), y(w.kev)] as [number, number]))} fill="none" stroke="#fb923c" strokeWidth="3" vectorEffect="non-scaling-stroke" />
           </svg>

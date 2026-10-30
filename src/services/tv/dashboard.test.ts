@@ -54,6 +54,23 @@ describe('vulnDashboard', () => {
     expect(r.weekly[12]).toMatchObject({ critical: 1, kev: 1 });
     expect(r.critical7d.value).toBe(1);
   });
+  it('leaves weeks before any critical data without a bar, keeping the KEV line', () => {
+    const v = {
+      kev: [{ cve: 'CVE-1', vendor: 'A', product: 'B', dateAdded: '2026-08-12' }],
+      notable: [{ id: 'CVE-2', published: '2026-10-20T00:00:00Z', score: 9.8, severity: 'CRITICAL' }],
+      exploits: {},
+    } as unknown as VulnData;
+    const r = vulnDashboard(v, null, null, now);
+    // Oldest critical is Tue 2026-10-20, so the week of 10-19 has data and earlier weeks do not
+    expect(r.weekly.map(w => w.critical === null)).toEqual([...Array(11).fill(true), false, false]);
+    expect(r.weekly.find(w => w.week === '2026-08-10')).toMatchObject({ critical: null, kev: 1 });
+    expect(r.weekly[11]).toMatchObject({ week: '2026-10-19', critical: 1 });
+    // Stats history with an earlier non-empty crit list moves the start back
+    const s = stats({ '2026-09-01': day({ crit: ['CVE-9'] }) });
+    const r2 = vulnDashboard(v, null, s, now);
+    expect(r2.weekly.filter(w => w.critical === null)).toHaveLength(4);
+    expect(r2.weekly[4]).toMatchObject({ week: '2026-08-31', critical: 1 });
+  });
   it('hides the exploits delta when notable is shallow even with a deep KEV catalog', () => {
     const v = {
       kev: [{ cve: 'CVE-1', vendor: 'A', product: 'B', dateAdded: '2022-01-05' }, { cve: 'CVE-3', vendor: 'A', product: 'B', dateAdded: '2026-10-29' }],

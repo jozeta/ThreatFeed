@@ -7,7 +7,8 @@ export interface VulnDashboardData {
   critical7d: Figure; kev7d: Figure; exploits7d: Figure;
   patchTuesday: { total: number; critical: number; zeroDays: number; month: string } | null;
   exploitedNow: { cve: string; score?: number; title: string; tag: 'KEV' | 'PoC' }[];
-  weekly: { week: string; critical: number; kev: number }[];
+  /** critical is null for weeks before any critical-CVE data exists (no bar, rather than a misleading zero) */
+  weekly: { week: string; critical: number | null; kev: number }[];
 }
 export interface RansomDashboardData {
   victims24h: Figure; victims7d: Figure; groups7d: { value: number; newThisWeek: number };
@@ -120,10 +121,16 @@ export function vulnDashboard(v: VulnData | null, msrc: MsrcData | null, stats: 
   const today = new Date(now);
   const monday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - ((today.getUTCDay() + 6) % 7) * DAY_MS;
   const weekly: VulnDashboardData['weekly'] = [];
+  const critStart = minDay([
+    ...(notableOldest ? [notableOldest] : []),
+    ...(stats ? Object.entries(stats.days).filter(([, d]) => (d.crit ?? []).length > 0).map(([k]) => k) : []),
+  ]);
   for (let w = 12; w >= 0; w--) {
     const start = monday - w * 7 * DAY_MS;
     const days = Array.from({ length: 7 }, (_, i) => dayKey(start + i * DAY_MS));
-    weekly.push({ week: days[0], critical: countIn(crit, days), kev: countIn(kevs, days) });
+    // A week that ends before the first day with critical data has no real count, only a missing history
+    const critical = critStart !== '' && days[6] < critStart ? null : countIn(crit, days);
+    weekly.push({ week: days[0], critical, kev: countIn(kevs, days) });
   }
 
   return {
