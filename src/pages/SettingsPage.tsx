@@ -34,9 +34,10 @@ import {
   ArrowUp,
   ArrowDown,
   SlidersHorizontal,
-  Clock
+  Clock,
+  Tv
 } from 'lucide-react';
-import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode } from '../types';
+import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode, TvTransition } from '../types';
 
 const ACCENT_PRESETS = [
   { name: 'Crimson', color: '#e11d48' },
@@ -528,6 +529,53 @@ export const SettingsPage: React.FC = () => {
             </span>
           </span>
         </label>
+      </section>
+
+      {/* TV & DASHBOARD */}
+      <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+        <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
+          <Tv className="w-5 h-5 text-theme-accent" />
+          <h2 className="font-serif text-xl font-bold text-theme-text">TV & dashboard</h2>
+        </div>
+
+        <div>
+          <label htmlFor="tv-interval" className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">
+            Time per screen
+          </label>
+          <p className="text-xs font-serif text-theme-text-muted mb-2">
+            How long TV mode keeps one set of stories up before moving to the next.
+          </p>
+          <select
+            id="tv-interval"
+            value={settings.tvIntervalMinutes}
+            onChange={(e) => updateSettings({ tvIntervalMinutes: Number(e.target.value) })}
+            className="w-full sm:w-64 bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
+          >
+            {[1, 2, 3, 5, 10, 15, 20, 30].map((m) => (
+              <option key={m} value={m}>{m} {m === 1 ? 'minute' : 'minutes'}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <span className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">Transition</span>
+          <p className="text-xs font-serif text-theme-text-muted mb-2">How one set gives way to the next.</p>
+          <div role="group" aria-label="TV transition" className="inline-flex border border-theme-border rounded-md p-0.5 bg-theme-card">
+            {(['fade', 'slide', 'reveal'] as TvTransition[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={settings.tvTransition === t}
+                onClick={() => updateSettings({ tvTransition: t })}
+                className={`px-3 py-1.5 rounded text-xs font-mono capitalize transition-colors ${
+                  settings.tvTransition === t ? 'bg-theme-accent-subtle text-theme-accent font-bold' : 'text-theme-text-muted hover:text-theme-text'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* SECTION 4: INGESTION & GATEWAY */}

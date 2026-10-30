@@ -1,7 +1,8 @@
-import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, FeedHealth, IncidentData, MsrcData, RansomwareIntel, TrendsData, VulnData } from '../types';
+import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, FeedHealth, IncidentData, MsrcData, RansomwareIntel, StatsData, TrendsData, VulnData } from '../types';
 import { decodeWatchable } from './intelligence/vulns';
 import { decodeMsrc } from './intelligence/patchTuesday';
 import { decodeActors } from './intelligence/actors';
+import { decodeStats } from './intelligence/stats';
 import { decodeTrends } from './intelligence/trends';
 import { decodeEntities } from './intelligence/entities';
 
@@ -112,6 +113,17 @@ export async function loadTrends(): Promise<TrendsData | null> {
     if (!res.ok) return null;
     // Malformed days and counts are dropped, so the page can't throw on them
     return decodeTrends(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/stats.json (daily counts of critical CVEs, KEV additions, exploits and leak-site victims, 400 days) for the dashboards */
+export async function loadStats(): Promise<StatsData | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/stats.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    return decodeStats(await res.json());
   } catch {
     return null;
   }

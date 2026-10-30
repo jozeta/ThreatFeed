@@ -157,6 +157,17 @@ Every article is enriched in the browser while its feed is parsed, and the resul
 - **Cross-device sync** through a private GitHub Gist (Settings → Cross-Device Sync). Per-article state is merged by whichever device changed it last; feeds, bookmarked articles, keyword lists and alert rules are combined (the newer edit of a rule wins; a rule deleted on one device comes back from the other). The token is stored only in that browser's IndexedDB and is never included in backups or synced data.
 - **Failing-feed backoff**: a feed that fails 5 refreshes in a row is only retried hourly during automatic refreshes (manual refresh still tries it).
 
+### 14. TV & Dashboard Modes
+- **TV mode**: a full-screen wall of 5–6 large news tiles (a 3×2 grid of 1×1 and 2×1 tiles) that rotates through the top stories. It is available on the front page / Latest, Briefing and Ransomware pages; Ransomware mixes in leak-site victim tiles, about one in three. Enter it with the **TV** button next to the layout buttons. Leave with the × in the top-right corner (it hides after 3 seconds without mouse movement), <kbd>Esc</kbd>, or by leaving browser full screen. The screen is kept awake (Wake Lock) where supported. If fewer than 5 stories are newer than 24 hours, the window widens to 72 hours, then 7 days.
+- **Dashboard mode**: a figures-first view for screens. **Vulns** shows critical CVEs and CISA KEV additions over 7 days, public exploits over 7 days, the latest Patch Tuesday, "Exploited right now" and a 90-day weekly trend. **Ransomware** shows victims over 24 hours and 7 days, active groups, the most-hit sector, top groups, victims per day, top countries and the latest victims. Open it with the **Dashboard** button on those pages.
+- **Kiosk URLs** (prefix with `https://jozeta.github.io/ThreatFeed/`):
+  - `#/latest?tv=1`, `#/briefing?tv=1`, `#/ransomware?tv=1`: TV mode
+  - `#/vulns?dash=1`, `#/ransomware?dash=1`: dashboard mode
+
+  A URL opened directly may not reach true full screen without a click, so for a dedicated display use the browser's kiosk mode or F11.
+- **Settings → TV & dashboard**: rotation interval of 1–30 minutes (default 2), and transition **Fade**, **Slide** or **Reveal** (default Reveal). Reduce motion forces a plain fade.
+- **Trend history**: dashboard trends are built from `stats.json` (see [Feed Snapshot](#-feed-snapshot--cve-intelligence)), so they fill in over the coming weeks. "vs last week" figures stay hidden until there is history to compare against.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -210,6 +221,7 @@ Without a local snapshot, the dev server falls back to fetching feeds live throu
 - `data/msrc.json`, `data/actors.json`: Patch Tuesday releases and actor/malware profiles (used by the actor and malware panels). Each run reads its previous copy (`PREVIOUS_MSRC_URL`, `PREVIOUS_ACTORS_URL`) and carries over what it can't refetch.
 - `data/entities.json`: the names (vendors, ransomware groups, actors, malware, aliases) the app turns into entity links.
 - `data/trends.json`: daily counts kept for 730 days; the mentions-over-time charts in the panels read it. The run recounts the last three days on top of the previous copy (`PREVIOUS_TRENDS_URL`, or `PREVIOUS_TRENDS_FILE` from an `actions/cache` copy). A deploy replaces the whole site, so a "Keep the trends history" step restores the published or cached copy if the snapshot didn't write one; the history is never lost.
+- `data/stats.json`: daily counts for the last 400 days (critical and high CVEs, KEV additions, public exploits, leak-site victims, and per group, country and sector), de-duplicated by CVE and victim ID. Like `trends.json`, it is read back on the next run and kept across deploys, and it feeds the TV and dashboard modes.
 
 **Optional NVD API key**: NVD allows 5 requests per 30 seconds without a key and 50 with one. Request a free key at <https://nvd.nist.gov/developers/request-an-api-key>, then add it as a repository secret named `NVD_API_KEY` (Settings → Secrets and variables → Actions). The workflow passes it to the script; without it everything still works, just slower on full downloads.
 

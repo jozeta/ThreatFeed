@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useFeeds } from './context/FeedContext';
 import { useSettings } from './context/SettingsContext';
 import { useFilter } from './context/FilterContext';
@@ -19,6 +19,7 @@ import { CveWatchMonitor } from './components/CveWatchMonitor';
 import { closeAllPanels, closePanel, PANEL_PARAMS, panelParam, redirectRemovedPage, useHashRoute } from './hooks/useHashRoute';
 import { usePanelLevels } from './hooks/usePanelLevels';
 import { PanelLevel } from './components/Common/SidePanel';
+import { exitTv, tvFromParams } from './components/tv/tvRoute';
 
 // Secondary pages load on first visit, keeping the initial bundle to what the front page needs
 const SourcesPage = lazy(() => import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage })));
@@ -29,6 +30,15 @@ const BriefingPage = lazy(() => import('./pages/BriefingPage').then((m) => ({ de
 const MyFeedPage = lazy(() => import('./pages/MyFeedPage').then((m) => ({ default: m.MyFeedPage })));
 const RansomwarePage = lazy(() => import('./pages/RansomwarePage').then((m) => ({ default: m.RansomwarePage })));
 const VulnerabilitiesPage = lazy(() => import('./pages/VulnerabilitiesPage').then((m) => ({ default: m.VulnerabilitiesPage })));
+const TvShell = lazy(() => import('./components/tv/TvShell'));
+
+/** If the TV chunk fails to load (or the shell throws), drop out of the mode instead of unmounting the whole app */
+class TvErrorBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { exitTv(); }
+  render() { return this.state.failed ? null : this.props.children; }
+}
 // Detail panels over any page, each from its hash parameter
 const VendorPanelHost = lazy(() => import('./components/VendorPanel'));
 const CvePanelHost = lazy(() => import('./pages/vulns/CvePanelHost').then((m) => ({ default: m.CvePanelHost })));
@@ -52,6 +62,12 @@ export const App: React.FC = () => {
   // a blank, overlong or (for ?cve=) malformed value opens none
   const { actor, malware, group, vendor, cve, tag } = Object.fromEntries(PANEL_PARAMS.map((key) => [key, panelParam(key, route.params.get(key))]));
   const levels = usePanelLevels(route.params, Boolean(activeArticle));
+  // ?tv=1 / ?dash=1: a full-screen mode over the app, which goes inert underneath
+  const tvKind = tvFromParams(activeTab, route.params);
+  const appRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (appRef.current) appRef.current.inert = tvKind !== null; // React 18 has no `inert` prop
+  }, [tvKind]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
@@ -150,7 +166,8 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-theme-bg text-theme-text transition-colors">
+    <>
+    <div ref={appRef} className="min-h-screen flex flex-col bg-theme-bg text-theme-text transition-colors">
       {/* Print-Only Masthead Header (Requirement 48) */}
       <div id="print-masthead" className="hidden">
         <h1 className="font-serif text-3xl font-black uppercase">THREATFEED</h1>
@@ -263,6 +280,14 @@ export const App: React.FC = () => {
         onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
+    {tvKind && (
+      <TvErrorBoundary>
+        <Suspense fallback={<div className="tv-root fixed inset-0 z-[90]" />}>
+          <TvShell kind={tvKind} page={activeTab} />
+        </Suspense>
+      </TvErrorBoundary>
+    )}
+    </>
   );
 };
 export default App;

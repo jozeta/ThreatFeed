@@ -361,6 +361,25 @@ export interface TrendsData {
   weeks?: TrendDays; // older days summed per Monday-to-Sunday week (keyed by the Monday), two years back
 }
 
+/** One UTC day of the dashboards' counts: CVE and victim ids (so merging runs is a set union), and victim tallies */
+export interface StatsDay {
+  crit: string[]; // CVSS 9+ CVEs published that day
+  high: string[]; // CVSS 7-8.9
+  kev: string[]; // CVEs added to the KEV catalog
+  exploits: string[]; // CVEs with a Metasploit module, Nuclei template or GitHub PoC, on their published day (else their KEV date)
+  victims: string[]; // leak-site victim ids discovered that day
+  groups: Record<string, number>;
+  countries: Record<string, number>;
+  sectors: Record<string, number>;
+}
+
+/** data/stats.json: daily counts, up to 400 days */
+export interface StatsData {
+  version: 1;
+  generatedAt: string;
+  days: Record<string, StatsDay>; // keyed YYYY-MM-DD (UTC)
+}
+
 export type IOCType ='cve' | 'ipv4' | 'hash_md5' | 'hash_sha1' | 'hash_sha256' | 'mitre';
 
 export interface ExtractedIOC {
@@ -416,6 +435,8 @@ export interface UserSettings {
   reducedMotion: boolean;
   maxArticlesPerFeed: number; // default: 25 (0 = unlimited)
   maxArticleAgeDays: number; // default: 30 (0 = unlimited)
+  tvIntervalMinutes: number; // TV mode: how long each set stays up (1–30, default 2)
+  tvTransition: TvTransition; // TV mode: how a set gives way to the next
   autoRefreshFeedCooldownHours: number; // default: 4 (hours: 0, 2, 4, 6, 12, 24)
   watchlistKeywords: string[];
   watchlistDefaultsVersion?: number; // which default keyword set the user has received
@@ -449,6 +470,8 @@ export interface FilterState {
   dateRange: 'all' | 'today' | 'week' | 'month';
   sortBy: 'newest' | 'oldest' | 'recently_read' | 'recently_viewed' | 'severity' | 'relevance';
 }
+
+export type TvTransition = 'fade' | 'slide' | 'reveal';
 
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 

@@ -29,6 +29,7 @@ const {
 const { refreshPatchMonths, decodeMsrc } = await import('../src/services/intelligence/patchTuesday');
 const { refreshActors, decodeActors, encodeActors } = await import('../src/services/intelligence/actors');
 const { buildEntities } = await import('../src/services/intelligence/entities');
+const { countStatsByDay, mergeStats, decodeStats } = await import('../src/services/intelligence/stats');
 const { countEntitiesByDay, mergeTrends, pickPreviousTrends, trendsVocab, decodeTrends, TREND_RECOUNT_DAYS } = await import('../src/services/intelligence/trends');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
@@ -49,6 +50,7 @@ type ExploitInfo = import('../src/types').ExploitInfo;
 type MsrcData = import('../src/types').MsrcData;
 type ActorsData = import('../src/types').ActorsData;
 type TrendsData = import('../src/types').TrendsData;
+type StatsData = import('../src/types').StatsData;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
@@ -58,6 +60,7 @@ const RANSOMWARE_OUT = resolve(root, 'public/data/ransomware.json'); // group in
 const MSRC_OUT = resolve(root, 'public/data/msrc.json'); // Patch Tuesday releases: the Vulnerabilities page's Patch Tuesday tab only
 const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and malware profiles: the actor and malware panels and trending chips
 const ENTITIES_OUT = resolve(root, 'public/data/entities.json'); // the names text links to their panels, loaded after first paint
+const STATS_OUT = resolve(root, 'public/data/stats.json'); // daily counts of CVEs, KEV additions, exploits and victims, 400 days: the dashboards
 const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // mention counts per entity (daily, then weekly), two years: the detail panels' mention history
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
 // The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
@@ -496,6 +499,34 @@ function loadCachedTrends(): TrendsData | null {
   }
 }
 
+/** The published stats.json (PREVIOUS_STATS_URL), read like the trends history */
+async function loadPreviousStats(): Promise<{ data: StatsData | null; error?: string }> {
+  if (!process.env.PREVIOUS_STATS_URL) return { data: null };
+  let error = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const data = decodeStats(await getJson(process.env.PREVIOUS_STATS_URL, 60000));
+      if (data) return { data };
+      error = 'malformed file';
+    } catch (err) {
+      error = errorText(err);
+      if (error === 'HTTP 404') return { data: null }; // first run
+    }
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  return { data: null, error };
+}
+
+/** The workflow's cached copy of the last run's stats.json (PREVIOUS_STATS_FILE) */
+function loadCachedStats(): StatsData | null {
+  if (!process.env.PREVIOUS_STATS_FILE) return null;
+  try {
+    return decodeStats(JSON.parse(readFileSync(process.env.PREVIOUS_STATS_FILE, 'utf8')));
+  } catch {
+    return null; // no cache yet, or a broken one
+  }
+}
+
 // ---------- Feeds ----------
 
 async function fetchFeeds() {
@@ -528,6 +559,7 @@ const exploitsPromise = loadExploitSources();
 const msrcPromise = loadMsrc();
 const previousActorsPromise = loadPreviousActors();
 const previousTrendsPromise = loadPreviousTrends();
+const previousStatsPromise = loadPreviousStats();
 const dailyPromise = Promise.all([rlPromise, previousActorsPromise])
   .then(([rl, previousActors]) => loadDailySources(previousIntel, rl.updates, !previousActors?.actors.length));
 const kevEntries = await loadKev();
@@ -712,6 +744,27 @@ report({
     : 'no previous history, started',
 });
 
+// Stats: daily counts from this run's CVEs (critical, and CVSS 7-8.9 as high), KEV, exploits and victims,
+// merged into the carried-over history. Same rule as trends: nothing is written if the history couldn't be read
+const publishedStats = await previousStatsPromise;
+const statsBase = pickPreviousTrends(loadCachedStats(), publishedStats);
+const statsNow = Date.now();
+const statsDays = mergeStats(
+  statsBase.base,
+  countStatsByDay({ notable: [...notable, ...watchable], kev: kevEntries, exploits, victims }, statsNow),
+  statsNow,
+);
+const statsDayKeys = Object.keys(statsDays);
+report({
+  id: 'stats',
+  label: 'Daily-count history',
+  status: statsBase.write ? 'ok' : 'failed',
+  count: statsDayKeys.length,
+  detail: !statsBase.write ? `previous history unreadable (${publishedStats.error}), kept previous`
+    : statsBase.base ? `since ${statsDayKeys[0]}, from the ${statsBase.source === 'cache' ? 'Action cache' : 'published file'}${publishedStats.error ? ` (published file: ${publishedStats.error})` : ''}`
+    : 'no previous history, started',
+});
+
 // Which groups exploit which CVE, for the Vulnerabilities page
 const cveGroups: Record<string, string[]> = {};
 for (const g of Object.values(intelGroups)) for (const c of g.cves ?? []) (cveGroups[c.cve] ??= []).push(g.name);
@@ -742,6 +795,8 @@ const entitiesJson = JSON.stringify({ version: 1, generatedAt, ...entities });
 writeFileSync(ENTITIES_OUT, entitiesJson);
 const trendsJson = trendsBase.write ? JSON.stringify({ version: 1, generatedAt, ...trends }) : '';
 if (trendsBase.write) writeFileSync(TRENDS_OUT, trendsJson);
+const statsJson = statsBase.write ? JSON.stringify({ version: 1, generatedAt, days: statsDays }) : '';
+if (statsBase.write) writeFileSync(STATS_OUT, statsJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
@@ -755,5 +810,8 @@ console.log(`Entities: ${entities.vendors.length} vendors, ${entities.groups.len
 console.log(trendsBase.write
   ? `Trends: ${trendDayKeys.length} days and ${Object.keys(trends.weeks).length} weeks since ${trendsSince}, ${(trendsJson.length / 1024).toFixed(0)} KB${trendsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
   : `Trends: not written, the previous history couldn't be read (${publishedTrends.error})`);
+console.log(statsBase.write
+  ? `Stats: ${statsDayKeys.length} days since ${statsDayKeys[0]}, ${(statsJson.length / 1024).toFixed(0)} KB${statsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
+  : `Stats: not written, the previous history couldn't be read (${publishedStats.error})`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);
