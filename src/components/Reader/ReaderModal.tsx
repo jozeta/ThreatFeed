@@ -7,6 +7,7 @@ import { ArticleImage } from '../Common/ArticleImage';
 import { SeverityBadge, WatchlistBadge, CveChip, StackBadge } from '../Common/ThreatBadges';
 import { downloadText, iocsToCsv, iocsToStix } from '../../services/intelligence/iocExport';
 import { extractIOCs } from '../../services/intelligence/iocExtractor';
+import { iocLookupLinks } from '../../services/intelligence/iocLinks';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { sanitizeHtml } from '../../services/rss/sanitizer';
 import {
@@ -26,6 +27,27 @@ import {
   Terminal,
   FileText
 } from 'lucide-react';
+
+// A copy/CVE chip followed by small lookup chips (VirusTotal, GreyNoise, ...); in-app links stay in the tab
+const IocWithLookups: React.FC<{ lookups: { label: string; url: string }[]; onNavigate?: () => void; children: React.ReactNode }> = ({ lookups, onNavigate, children }) => (
+  <span className="inline-flex flex-wrap items-center gap-1">
+    {children}
+    {lookups.map((l) => {
+      const inApp = l.url.startsWith('#');
+      return (
+        <a
+          key={l.label}
+          href={l.url}
+          {...(inApp ? { onClick: onNavigate } : { target: '_blank', rel: 'noopener noreferrer' })}
+          title={`Look up on ${l.label}`}
+          className="px-1 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide text-theme-text-muted hover:text-theme-accent border border-theme-border hover:border-theme-accent/50 transition-colors"
+        >
+          {l.label}
+        </a>
+      );
+    })}
+  </span>
+);
 
 interface ReaderModalProps {
   article: Article;
@@ -445,14 +467,15 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
               <div className="mt-3 flex flex-wrap gap-1.5 items-center">
                 {extractedIOCs.map((ioc, idx) => {
+                  const lookups = iocLookupLinks(ioc);
                   if (ioc.type === 'cve') {
-                    return <CveChip key={idx} cve={ioc.value} />;
+                    return <IocWithLookups key={idx} lookups={lookups} onNavigate={onClose}><CveChip cve={ioc.value} /></IocWithLookups>;
                   }
                   if (ioc.type === 'mitre') {
                     return (
                       <a
                         key={idx}
-                        href={`https://attack.mitre.org/techniques/${ioc.value.replace('.', '/')}`}
+                        href={lookups[0].url}
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`Inspect ${ioc.value} on MITRE ATT&CK`}
@@ -464,18 +487,19 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     );
                   }
                   return (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        navigator.clipboard.writeText(ioc.value);
-                      }}
-                      title={`Click to copy ${ioc.type}: ${ioc.value}`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-theme-surface hover:bg-theme-card text-theme-text-muted hover:text-theme-text border border-theme-border transition-colors"
-                    >
-                      <span className="opacity-60">{ioc.type === 'ipv4' ? 'IP:' : 'HASH:'}</span>
-                      <span>{ioc.value.length > 20 ? `${ioc.value.slice(0, 10)}...${ioc.value.slice(-6)}` : ioc.value}</span>
-                      <Copy className="w-2.5 h-2.5 opacity-50" />
-                    </button>
+                    <IocWithLookups key={idx} lookups={lookups}>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(ioc.value);
+                        }}
+                        title={`Click to copy ${ioc.type}: ${ioc.value}`}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-theme-surface hover:bg-theme-card text-theme-text-muted hover:text-theme-text border border-theme-border transition-colors"
+                      >
+                        <span className="opacity-60">{ioc.type === 'ipv4' ? 'IP:' : 'HASH:'}</span>
+                        <span>{ioc.value.length > 20 ? `${ioc.value.slice(0, 10)}...${ioc.value.slice(-6)}` : ioc.value}</span>
+                        <Copy className="w-2.5 h-2.5 opacity-50" />
+                      </button>
+                    </IocWithLookups>
                   );
                 })}
               </div>
