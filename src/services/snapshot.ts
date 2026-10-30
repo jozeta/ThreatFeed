@@ -1,4 +1,5 @@
 import { Article, CveIntel, DataSourceStatus, FeedHealth, IncidentData, RansomwareIntel, VulnData } from '../types';
+import { decodeWatchable } from './intelligence/vulns';
 
 export interface FeedSnapshot {
   generatedAt: string;
@@ -43,7 +44,7 @@ export async function loadVulnData(): Promise<VulnData | null> {
     if (!res.ok) return null;
     const data = await res.json();
     if (!data || !Array.isArray(data.kev) || !Array.isArray(data.notable) || !Array.isArray(data.advisories) || !Array.isArray(data.epssTop)) return null;
-    return data as VulnData;
+    return { ...data, watchable: decodeWatchable(data.watchable) } as VulnData;
   } catch {
     return null;
   }

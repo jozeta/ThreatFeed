@@ -230,6 +230,20 @@ export function encodeNvdCache(cache: NvdCache): unknown {
   };
 }
 
+/** Compact tuples for CVSS 7-8.9 CVEs (alert rules): short vector and products kept, no description */
+export function encodeWatchable(records: CveRecord[]): unknown[] {
+  return records.map(r => {
+    const t = toTuple(r, false, false);
+    t[8] = r.products ?? null;
+    return t;
+  });
+}
+
+export function decodeWatchable(raw: unknown): CveRecord[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(fromTuple).filter((r): r is CveRecord => r !== null);
+}
+
 /** Parses a cache fetched over the network; anything malformed (or an older format) means a full fetch */
 export function decodeNvdCache(raw: any): NvdCache | null {
   if (!raw || raw.version !== 2 || isNaN(Date.parse(raw.fetchedAt)) || !Array.isArray(raw.records) || !Array.isArray(raw.kev)) return null;

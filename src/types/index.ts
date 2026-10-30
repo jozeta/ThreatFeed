@@ -220,6 +220,7 @@ export interface VulnData {
   kev: KevEntry[]; // the whole catalog
   nvd: NvdStats | null;
   notable: CveRecord[]; // critical (CVSS >= 9) CVEs from the NVD window
+  watchable?: CveRecord[]; // CVSS 7–8.9 CVEs from the NVD window, no descriptions (alert rules)
   advisories: OssAdvisory[];
   epssTop: EpssScore[]; // highest exploitation probability across all CVEs
   exploits?: Record<string, ExploitInfo>; // for the CVEs above

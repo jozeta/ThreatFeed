@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyNvdUpdates, assignerName, cvssBand, daysToKev, median, timeToKevBucket, decodeNvdCache, encodeNvdCache, isRemoteNoAuth, kevPerMonth, parseVector, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd } from './vulns';
-import { KevEntry } from '../../types';
+import { applyNvdUpdates, assignerName, cvssBand, daysToKev, median, timeToKevBucket, decodeNvdCache, encodeNvdCache, isRemoteNoAuth, kevPerMonth, parseVector, normalizeAdvisory, normalizeKev, normalizeNvdCve, summarizeNvd, encodeWatchable, decodeWatchable, severityFromScore } from './vulns';
+import { CveRecord, KevEntry } from '../../types';
 
 describe('normalizeKev', () => {
   it('keeps the catalog fields and flags ransomware use', () => {
@@ -177,5 +177,23 @@ describe('time to KEV', () => {
     expect(median([5, 1, 9])).toBe(5);
     expect(median([1, 2, 3, 10])).toBe(3);
     expect(median([])).toBeUndefined();
+  });
+});
+
+describe('watchable CVEs', () => {
+  const rec = (id: string, score: number): CveRecord => ({
+    id, published: '2026-10-20T00:00:00.000Z', score, severity: severityFromScore(score), cwe: 'CWE-79',
+    description: 'long text', vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+    ssvc: { exploitation: 'poc', automatable: 'yes' }, products: ['Fortinet FortiOS', 'Fortinet FortiProxy'],
+  });
+  it('round-trips id, score, cwe, short vector, ssvc and products and drops the description', () => {
+    const [r] = decodeWatchable(encodeWatchable([rec('CVE-2026-1', 7.5)]));
+    expect(r).toMatchObject({ id: 'CVE-2026-1', score: 7.5, severity: 'HIGH', cwe: 'CWE-79', vector: 'AV:N/PR:N/UI:N', products: ['Fortinet FortiOS', 'Fortinet FortiProxy'] });
+    expect(r.ssvc?.exploitation).toBe('poc');
+    expect(r.description).toBeUndefined();
+  });
+  it('ignores malformed input', () => {
+    expect(decodeWatchable(null)).toEqual([]);
+    expect(decodeWatchable([['bad'], 5])).toEqual([]);
   });
 });

@@ -20,7 +20,7 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, D
 const { parseFeedXml } = await import('../src/services/rss/parser');
 const { filterAndLimitArticles } = await import('../src/services/rss/fetcher');
 const { normalizeVictim, normalizeGroup, normalizeBreach, mergeVictims } = await import('../src/services/intelligence/incidents');
-const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory, encodeNvdCache, decodeNvdCache, applyNvdUpdates, statsVector } = await import('../src/services/intelligence/vulns');
+const { normalizeKev, normalizeNvdCve, summarizeNvd, normalizeAdvisory, encodeNvdCache, decodeNvdCache, encodeWatchable, applyNvdUpdates, statsVector } = await import('../src/services/intelligence/vulns');
 const {
   parseMetasploit, parseNuclei, parsePocIndex, exploitInfo, normalizeGroupDetail, cvesInTtps, normalizePublicAttack,
   cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor, malpediaProfiles, stopRansomwareAdvisories,
@@ -448,6 +448,8 @@ const [nvd, advisories, epssTop] = await vulnSourcesPromise;
 const nvdKev = nvd?.cache.kev ?? {};
 const notable = (nvd?.cache.records ?? []).filter(r => (r.score ?? 0) >= 9).sort((a, b) => b.published.localeCompare(a.published));
 
+const watchable = (nvd?.cache.records ?? []).filter(r => (r.score ?? 0) >= 7 && (r.score ?? 0) < 9).sort((a, b) => b.published.localeCompare(a.published));
+
 // EPSS for every CVE the app shows: in articles, the KEV catalog and critical NVD records
 const cves = Array.from(new Set([
   ...articles.flatMap(a => a.cves || []),
@@ -485,6 +487,7 @@ const vulns: VulnData = {
     .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
   nvd: nvd ? summarizeNvd(nvd.cache.records, nvd.from, nvd.to) : null,
   notable: notable.map(r => ({ ...r, epss: epss.get(r.id)?.epss })),
+  watchable: encodeWatchable(watchable) as VulnData['watchable'],
   advisories,
   epssTop,
   exploits,
@@ -599,7 +602,7 @@ if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)))
 const healthy = results.filter(r => r.health.status === 'healthy').length;
 const mb = (s: string) => `${(s.length / 1e6).toFixed(2)} MB`;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${mb(json)}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
+console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${watchable.length} CVSS 7–8.9 (${mb(JSON.stringify(vulns.watchable))}), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
 console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);
