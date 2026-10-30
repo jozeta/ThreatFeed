@@ -811,7 +811,7 @@ console.log(trendsBase.write
   ? `Trends: ${trendDayKeys.length} days and ${Object.keys(trends.weeks).length} weeks since ${trendsSince}, ${(trendsJson.length / 1024).toFixed(0)} KB${trendsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
   : `Trends: not written, the previous history couldn't be read (${publishedTrends.error})`);
 console.log(statsBase.write
-  ? `Stats: ${statsDayKeys.length} days since ${statsDayKeys[0]}, ${(statsJson.length / 1024).toFixed(0)} KB`
+  ? `Stats: ${statsDayKeys.length} days since ${statsDayKeys[0]}, ${(statsJson.length / 1024).toFixed(0)} KB${statsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
   : `Stats: not written, the previous history couldn't be read (${publishedStats.error})`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);
