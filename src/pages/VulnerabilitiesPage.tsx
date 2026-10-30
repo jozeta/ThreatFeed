@@ -4,7 +4,7 @@ import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTabInk } from '../hooks/useTabInk';
 import { useMsrc, useVulns } from '../hooks/useVulns';
-import { useHashParam, useHashRoute } from '../hooks/useHashRoute';
+import { openPanel, useHashRoute } from '../hooks/useHashRoute';
 import { formatRelativeTime } from '../utils/date';
 import { KevTab } from './vulns/KevTab';
 import { NewCvesTab } from './vulns/NewCvesTab';
@@ -36,8 +36,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
   const ink = useTabInk(tab);
   const setTab = (t: Tab) => navigate('vulnerabilities', t);
   // The CVE panel itself is the app's, over any page
-  const [, setCveParam] = useHashParam('cve');
-  const openCve = (cve: string) => setCveParam(cve, true);
+  const openCve = (cve: string) => openPanel('cve', cve);
 
   const watched = settings.watchedCves;
   const watch = (cve: string) => updateSettings({ watchedCves: [...watched.filter((c) => c !== cve), cve] });

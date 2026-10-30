@@ -16,7 +16,7 @@ import { formatMastheadDate } from './utils/date';
 import { ActiveNavTab, Article } from './types';
 import { AlertMonitor } from './components/AlertMonitor';
 import { CveWatchMonitor } from './components/CveWatchMonitor';
-import { redirectRemovedPage, setHashParams, useHashRoute } from './hooks/useHashRoute';
+import { closeAllPanels, closePanel, PANEL_PARAMS, panelParam, redirectRemovedPage, useHashRoute } from './hooks/useHashRoute';
 import { usePanelLevels } from './hooks/usePanelLevels';
 import { PanelLevel } from './components/Common/SidePanel';
 
@@ -48,9 +48,9 @@ export const App: React.FC = () => {
   const setActiveTab = useCallback((tab: ActiveNavTab) => navigate(tab), [navigate]);
   // Old links to removed pages (#/trends, #/actors?actor=G0007) become the newspaper's, keeping their panel
   useEffect(redirectRemovedPage);
-  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…, ?tag=…) open over any page
-  const panel = (key: string) => route.params.get(key) ?? '';
-  const [vendor, cve, actor, malware, group, tag] = ['vendor', 'cve', 'actor', 'malware', 'group', 'tag'].map(panel);
+  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…, ?tag=…) open over any page;
+  // a blank, overlong or (for ?cve=) malformed value opens none
+  const { actor, malware, group, vendor, cve, tag } = Object.fromEntries(PANEL_PARAMS.map((key) => [key, panelParam(key, route.params.get(key))]));
   const levels = usePanelLevels(route.params, Boolean(activeArticle));
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
@@ -138,6 +138,11 @@ export const App: React.FC = () => {
     setReaderOrder(displayArticles.map((a) => a.id));
     setActiveArticle(article);
   };
+  // Reading an article from a panel closes every panel first, so none is left hidden under the reader
+  const openArticleFromPanel = (article: Article) => {
+    closeAllPanels();
+    handleOpenArticle(article);
+  };
 
   const handleSelectFeedFromSources = (feedId: string) => {
     updateFilter('selectedSourceId', feedId);
@@ -222,19 +227,19 @@ export const App: React.FC = () => {
       {/* Detail panels, over whichever page opened them, stacked in the order they were opened (their levels).
           Keyed by what they show, so a panel opened again for something else comes in anew, on top */}
       <Suspense fallback={null}>
-        {actor && <PanelLevel.Provider value={levels.actor ?? 0}><ActorPanelHost key={actor} id={actor} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
-        {malware && <PanelLevel.Provider value={levels.malware ?? 0}><MalwarePanelHost key={malware} id={malware} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
-        {group && <PanelLevel.Provider value={levels.group ?? 0}><GroupPanelHost key={group} id={group} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
-        {vendor && <PanelLevel.Provider value={levels.vendor ?? 0}><VendorPanelHost key={vendor} vendor={vendor} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
-        {tag && <PanelLevel.Provider value={levels.tag ?? 0}><TagPanelHost key={tag} id={tag} onOpenArticle={handleOpenArticle} /></PanelLevel.Provider>}
+        {actor && <PanelLevel.Provider value={levels.actor ?? 0}><ActorPanelHost key={actor} id={actor} onOpenArticle={openArticleFromPanel} /></PanelLevel.Provider>}
+        {malware && <PanelLevel.Provider value={levels.malware ?? 0}><MalwarePanelHost key={malware} id={malware} onOpenArticle={openArticleFromPanel} /></PanelLevel.Provider>}
+        {group && <PanelLevel.Provider value={levels.group ?? 0}><GroupPanelHost key={group} id={group} onOpenArticle={openArticleFromPanel} /></PanelLevel.Provider>}
+        {vendor && <PanelLevel.Provider value={levels.vendor ?? 0}><VendorPanelHost key={vendor} vendor={vendor} onOpenArticle={openArticleFromPanel} /></PanelLevel.Provider>}
+        {tag && <PanelLevel.Provider value={levels.tag ?? 0}><TagPanelHost key={tag} id={tag} onOpenArticle={openArticleFromPanel} /></PanelLevel.Provider>}
         {cve && (
           <PanelLevel.Provider value={levels.cve ?? 0}>
             <CvePanelHost
               key={cve}
               cve={cve}
               articles={articles}
-              onOpenArticle={(a) => { setHashParams({ cve: '' }); handleOpenArticle(a); }}
-              onClose={() => setHashParams({ cve: '' })}
+              onOpenArticle={openArticleFromPanel}
+              onClose={() => closePanel('cve')}
             />
           </PanelLevel.Provider>
         )}

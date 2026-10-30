@@ -49,11 +49,11 @@ export function buildHash(page: ActiveNavTab, sub = '', params?: URLSearchParams
   return `#/${path}${query ? `?${query}` : ''}`;
 }
 
-function go(hash: string, replace: boolean) {
+function go(hash: string, replace: boolean, state: unknown = null) {
   if (hash === window.location.hash || (hash === '#/' && !window.location.hash)) return;
   const url = `${window.location.pathname}${window.location.search}${hash}`;
   if (replace) window.history.replaceState(window.history.state, '', url);
-  else window.history.pushState(null, '', url);
+  else window.history.pushState(state, '', url);
   window.dispatchEvent(new Event(ROUTE_EVENT)); // pushState doesn't fire hashchange
 }
 
@@ -91,10 +91,101 @@ export function withPanelOnTop(params: URLSearchParams, key: string, value: stri
   return next;
 }
 
-/** Opens a panel over the current page and any panels already open, with a history entry so Back closes it */
+/**
+ * A panel's parameter as its host should get it, or '' to show no panel: trimmed, at most 200 characters, and
+ * for ?cve= an upper-cased CVE id (so a mistyped link can't put junk on the watchlist)
+ */
+export function panelParam(key: PanelParam, raw: string | null): string {
+  const value = raw?.trim() ?? '';
+  if (!value || value.length > 200) return '';
+  if (key !== 'cve') return value;
+  const id = value.toUpperCase();
+  return /^CVE-\d{4}-\d{4,}$/.test(id) ? id : '';
+}
+
+/**
+ * What a panel's history entry knows, so closing it can go Back instead of adding to the history: the panel it
+ * opened, the hash it was opened from, and how many such entries in a row lead back to a hash without them
+ */
+interface PanelEntryState { panel: PanelParam; from: string; depth: number }
+
+const isPanelParam = (key: string): key is PanelParam => (PANEL_PARAMS as readonly string[]).includes(key);
+const currentHash = () => { const r = parseHash(window.location.hash); return buildHash(r.page, r.sub, r.params); };
+function hashWithout(keys: readonly string[]) {
+  const route = parseHash(window.location.hash);
+  for (const key of keys) route.params.delete(key);
+  return buildHash(route.page, route.sub, route.params);
+}
+
+/**
+ * How many entries Back can undo here, each one a panel opened: 0 when this entry didn't open a panel (a deep
+ * link, a shared URL) or its hash changed since, other than by raising a panel already open
+ */
+function panelDepth(): number {
+  const s = window.history.state as Partial<PanelEntryState> | null;
+  if (!s || typeof s.panel !== 'string' || !isPanelParam(s.panel) || typeof s.from !== 'string' || typeof s.depth !== 'number') return 0;
+  return hashWithout([s.panel]) === s.from ? s.depth : 0;
+}
+
+// Going Back lands later (popstate); closes asked for meanwhile wait for it, so each sees the hash it closes on
+let backPending = false;
+const afterBack: (() => void)[] = [];
+function back(steps: number, then?: () => void) {
+  backPending = true;
+  if (then) afterBack.push(then);
+  window.history.go(-steps);
+}
+const onPopState = () => {
+  backPending = false;
+  afterBack.splice(0).forEach((run) => run());
+};
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', onPopState);
+  import.meta.hot?.dispose(() => window.removeEventListener('popstate', onPopState));
+}
+
+// Each panel's open count, so a link to a panel that is already open can still raise it over the reader (usePanelLevels)
+let opens: Partial<Record<PanelParam, number>> = {};
+const openListeners = new Set<() => void>();
+export const panelOpens = {
+  get: () => opens,
+  subscribe(listener: () => void) {
+    openListeners.add(listener);
+    return () => { openListeners.delete(listener); };
+  },
+};
+
+/**
+ * Opens a panel over the current page and any panels already open, with a history entry so Back closes it. One
+ * already open showing the same thing is raised to the top in place instead, adding no entry.
+ */
 export function openPanel(key: PanelParam, value: string) {
   const current = parseHash(window.location.hash);
-  go(buildHash(current.page, current.sub, withPanelOnTop(current.params, key, value)), false);
+  const hash = buildHash(current.page, current.sub, withPanelOnTop(current.params, key, value));
+  opens = { ...opens, [key]: (opens[key] ?? 0) + 1 };
+  openListeners.forEach((l) => l());
+  if (current.params.get(key) === value) return go(hash, true);
+  const state: PanelEntryState = { panel: key, from: currentHash(), depth: panelDepth() + 1 };
+  go(hash, false, state);
+}
+
+/**
+ * Closes a panel (its ✕, Escape, the backdrop). The panel on top that this app opened goes Back through its own
+ * entry, so Back afterwards doesn't bring it again; a deep-linked one, or one under another, is removed in place.
+ */
+export function closePanel(key: PanelParam) {
+  if (backPending) return void afterBack.push(() => closePanel(key));
+  const s = window.history.state as Partial<PanelEntryState> | null;
+  if (s?.panel === key && panelDepth() > 0) return back(1);
+  setHashParams({ [key]: '' });
+}
+
+/** Closes every panel at once (reading an article from one): Back to before the first this app opened, then any deep-linked ones in place */
+export function closeAllPanels() {
+  if (backPending) return void afterBack.push(closeAllPanels);
+  const depth = panelDepth();
+  if (depth > 0) return back(depth, closeAllPanels);
+  go(hashWithout(PANEL_PARAMS), true);
 }
 
 /** Rewrites an unknown or removed page's hash in place (no history entry), e.g. #/actors?actor=G0007 to #/?actor=G0007 */

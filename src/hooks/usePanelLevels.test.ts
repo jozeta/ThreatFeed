@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { usePanelLevels } from './usePanelLevels';
 import { READER_LEVEL } from '../components/Common/panelStack';
+import { openPanel } from './useHashRoute';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -29,5 +30,17 @@ describe('usePanelLevels', () => {
     expect(levels).toEqual({ vendor: READER_LEVEL + 1, group: READER_LEVEL + 2 });
     await render('vendor=Cisco&group=akira', false); // the reader closed
     expect(levels).toEqual({ vendor: 0, group: 1 });
+  });
+
+  it('raises a panel already open under the reader when a link in the article opens it again', async () => {
+    window.history.replaceState(null, '', '#/?vendor=Fortinet');
+    await render('vendor=Fortinet', false);
+    await render('vendor=Fortinet', true); // the reader opens over the vendor panel
+    expect(levels).toEqual({ vendor: 0 });
+    await act(async () => openPanel('vendor', 'Fortinet')); // a Fortinet link in the article: the hash stays as it is
+    await render('vendor=Fortinet', true);
+    expect(levels).toEqual({ vendor: READER_LEVEL + 1 });
+    await render('vendor=Fortinet', false);
+    expect(levels).toEqual({ vendor: 0 });
   });
 });

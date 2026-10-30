@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useHashParam } from '../../hooks/useHashRoute';
+import { openPanel } from '../../hooks/useHashRoute';
 import { isPubliclyReported, publicReportIndex } from '../../services/intelligence/enrichment';
 import { LeakSiteVictim, RansomwareIntel } from '../../types';
 import { countryFlag, countryName, groupDisplayName, localCountry, NORDIC_COUNTRIES } from '../../utils/countries';
@@ -32,9 +32,8 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, int
   const [sector, setSector] = useState('');
   const [query, setQuery] = useState('');
   const [reportedOnly, setReportedOnly] = useState(false);
-  // Opening a group sets ?group= in the URL; the Ransomware page shows the panel (on any tab)
-  const [, setGroupParam] = useHashParam('group');
-  const setOpenGroup = (g: string) => setGroupParam(g.toLowerCase(), true);
+  // Opening a group sets ?group= in the URL; the app shows its panel over any page
+  const setOpenGroup = (g: string) => openPanel('group', g.toLowerCase());
 
   // Victims that also show up in press reports or official breach notices (Ransomware.live)
   const reports = useMemo(() => publicReportIndex(intel?.attacks ?? []), [intel]);

@@ -3,7 +3,7 @@ import { Article } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useActors, useRansomwareIntel, useTrends, useVulns } from '../hooks/useVulns';
 import { useLeakSiteVictims } from '../hooks/useLeakSiteVictims';
-import { openPanel, setHashParams } from '../hooks/useHashRoute';
+import { closePanel, openPanel } from '../hooks/useHashRoute';
 import { actorMentions } from '../services/intelligence/actors';
 import { weeklySeries } from '../services/intelligence/trends';
 import { groupDisplayName } from '../utils/countries';
@@ -15,9 +15,8 @@ import { TagPanel } from './TagPanel';
 /**
  * The actor (?actor=G0007), malware (?malware=<id>), ransomware group (?group=<key>) and tag (?tag=Ransomware) panels, mounted once by
  * the app so any page can open them. What a panel opens (software, a group, a CVE) goes on top of it, with a
- * history entry so Back returns to the one below. Reading an article closes them.
+ * history entry so Back returns to the one below. Reading an article closes them all (App's onOpenArticle).
  */
-const PROFILE_KEYS = { actor: '', malware: '', cve: '' };
 const openProfile = (key: 'actor' | 'malware', id: string) => openPanel(key, id);
 const openCve = (cve: string) => openPanel('cve', cve);
 
@@ -43,8 +42,8 @@ export const ActorPanelHost: React.FC<Props> = ({ id, onOpenArticle }) => {
       weekly={weekly}
       onOpenMalware={(m) => openProfile('malware', m)}
       onOpenCve={openCve}
-      onOpenArticle={(a) => { setHashParams(PROFILE_KEYS); onOpenArticle(a); }}
-      onClose={() => setHashParams({ actor: '' })}
+      onOpenArticle={onOpenArticle}
+      onClose={() => closePanel('actor')}
     />
   );
 };
@@ -66,8 +65,8 @@ export const MalwarePanelHost: React.FC<Props> = ({ id, onOpenArticle }) => {
       weekly={weekly}
       onOpenActor={(a) => openProfile('actor', a)}
       onOpenCve={openCve}
-      onOpenArticle={(a) => { setHashParams(PROFILE_KEYS); onOpenArticle(a); }}
-      onClose={() => setHashParams({ malware: '' })}
+      onOpenArticle={onOpenArticle}
+      onClose={() => closePanel('malware')}
     />
   );
 };
@@ -89,8 +88,8 @@ export const GroupPanelHost: React.FC<Props> = ({ id: param, onOpenArticle }) =>
       profile={profile}
       intel={intel?.groups[id]}
       articles={articles}
-      onOpenArticle={(a) => { setHashParams({ group: '' }); onOpenArticle(a); }}
-      onClose={() => setHashParams({ group: '' })}
+      onOpenArticle={onOpenArticle}
+      onClose={() => closePanel('group')}
     />
   );
 };
@@ -104,9 +103,9 @@ export const TagPanelHost: React.FC<Props> = ({ id, onOpenArticle }) => {
       tag={id}
       articles={articles}
       vulns={vulns}
-      onOpenArticle={(a) => { setHashParams({ tag: '' }); onOpenArticle(a); }}
+      onOpenArticle={onOpenArticle}
       onOpenCve={openCve}
-      onClose={() => setHashParams({ tag: '' })}
+      onClose={() => closePanel('tag')}
     />
   );
 };

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildHash, canonicalHash, panelLevels, parseHash, withPanelOnTop } from './useHashRoute';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildHash, canonicalHash, closeAllPanels, closePanel, openPanel, panelLevels, panelParam, parseHash, withPanelOnTop } from './useHashRoute';
 
 describe('hash routes', () => {
   it('parses page, tab and parameters', () => {
@@ -57,5 +57,123 @@ describe('hash routes', () => {
     expect(withPanelOnTop(params, 'group', 'play').toString()).toBe('vendor=Fortinet&q=x&group=play');
     expect(withPanelOnTop(params, 'actor', 'G0007').toString()).toBe('group=akira&vendor=Fortinet&q=x&actor=G0007');
     expect(params.toString()).toBe('group=akira&vendor=Fortinet&q=x');
+  });
+});
+
+describe('panel parameters', () => {
+  it('keeps a trimmed value of at most 200 characters, and nothing for a blank or longer one', () => {
+    expect(panelParam('vendor', ' Fortinet ')).toBe('Fortinet');
+    expect(panelParam('tag', null)).toBe('');
+    expect(panelParam('tag', '   ')).toBe('');
+    expect(panelParam('group', 'a'.repeat(200))).toBe('a'.repeat(200));
+    expect(panelParam('group', 'a'.repeat(201))).toBe('');
+  });
+
+  it('upper-cases a CVE id and drops anything that is not one', () => {
+    expect(panelParam('cve', 'cve-2026-21643')).toBe('CVE-2026-21643');
+    expect(panelParam('cve', 'CVE-2026-123')).toBe('');
+    expect(panelParam('cve', 'CVE-2026-1234<x>')).toBe('');
+    expect(panelParam('cve', 'junk')).toBe('');
+  });
+});
+
+describe('opening and closing panels', () => {
+  const hash = () => window.location.hash;
+  // Back (history.go) lands asynchronously, with a popstate
+  const pops = (n: number) => new Promise<void>((resolve) => {
+    let left = n;
+    const on = () => { if (--left === 0) { window.removeEventListener('popstate', on); resolve(); } };
+    window.addEventListener('popstate', on);
+  });
+  const panelsOpen = () => Object.keys(panelLevels(parseHash(hash()).params));
+
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#/');
+    window.history.pushState(null, '', '#/latest'); // a page visited in the app before the panels
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('closing the panels goes back through their entries, so Back afterwards reopens none', async () => {
+    openPanel('vendor', 'Fortinet');
+    openPanel('cve', 'CVE-2026-1234');
+    expect(hash()).toBe('#/latest?vendor=Fortinet&cve=CVE-2026-1234');
+    let popped = pops(1);
+    closePanel('cve');
+    await popped;
+    expect(hash()).toBe('#/latest?vendor=Fortinet');
+    popped = pops(1);
+    closePanel('vendor');
+    await popped;
+    expect(hash()).toBe('#/latest');
+    popped = pops(1);
+    window.history.back(); // the user's Back: the page before, still in the app, with no panel
+    await popped;
+    expect(hash()).toBe('#/');
+    expect(panelsOpen()).toEqual([]);
+  });
+
+  it('a second close while the first is still going back waits for it (Escape twice during the exit)', async () => {
+    openPanel('vendor', 'Fortinet');
+    openPanel('cve', 'CVE-2026-1234');
+    const popped = pops(2);
+    closePanel('cve');
+    closePanel('vendor');
+    await popped;
+    expect(hash()).toBe('#/latest');
+  });
+
+  it('a deep-linked panel closes in place, without going back out of the app', () => {
+    window.history.replaceState(null, '', '#/?vendor=Fortinet');
+    const go = vi.spyOn(window.history, 'go');
+    const length = window.history.length;
+    closePanel('vendor');
+    expect(hash()).toBe('#/');
+    expect(go).not.toHaveBeenCalled();
+    expect(window.history.length).toBe(length);
+  });
+
+  it('a panel with another on top of it closes in place', () => {
+    openPanel('vendor', 'Fortinet');
+    openPanel('cve', 'CVE-2026-1234');
+    const go = vi.spyOn(window.history, 'go');
+    closePanel('vendor');
+    expect(hash()).toBe('#/latest?cve=CVE-2026-1234');
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  it('opening a panel that is already open raises it in place, with no new entry', () => {
+    openPanel('vendor', 'Fortinet');
+    openPanel('cve', 'CVE-2026-1234');
+    const length = window.history.length;
+    openPanel('vendor', 'Fortinet');
+    expect(hash()).toBe('#/latest?cve=CVE-2026-1234&vendor=Fortinet');
+    expect(window.history.length).toBe(length);
+  });
+
+  it('closing them all (reading an article from a panel) goes back to before the first, so Back reopens none', async () => {
+    openPanel('vendor', 'Fortinet');
+    openPanel('group', 'akira');
+    openPanel('cve', 'CVE-2026-1234');
+    const popped = pops(1);
+    closeAllPanels();
+    await popped;
+    expect(hash()).toBe('#/latest');
+  });
+
+  it('closing them all on a deep link removes every panel parameter in place, keeping the rest', () => {
+    window.history.replaceState(null, '', '#/vulns/kev?kevVendor=X&vendor=Fortinet&tag=Ransomware&cve=CVE-2026-1234');
+    const go = vi.spyOn(window.history, 'go');
+    closeAllPanels();
+    expect(hash()).toBe('#/vulns/kev?kevVendor=X');
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  it('closing them all after a deep-linked panel had others opened on it goes back, then clears that one too', async () => {
+    window.history.replaceState(null, '', '#/?tag=Ransomware');
+    openPanel('cve', 'CVE-2026-1234');
+    const popped = pops(1);
+    closeAllPanels();
+    await popped;
+    expect(hash()).toBe('#/');
   });
 });

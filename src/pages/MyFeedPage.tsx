@@ -5,7 +5,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useTabInk } from '../hooks/useTabInk';
 import { useVulns } from '../hooks/useVulns';
 import { AlertRow, useAlertFeed } from '../hooks/useAlertFeed';
-import { buildHash, useHashParam, useHashRoute } from '../hooks/useHashRoute';
+import { buildHash, openPanel, useHashParam, useHashRoute } from '../hooks/useHashRoute';
 import { usePagedCount } from '../hooks/usePagedCount';
 import { ListArticle } from '../components/ArticleCard/ListArticle';
 import { NewspaperView } from '../components/Newspaper/NewspaperView';
@@ -93,8 +93,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
   const ink = useTabInk(sub);
   const [ruleParam, setRuleParam] = useHashParam('rule');
   // The CVE panel itself is the app's, over any page
-  const [, setCveParam] = useHashParam('cve');
-  const openCve = (cve: string) => setCveParam(cve, true);
+  const openCve = (cve: string) => openPanel('cve', cve);
 
   const articleById = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
 

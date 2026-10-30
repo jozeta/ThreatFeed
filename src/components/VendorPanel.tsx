@@ -3,7 +3,7 @@ import { Article, MsrcData, VulnData } from '../types';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { useMsrc, useTrends, useVulns } from '../hooks/useVulns';
-import { goToPage, openPanel, setHashParams } from '../hooks/useHashRoute';
+import { closePanel, goToPage, openPanel } from '../hooks/useHashRoute';
 import { canonicalVendor, fetchWikiSummary, vendorSummary, VendorSummary, WikiSummary } from '../services/intelligence/vendor';
 import { severityFromScore } from '../services/intelligence/vulns';
 import { weeklySeries } from '../services/intelligence/trends';
@@ -261,7 +261,7 @@ interface HostProps {
   onOpenArticle: (a: Article) => void;
 }
 
-/** Mounted once by the app for ?vendor=…; closing removes the parameter (and any CVE opened from the panel, which the app's CVE host shows) */
+/** Mounted once by the app for ?vendor=…; closing removes the parameter, and a CVE opened from it is the app's CVE host's */
 const VendorPanelHost: React.FC<HostProps> = (props) => {
   const vulns = useVulns();
   return canonicalVendor(props.vendor) === 'Microsoft'
@@ -277,13 +277,12 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
   // The history counts vendors under the KEV catalog's spelling
   const mentions = useMemo(() => weeklySeries(trends, [`vendor:${summary.name}`, `vendor:${summary.kevVendor ?? summary.name}`]), [trends, summary.name, summary.kevVendor]);
 
-  const close = () => setHashParams({ vendor: '' });
+  const close = () => closePanel('vendor');
 
   const stack = settings.stackKeywords;
   const inStack = stack.some((k) => k.toLowerCase() === summary.name.toLowerCase());
   const hiddenName = summary.kevVendor;
   const hidden = Boolean(hiddenName && settings.hiddenVulnVendors.includes(hiddenName));
-  const read = (a: Article) => { setHashParams({ vendor: '', cve: '' }); onOpenArticle(a); };
 
   return (
     <VendorPanel
@@ -298,7 +297,7 @@ const VendorView: React.FC<HostProps & { vulns: VulnData | null; msrc?: MsrcData
       }) : undefined}
       onOpenCve={(id) => openPanel('cve', id)}
       onOpenProduct={(v, p) => goToPage('vulnerabilities', 'kev', new URLSearchParams({ kevVendor: v, product: `${v} ${p}`, days: '0' }))}
-      onOpenArticle={read}
+      onOpenArticle={onOpenArticle}
       onClose={close}
     />
   );
