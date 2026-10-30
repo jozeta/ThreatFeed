@@ -57,9 +57,13 @@ export function buildEntities(s: EntitySources): Omit<EntitiesData, 'generatedAt
   };
 }
 
-/** entities.json as published, or null if it isn't; malformed entries are dropped (it comes over the network) */
+/**
+ * entities.json as published, or null if it isn't, or is a version this build can't read (1, or none from before
+ * versions); malformed entries are dropped (it comes over the network)
+ */
 export function decodeEntities(raw: any): EntitiesData | null {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.vendors)) return null;
+  if (raw.version !== undefined && raw.version !== 1) return null;
   const list = <K extends string>(v: unknown, idKey: K) =>
     (Array.isArray(v) ? v : [])
       .filter((p: any) => p && typeof p[idKey] === 'string' && p[idKey] && typeof p.name === 'string' && p.name.trim())

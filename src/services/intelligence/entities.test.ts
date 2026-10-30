@@ -49,6 +49,13 @@ describe('decodeEntities', () => {
     expect(decodeEntities([])).toBeNull();
   });
 
+  it('reads version 1 or an unversioned file, and nothing newer it would misread', () => {
+    expect(decodeEntities({ version: 1, vendors: ['Fortinet'] })?.vendors).toEqual(['Fortinet']);
+    expect(decodeEntities({ vendors: ['Fortinet'] })?.vendors).toEqual(['Fortinet']);
+    expect(decodeEntities({ version: 2, vendors: ['Fortinet'] })).toBeNull();
+    expect(decodeEntities({ version: '1', vendors: ['Fortinet'] })).toBeNull();
+  });
+
   it('drops malformed entries and fields, keeping the rest', () => {
     const data = decodeEntities({
       generatedAt: '2026-10-30T12:00:00Z',
