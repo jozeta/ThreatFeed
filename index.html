@@ -20,6 +20,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&display=swap" rel="stylesheet">
 
     <title>ThreatFeed — Security Intelligence Daily</title>
+    <script>
+      // A TV screen (#/…?tv=1 or ?dash=1, e.g. after its automatic reload) is always dark: paint it dark before the app
+      // boots so a light theme never flashes white. App removes this once the dark TV overlay is on screen.
+      if (/[?&](tv|dash)=1(&|$)/.test(location.hash)) {
+        var tvBoot = document.createElement('style');
+        tvBoot.id = 'tv-boot-bg';
+        tvBoot.textContent = 'html,body{background:#07090c!important}';
+        document.head.appendChild(tvBoot);
+      }
+    </script>
   </head>
   <body class="bg-theme-bg text-theme-text antialiased selection:bg-rose-500 selection:text-white min-h-screen">
     <div id="root"></div>

@@ -72,6 +72,7 @@ export const App: React.FC = () => {
   const appRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (appRef.current) appRef.current.inert = tvKind !== null; // React 18 has no `inert` prop
+    document.getElementById('tv-boot-bg')?.remove(); // index.html's pre-boot dark paint: the TV overlay (or the page) is on screen now
   }, [tvKind]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);

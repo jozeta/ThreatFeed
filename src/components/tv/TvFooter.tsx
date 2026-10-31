@@ -5,7 +5,7 @@ import PageCounter from './PageCounter';
 
 const TICK_MS = 30_000; // the indicator updates at least once a minute
 
-/** "14:05", or "30 Oct 14:05" when it is not today */
+/** "14:05", or with the date when it is not today ("Oct 30 14:05" in en-US; the browser's locale order) */
 function freshLabel(at: number, now: number): string {
   const d = new Date(at);
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });

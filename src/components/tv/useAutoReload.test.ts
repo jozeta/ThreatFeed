@@ -3,6 +3,8 @@ import { act, createElement, StrictMode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHECK_EVERY_MS, QUIET_WAIT_MS, RELOAD_KEY, useAutoReload } from './useAutoReload';
+
+const SETTLE = 1500; // the arriving tiles' in-animation, passed by the shell
 import { TV_QUIET_EVENT } from './useLivingWall';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,12 +26,13 @@ const running = (name: string | null) => {
   document.head.appendChild(script);
 };
 const mount = (strict = false) => {
-  function H() { useAutoReload(reload); return null; }
+  function H() { useAutoReload({ reload, settleMs: SETTLE }); return null; }
   root = createRoot(document.createElement('div'));
   act(() => root.render(strict ? createElement(StrictMode, null, createElement(H)) : createElement(H)));
 };
 const advance = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
 const quiet = () => act(() => { window.dispatchEvent(new Event(TV_QUIET_EVENT)); });
+const quietSettled = async () => { quiet(); await advance(SETTLE); };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -78,7 +81,9 @@ describe('useAutoReload', () => {
     await advance(CHECK_EVERY_MS);
     expect(reload).not.toHaveBeenCalled();
     quiet();
-    expect(reload).toHaveBeenCalledTimes(1);
+    await advance(SETTLE - 1);
+    expect(reload).not.toHaveBeenCalled(); // the arriving tiles are still animating in
+    await advance(1);
     expect(JSON.parse(sessionStorage.getItem(RELOAD_KEY)!)).toEqual({ at: Date.now(), build: 'index-B.js' });
   });
 
@@ -93,7 +98,24 @@ describe('useAutoReload', () => {
     await advance(CHECK_EVERY_MS + QUIET_WAIT_MS);
     expect(reload).not.toHaveBeenCalled(); // a swap is in its out phase
     leaving.remove();
-    quiet();
+    await quietSettled();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('when the fallback meets a swap mid-way, retries shortly even without a quiet event (hidden tab)', async () => {
+    running('index-A.js');
+    deploy('index-B.js');
+    const leaving = document.createElement('div');
+    leaving.className = 'tv-root';
+    leaving.innerHTML = '<div data-leaving="1"></div>';
+    document.body.appendChild(leaving);
+    mount();
+    await advance(CHECK_EVERY_MS + QUIET_WAIT_MS);
+    expect(reload).not.toHaveBeenCalled();
+    await advance(3000);
+    expect(reload).not.toHaveBeenCalled(); // still mid-swap
+    leaving.remove();
+    await advance(1000);
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
@@ -124,7 +146,23 @@ describe('useAutoReload', () => {
     await advance(9 * MIN);
     expect(reload).not.toHaveBeenCalled();
     await advance(MIN); // 03:00 tick
-    quiet();
+    await quietSettled();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a nightly reload missed by more than an hour (asleep across 03:00) and waits for the next night', async () => {
+    vi.setSystemTime(new Date(2026, 9, 31, 2, 50));
+    running('index-A.js');
+    deploy('index-A.js');
+    mount();
+    vi.setSystemTime(new Date(2026, 9, 31, 8, 0)); // woke up at 08:00
+    await advance(MIN);
+    await quietSettled();
+    await advance(QUIET_WAIT_MS * 2);
+    expect(reload).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date(2026, 10, 1, 2, 59)); // the next night
+    await advance(2 * MIN); // the next 1-min tick after 03:00
+    await quietSettled();
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
