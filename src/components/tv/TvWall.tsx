@@ -50,7 +50,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings };
   const ref = useRef(latest);
   ref.current = latest;
-  // Tile content by id: every build's tiles, plus whatever is still on screen from earlier builds
+  // Tile content by id: every build's tiles, with the on-screen copy winning for tiles still on screen
   const tilesById = useRef(new Map<string, TvTile>());
   const onScreen = useRef<Slot[]>([]);
 
@@ -81,9 +81,10 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     () => {
       const tiles = build();
       const next = new Map(tiles.map(t => [t.id, t]));
+      // Tiles on screen keep their content until they swap out
       for (const s of onScreen.current) {
         const t = tilesById.current.get(s.itemId);
-        if (t && !next.has(t.id)) next.set(t.id, t);
+        if (t) next.set(t.id, t);
       }
       tilesById.current = next;
       return toEngineItems(tiles);

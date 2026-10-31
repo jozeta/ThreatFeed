@@ -70,6 +70,49 @@ describe('useLivingWall', () => {
     expect(result.slots.length).toBeGreaterThanOrEqual(5);
   });
 
+  it('an empty wall fills at once when data arrives', () => {
+    let data: EngineItem[] = [];
+    let sig = 0;
+    mount(() => data, 60000, () => sig);
+    expect(result.slots.length).toBe(0);
+    data = items(30);
+    sig = 1;
+    act(() => root.render(createElement(Harness)));
+    expect(result.slots.length).toBeGreaterThanOrEqual(5);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('keeps the slot keys when a signature change brings the same first screen', () => {
+    let sig = 0;
+    mount(() => items(30), 60000, () => sig);
+    const before = result.slots.map(s => s.key);
+    sig = 1;
+    act(() => root.render(createElement(Harness)));
+    advance(5000);
+    expect(result.slots.map(s => s.key)).toEqual(before);
+  });
+
+  it('debounces rapid signature changes on a non-empty wall into one rebuild', () => {
+    let data = items(30);
+    let sig = 0;
+    mount(() => data, 60000, () => sig);
+    const snapshots = new Set([result.slots.map(s => s.key).join()]);
+    for (let i = 1; i <= 10; i++) {
+      data = items(30 + i).slice(i); // a different first screen every time
+      sig = i;
+      act(() => root.render(createElement(Harness)));
+      advance(500);
+      snapshots.add(result.slots.map(s => s.key).join());
+    }
+    expect(snapshots.size).toBe(1);
+    advance(2500);
+    snapshots.add(result.slots.map(s => s.key).join());
+    advance(5000);
+    snapshots.add(result.slots.map(s => s.key).join());
+    expect(snapshots.size).toBe(2);
+    expect(result.slots.every(s => +s.itemId.slice(1) >= 10)).toBe(true);
+  });
+
   it('does not swap in the first second after a long hidden period', () => {
     mount(() => items(30));
     advance(1000);
@@ -148,6 +191,8 @@ describe('useLivingWall', () => {
     act(() => root.render(createElement(Harness)));
     advance(450);
     expect(result.leaving.size).toBe(0);
+    expect(result.fallback).toBe(true); // a non-empty wall waits for the data to settle
+    advance(2500);
     expect(result.fallback).toBe(false);
     cellsOk(result.slots, 4, 2);
   });

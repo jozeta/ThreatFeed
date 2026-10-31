@@ -20,7 +20,7 @@ export const WIDE_SHAPES: Shape[] = ['2x1', '2x2'];
 export default function DashboardWall({ build, signature }: { build: () => PanelDef[]; signature?: string | number }) {
   const { settings } = useSettings();
   const reduced = useReducedMotion();
-  // Panels by id: every build's panels, plus whatever is still on screen from earlier builds
+  // Panels by id: every build's panels, with the on-screen copy winning for panels still on screen
   const panelsById = useRef(new Map<string, PanelDef>());
   const onScreen = useRef<Slot[]>([]);
 
@@ -29,9 +29,10 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
     () => {
       const panels = build();
       const next = new Map(panels.map(p => [p.id, p]));
+      // Panels on screen keep their content until they swap out
       for (const s of onScreen.current) {
         const p = panelsById.current.get(s.itemId);
-        if (p && !next.has(p.id)) next.set(p.id, p);
+        if (p) next.set(p.id, p);
       }
       panelsById.current = next;
       return panels.map(({ id, weight, shapes }) => ({ id, weight, shapes }));

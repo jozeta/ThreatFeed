@@ -5,9 +5,11 @@ import { EngineItem, Rng, Slot, WallState, Swap, applySwap, initWall, nextDue, p
 
 export const SWAP_OUT_MS = 450;
 export const REDUCED_OUT_MS = 200;
+/** Signature-driven rebuilds of a non-empty wall wait this long for the data to settle. */
+export const DATA_DEBOUNCE_MS = 2500;
 
 interface Options {
-  /** Changes when the data behind `build` changes; rebuilds the wall until the first swap completes (or while it is empty/fallback) */
+  /** Changes when the data behind `build` changes; rebuilds the wall until the first swap completes (or while it is empty/fallback): at once when empty, otherwise debounced by DATA_DEBOUNCE_MS and skipped when the first screen would hold the same items */
   signature?: string | number;
   outMs?: number;
   now?: () => number;
@@ -42,18 +44,48 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
     setWallState(w);
   };
 
+  const rebuild = (next: WallState) => {
+    generation.current++;
+    setWall(next);
+    setLeaving(new Set());
+    setEpoch(e => e + 1);
+  };
+  /** A signature-driven rebuild: skipped when the wall has settled (and is not a fallback) or the new first screen holds the same items. */
+  const rebuildForData = () => {
+    const w = wallRef.current;
+    if (settled.current && w.slots.length > 0 && !w.fallback) return;
+    const next = initWall(buildRef.current(), w.size, now(), intervalMs, rng, w.cycle + 1, w.seq);
+    const ids = new Set(w.slots.map(t => t.itemId));
+    if (w.slots.length > 0 && next.slots.length === ids.size && next.slots.every(t => ids.has(t.itemId))) return;
+    rebuild(next);
+  };
+  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clearDebounce = () => {
+    if (debounce.current !== undefined) clearTimeout(debounce.current);
+    debounce.current = undefined;
+  };
+  useEffect(() => clearDebounce, []);
+
   useEffect(() => {
     const p = prev.current;
     const w = wallRef.current;
     const changed = p.size !== size || p.intervalMs !== intervalMs;
     const signed = p.signature !== opts.signature && (!settled.current || w.slots.length === 0 || w.fallback);
     prev.current = { size, intervalMs, signature: opts.signature };
-    if (!changed && !signed) return;
-    generation.current++;
-    if (changed) settled.current = false;
-    setWall(initWall(buildRef.current(), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
-    setLeaving(new Set());
-    setEpoch(e => e + 1);
+    if (changed) {
+      clearDebounce();
+      settled.current = false;
+      rebuild(initWall(buildRef.current(), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
+      return;
+    }
+    if (!signed) return;
+    clearDebounce();
+    // An empty wall fills at once; otherwise data changes are debounced so live refreshes don't re-lay out the wall each time
+    if (w.slots.length === 0) return rebuildForData();
+    debounce.current = setTimeout(() => {
+      debounce.current = undefined;
+      rebuildForData();
+    }, DATA_DEBOUNCE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size, intervalMs, opts.signature]);
 
