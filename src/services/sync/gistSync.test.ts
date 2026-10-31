@@ -6,6 +6,13 @@ import { article, feed } from '../../test/fixtures';
 const data = (overrides: any) => ({ version: '1.1', exportDate: '', feeds: [], articleStates: [], bookmarkedArticles: [], settings: null, ...overrides });
 
 describe('mergeSyncData', () => {
+  it('keeps the local disabled categories and does not merge in the remote ones', () => {
+    const local = data({ settings: { watchlistKeywords: [], disabledCategories: ['Policy'] } });
+    const remote = data({ settings: { watchlistKeywords: [], disabledCategories: ['Research', 'Vulnerabilities'] } });
+    const merged = mergeSyncData(local as any, remote) as any;
+    expect(merged.settings.disabledCategories).toEqual(['Policy']);
+  });
+
   it('takes the most recently changed state per article, including un-bookmarking', () => {
     const local = data({ articleStates: [
       { id: 'a', read: true, viewed: true, bookmarked: false, updatedAt: '2026-10-28T10:00:00Z' }, // un-bookmarked later

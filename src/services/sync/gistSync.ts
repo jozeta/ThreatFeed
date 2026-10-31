@@ -38,7 +38,7 @@ export function mergeAlertRules(local: AlertRule[], remote: AlertRule[]): AlertR
 
 /**
  * Merges two devices' data: per-article state takes whichever side changed it last; feeds and
- * bookmarked articles are unioned (local wins on conflicts); settings stay local except keyword
+ * bookmarked articles are unioned (local wins on conflicts); settings stay local (disabled categories too) except keyword
  * lists, which are unioned so a term added on either device survives.
  */
 export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncData {
@@ -60,7 +60,6 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
         watchlistKeywords: union(local.settings.watchlistKeywords, remote.settings.watchlistKeywords),
         stackKeywords: union(local.settings.stackKeywords, remote.settings.stackKeywords),
         mutedKeywords: union(local.settings.mutedKeywords, remote.settings.mutedKeywords),
-        disabledCategories: union(local.settings.disabledCategories, remote.settings.disabledCategories),
         savedSearches: union(local.settings.savedSearches, remote.settings.savedSearches),
         bookmarkFolders: union(local.settings.bookmarkFolders, remote.settings.bookmarkFolders),
         alertRules: mergeAlertRules(local.settings.alertRules, remote.settings.alertRules),
