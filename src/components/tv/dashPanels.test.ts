@@ -129,3 +129,15 @@ describe('ransomPanels', () => {
     expect(ids(ransomPanels({ victims, stats: null, now }))).not.toContain('attacks');
   });
 });
+
+describe('ransomPanels · busiest hours', () => {
+  it('shows the value of the peak hour and every 3rd hour only', () => {
+    const at = (h: number, n: number) => Array.from({ length: n }, (_, i) =>
+      ({ id: `${h}-${i}`, victim: 'v', group: 'g', discoveredAt: `2026-10-29T${String(h).padStart(2, '0')}:10:00Z` }) as LeakSiteVictim);
+    const victims = [...at(0, 2), ...at(1, 4), ...at(5, 9), ...at(6, 3)];
+    const p = ransomPanels({ victims, stats: null, now }).find(x => x.id === 'hours')!;
+    const html = renderToStaticMarkup(createElement(Fragment, null, p.render()));
+    const values = [...html.matchAll(/class="tv-vbar-n">([^<]*)</g)].map(m => m[1]);
+    expect(values.slice(0, 7)).toEqual(['2', ' ', ' ', '0', ' ', '9', '3']); // 5 is the peak
+  });
+});

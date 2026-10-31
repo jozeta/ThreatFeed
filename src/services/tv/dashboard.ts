@@ -226,11 +226,11 @@ export interface VulnExtras {
   patchBreakdown: { month: string; critical: number; important: number; moderate: number; low: number; exploited: number; disclosed: number } | null;
   cvssSpread: { score: number; count: number }[];
   kevRansomware: { cve: string; title: string; dateAdded: string }[];
-  /** The highest EPSS scores right now; title from KEV/notable when known */
+  /** The highest EPSS scores among CVEs published or added to KEV in the last 90 days (else the global top list); title from KEV/notable when known */
   epssTop: { cve: string; epss: number; title?: string }[];
   /** Median whole days from CVE publication to KEV listing, over KEV entries added in the last 90 days */
   timeToKev: { medianDays: number; count: number } | null;
-  /** Most common weaknesses among notable CVEs of the last 30 days */
+  /** Most common weaknesses among critical (CVSS >= 9) CVEs published in the last 30 days */
   topCwes: { cwe: string; label: string; count: number }[];
   /** CISA remediation deadlines from today through the next 6 days, soonest first */
   kevDue: { cve: string; title: string; dueDate: string }[];
@@ -306,6 +306,7 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
   const kevById = new Map(kev.map(k => [k.cve, k]));
   const noteById = new Map(notable.map(r => [r.id, r]));
   const epssTop = new Map((v?.epssTop ?? []).map(e => [e.cve, e.epss]));
+  const watchById = new Map((v?.watchable ?? []).map(r => [r.id, r]));
   type Item = NonNullable<VulnExtras['watchlist']>[number];
   const describe = (cve: string): Item => {
     const k = kevById.get(cve);
@@ -385,18 +386,27 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
     .slice(0, 8)
     .map(k => ({ cve: k.cve, title: `${k.vendor} ${k.product}`.trim(), dateAdded: k.dateAdded }));
 
-  const epssTopList = [...(v?.epssTop ?? [])]
-    .sort((a, b) => b.epss - a.epss || a.cve.localeCompare(b.cve))
+  // Highest exploitation odds now: CVEs published or added to KEV in the last 90 days, by EPSS (KEV, then NVD, then
+  // the global top list); the global top list only when none of them has a score
+  const since90 = dayKey(now - 89 * DAY_MS);
+  const titled = (cve: string, epss: number) => {
+    const k = kevById.get(cve);
+    const n = noteById.get(cve);
+    const title = k ? `${k.vendor} ${k.product}`.trim() : n ? shortTitle(n) : undefined;
+    return title ? { cve, epss, title } : { cve, epss };
+  };
+  const recentIds = new Set<string>();
+  for (const r of [...notable, ...(v?.watchable ?? [])]) if (recent(r.published, since90)) recentIds.add(r.id);
+  for (const k of kev) if (recent(k.dateAdded, since90) || recent(k.published, since90)) recentIds.add(k.cve);
+  const epssOf = (cve: string) => kevById.get(cve)?.epss ?? noteById.get(cve)?.epss ?? watchById.get(cve)?.epss ?? epssTop.get(cve);
+  const byEpss = (a: { cve: string; epss: number }, b: { cve: string; epss: number }) => b.epss - a.epss || b.cve.localeCompare(a.cve, undefined, { numeric: true });
+  const recentScored = [...recentIds].flatMap(cve => { const e = epssOf(cve); return e === undefined ? [] : [{ cve, epss: e }]; });
+  const epssTopList = (recentScored.length ? recentScored : (v?.epssTop ?? []).map(e => ({ cve: e.cve, epss: e.epss })))
+    .sort(byEpss)
     .slice(0, 8)
-    .map(e => {
-      const k = kevById.get(e.cve);
-      const n = noteById.get(e.cve);
-      const title = k ? `${k.vendor} ${k.product}`.trim() : n ? shortTitle(n) : undefined;
-      return title ? { cve: e.cve, epss: e.epss, title } : { cve: e.cve, epss: e.epss };
-    });
+    .map(e => titled(e.cve, e.epss));
 
   // Time to KEV: whole UTC days from publication to listing, never negative (NVD sometimes publishes after CISA lists)
-  const since90 = dayKey(now - 89 * DAY_MS);
   const lags: number[] = [];
   for (const k of kev) {
     const pub = dayOf(k.published);
@@ -406,7 +416,7 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
   const timeToKev = lags.length ? { medianDays: median(lags), count: lags.length } : null;
 
   const cwes = new Map<string, number>();
-  for (const r of notable) if (r.cwe && !NO_CWE.has(r.cwe) && recent(r.published, since30)) cwes.set(r.cwe, (cwes.get(r.cwe) ?? 0) + 1);
+  for (const r of notable) if (r.cwe && !NO_CWE.has(r.cwe) && (r.score ?? 0) >= 9 && recent(r.published, since30)) cwes.set(r.cwe, (cwes.get(r.cwe) ?? 0) + 1);
   const topCwes = top(cwes).map(([cwe, count]) => ({ cwe, label: shortCwe(cwe, v?.cweNames?.[cwe]), count }));
 
   const dueBy = dayKey(now + 6 * DAY_MS);

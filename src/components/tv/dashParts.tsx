@@ -59,6 +59,9 @@ export function Delta({ delta, versus }: { delta?: number; versus: string }) {
   );
 }
 
+/** A text value longer than this steps down a size and may wrap to two lines, so whole words show */
+const LONG_TEXT = 14;
+
 export function StatCard({ label, figure, value, color, versus = 'vs last week', note, text }: {
   label: string; figure?: Figure; value?: number; color?: string; versus?: string; note?: string; text?: string;
 }) {
@@ -71,7 +74,7 @@ export function StatCard({ label, figure, value, color, versus = 'vs last week',
       <div className="tv-label">{label}</div>
       <div className="tv-stat">
         {text !== undefined
-          ? <div className="tv-big tv-big-text" style={{ color }} title={text}>{text}</div>
+          ? <div className={`tv-big tv-big-text${text.length > LONG_TEXT ? ' tv-big-text-long' : ''}`} style={{ color }} title={text}>{text}</div>
           : <div className="tv-big" style={{ color }}>{Math.round(n).toLocaleString()}</div>}
         {figure ? <Delta delta={figure.delta} versus={versus} /> : note ? <span className="tv-delta">{note}</span> : null}
       </div>
@@ -123,8 +126,10 @@ export function HBarList({ label, data, color, format, note }: {
 }
 
 /** Vertical bars that grow from the bottom, one after another; value above, label under. A null value has no bar and no value (no history yet). */
-export function VBars({ label, data, color }: {
+export function VBars({ label, data, color, showValue }: {
   label: string; data: { label: string; n: number | null }[]; color: string | ((i: number) => string);
+  /** Which bars show their value (all by default); the others keep the space so bars stay aligned */
+  showValue?: (i: number) => boolean;
 }) {
   const max = Math.max(1, ...data.map(d => d.n ?? 0));
   return (
@@ -132,7 +137,7 @@ export function VBars({ label, data, color }: {
       <div className="tv-vbars" role="img" aria-label={label}>
         {data.map((d, i) => (
           <div key={d.label + i} className="tv-vbar">
-            <span className="tv-vbar-n">{d.n ?? '\u00a0'}</span>
+            <span className="tv-vbar-n">{d.n !== null && (!showValue || showValue(i)) ? d.n : '\u00a0'}</span>
             <span className="tv-vbar-track">
               {d.n !== null && <i className="tv-grow-y" style={{ ...nth(i), height: `${d.n ? Math.max(2, (d.n / max) * 100) : 0}%`, background: typeof color === 'string' ? color : color(i) }} />}
             </span>

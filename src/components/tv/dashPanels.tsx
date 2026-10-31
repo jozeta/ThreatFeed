@@ -74,18 +74,13 @@ const Score = ({ score }: { score?: number }) => <span className="tv-score">{sco
 const PILL: Record<string, string> = { KEV: 'tv-kev', PoC: 'tv-poc', Followed: 'tv-followed' };
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** "3 Aug" (UTC) */
-const shortDate = (iso: string) => {
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** "3 Aug", or with the weekday "Mon 3 Aug" (UTC); a YYYY-MM-DD day or a full timestamp */
+const shortDate = (iso: string, weekday = false) => {
   const t = Date.parse(iso.length === 10 ? iso + 'T00:00:00Z' : iso);
   if (isNaN(t)) return '';
   const d = new Date(t);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-};
-const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-/** "Mon 3 Nov" (UTC) for a YYYY-MM-DD day */
-const dayDate = (day: string) => {
-  const t = Date.parse(day + 'T00:00:00Z');
-  return isNaN(t) ? '' : `${WEEKDAY[new Date(t).getUTCDay()]} ${shortDate(day)}`;
+  return `${weekday ? WEEKDAY[d.getUTCDay()] + ' ' : ''}${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 };
 const EXPLOIT = '#fbbf24';
 const KEV = '#fb923c';
@@ -200,7 +195,7 @@ export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): Pane
   ));
   add('epssTop', true, x.epssTop.length > 0, ({ x }) => (
     <ListPanel
-      label="Highest exploitation odds · EPSS"
+      label="Highest exploitation odds · recent CVEs"
       items={x.epssTop}
       row={it => (
         <>
@@ -237,7 +232,7 @@ export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): Pane
         <>
           <span className="tv-row-main">{it.cve} {'·'} {it.title}</span>
           <span className="tv-row-meta" style={it.dueDate === new Date(now).toISOString().slice(0, 10) ? { color: KEV, fontWeight: 700 } : undefined}>
-            due {dayDate(it.dueDate)}
+            due {shortDate(it.dueDate, true)}
           </span>
         </>
       )}
@@ -254,6 +249,11 @@ export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): Pane
 }
 
 const PURPLE = '#a855f7';
+/** 24 values don't fit above 24 narrow bars: show the peak and every 3rd hour (the labelled ones) */
+const peakOrEvery3 = (hours: number[]) => {
+  const peak = hours.indexOf(Math.max(...hours));
+  return (i: number) => i === peak || i % 3 === 0;
+};
 
 export function ransomPanels(ctx: RansomCtx, fresh: () => RansomCtx = () => ctx): PanelDef[] {
   const { out, add, first: { d, x } } = pool(ctx, fresh, ransomData);
@@ -341,6 +341,7 @@ export function ransomPanels(ctx: RansomCtx, fresh: () => RansomCtx = () => ctx)
       label="Busiest hours · leak-site posts by hour (UTC) · 14 days"
       data={x.hours.map((n, h) => ({ label: h % 3 === 0 ? String(h).padStart(2, '0') : '\u00a0', n }))}
       color={PURPLE}
+      showValue={peakOrEvery3(x.hours)}
     />
   ));
   add('attacks', true, x.attacks.length > 0, ({ x }) => (

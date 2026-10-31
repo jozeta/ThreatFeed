@@ -211,14 +211,32 @@ describe('vulnExtras · new panels', () => {
   const rec = (id: string, published: string, extra: object = {}) => ({ id, published, score: 9.8, severity: 'CRITICAL', description: `Desc ${id}`, ...extra });
   const v = (over: object) => ({ kev: [], notable: [], epssTop: [], exploits: {}, ...over }) as unknown as VulnData;
 
-  it('epssTop: highest scores first, max 8, titled from KEV or notable when known', () => {
+  it('epssTop: ranks CVEs published or added to KEV in the last 90 days by EPSS, max 8, titled when known', () => {
+    const r = vulnExtras(v({
+      kev: [
+        kevE('CVE-2026-1', '2026-10-01', { epss: 0.9 }), // added to KEV recently
+        kevE('CVE-2014-1', '2020-01-01', { epss: 0.99, published: '2014-01-01T00:00:00Z' }), // old on both counts: left out
+        kevE('CVE-2026-2', '2025-01-01', { epss: 0.5, published: '2026-09-01T00:00:00Z' }), // KEV entry published recently
+      ],
+      notable: [rec('CVE-2026-3', '2026-10-20T00:00:00Z', { epss: 0.7 }), rec('CVE-2026-4', '2026-10-20T00:00:00Z')], // 4: score from the top list
+      watchable: [rec('CVE-2026-5', '2026-10-21T00:00:00Z', { epss: 0.1, score: 7.5 }), rec('CVE-2026-6', '2026-10-21T00:00:00Z', { score: 7.5 })], // 6: no score at all
+      epssTop: [{ cve: 'CVE-2026-4', epss: 0.8, percentile: 1 }, { cve: 'CVE-2010-9', epss: 1, percentile: 1 }],
+    }), null, [], [], now).epssTop;
+    expect(r.map(e => [e.cve, e.epss])).toEqual([['CVE-2026-1', 0.9], ['CVE-2026-4', 0.8], ['CVE-2026-3', 0.7], ['CVE-2026-2', 0.5], ['CVE-2026-5', 0.1]]);
+    expect(r[0].title).toBe('Acme CVE-2026-1');
+    expect(r[2].title).toBe('Desc CVE-2026-3');
+    const many = Array.from({ length: 10 }, (_, i) => rec(`CVE-2026-${i + 10}`, '2026-10-20T00:00:00Z', { epss: 0.5 }));
+    const m = vulnExtras(v({ notable: many }), null, [], [], now).epssTop;
+    expect(m).toHaveLength(8);
+    expect(m[0].cve).toBe('CVE-2026-19'); // ties: the newest CVE first
+  });
+  it('epssTop: falls back to the global top list when no recent CVE has a score', () => {
     const epss = Array.from({ length: 10 }, (_, i) => ({ cve: `CVE-${i}`, epss: i / 10, percentile: 0.9 }));
-    const r = vulnExtras(v({ epssTop: epss, kev: [kevE('CVE-9', '2026-10-01')], notable: [rec('CVE-8', '2026-10-01T00:00:00Z')] }), null, [], [], now).epssTop;
+    const r = vulnExtras(v({ epssTop: epss, kev: [kevE('CVE-9', '2020-01-01')] }), null, [], [], now).epssTop;
     expect(r).toHaveLength(8);
     expect(r.map(e => e.cve).slice(0, 3)).toEqual(['CVE-9', 'CVE-8', 'CVE-7']);
     expect(r[0]).toEqual({ cve: 'CVE-9', epss: 0.9, title: 'Acme CVE-9' });
-    expect(r[1].title).toBe('Desc CVE-8');
-    expect(r[2].title).toBeUndefined();
+    expect(r[1].title).toBeUndefined();
   });
   it('epssTop: empty without data', () => {
     expect(vulnExtras(null, null, [], [], now).epssTop).toEqual([]);
@@ -241,13 +259,14 @@ describe('vulnExtras · new panels', () => {
     expect(vulnExtras(null, null, [], [], now).timeToKev).toBeNull();
   });
 
-  it('topCwes: most common CWE among notable CVEs of the last 30 days, top 5, short names', () => {
+  it('topCwes: most common CWE among critical CVEs of the last 30 days, top 5, short names', () => {
     const notable = [
       rec('1', '2026-10-29T00:00:00Z', { cwe: 'CWE-79' }), rec('2', '2026-10-28T00:00:00Z', { cwe: 'CWE-79' }),
       rec('3', '2026-10-28T00:00:00Z', { cwe: 'CWE-287' }), rec('4', '2026-10-28T00:00:00Z', { cwe: 'NVD-CWE-noinfo' }),
       rec('5', '2026-09-01T00:00:00Z', { cwe: 'CWE-89' }), // older than 30 days
       rec('6', '2026-10-27T00:00:00Z', { cwe: 'CWE-1' }), rec('7', '2026-10-27T00:00:00Z', { cwe: 'CWE-2' }),
       rec('8', '2026-10-27T00:00:00Z', { cwe: 'CWE-3' }), rec('9', '2026-10-27T00:00:00Z', { cwe: 'CWE-4' }),
+      rec('10', '2026-10-27T00:00:00Z', { cwe: 'CWE-89', score: 8.8 }), rec('11', '2026-10-27T00:00:00Z', { cwe: 'CWE-89', score: 8.8 }), // not critical
     ];
     const cweNames = {
       'CWE-79': "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
