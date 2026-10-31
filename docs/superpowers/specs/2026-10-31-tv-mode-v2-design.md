@@ -144,8 +144,12 @@ Reduce motion → final values shown at once, plain quick fade.
 
 ## Settled after the builder check (my calls)
 
-- **Shapes:** tiles and panels are only ever 1×1 or 2×1, on every grid and on both the wall and the
-  dashboards (no 2×2). Charts and lists are always 2×1; number panels are 1×1.
+- **Shapes:** tiles and panels are 1×1 or 2×1 on Medium and Small. Number panels are always 1×1; charts and
+  lists are never 1×1. *(Amended while planning:)* on the 3-column Large grid a row holds at most one wide
+  tile, so 3 tiles is impossible without a **2×2 hero**; Large therefore also allows 2×2 (stories, charts,
+  lists). Swaps generalise: 2×2 splits into two stacked 2×1, two stacked 2×1 merge into 2×2.
+- **Fewer items than the size's minimum:** items split the screen into equal full-height columns and only
+  re-arrive in place until there are enough.
 - **Wide placement:** a wide tile may start in any column as long as both cells are in the same row (on
   the 3-column Large grid a row is either wide+single or single+wide or three singles).
 - **Merging:** a single merges with its left or right neighbour only if that neighbour is also single and
