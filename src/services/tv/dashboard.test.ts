@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ransomDashboard, vulnDashboard } from './dashboard';
+import { ransomDashboard, ransomExtras, vulnDashboard, vulnExtras } from './dashboard';
 import { LeakSiteVictim, StatsData, StatsDay, VulnData } from '../../types';
 
 const now = Date.parse('2026-10-30T12:00:00Z');
@@ -92,5 +92,88 @@ describe('vulnDashboard', () => {
     const msrc = { months: [{ id: '2026-Oct', title: 'October 2026 Security Updates', released: '', cves: [
       { cve: 'a', title: '', severity: 'Critical', exploited: true }, { cve: 'b', title: '', severity: 'Important', exploited: false }] }] };
     expect(vulnDashboard(null, msrc as any, null, now).patchTuesday).toEqual({ total: 2, critical: 1, zeroDays: 1, month: 'October 2026' });
+  });
+});
+
+describe('vulnExtras', () => {
+  const kevE = (cve: string, vendor: string, product: string, dateAdded: string, extra: object = {}) => ({ cve, vendor, product, dateAdded, ransomware: false, ...extra });
+  const base = (over: object = {}) => ({
+    kev: [kevE('CVE-F', 'Fortinet', 'FortiOS', '2026-10-28', { epss: 0.9 }), kevE('CVE-N', 'Fortinetwork', 'Thing', '2026-10-28'), kevE('CVE-R', 'Acme', 'Widget', '2026-10-25', { ransomware: true })],
+    notable: [
+      { id: 'CVE-C1', published: '2026-10-29T00:00:00Z', score: 9.8, severity: 'CRITICAL', description: 'Remote code in Contoso', products: ['contoso server'] },
+      { id: 'CVE-C2', published: '2026-10-10T00:00:00Z', score: 10, severity: 'CRITICAL', description: 'Old' },
+      { id: 'CVE-C3', published: '2026-09-01T00:00:00Z', score: 9.9, severity: 'CRITICAL', description: 'Too old' },
+    ],
+    watchable: [{ id: 'CVE-W', published: '2026-10-20T00:00:00Z', score: 7.5 }, { id: 'CVE-W2', published: '2026-08-20T00:00:00Z', score: 8.5 }],
+    epssTop: [{ cve: 'CVE-X', epss: 0.5, percentile: 0.9 }],
+    exploits: {},
+    ...over,
+  }) as unknown as VulnData;
+
+  it('watchlist is null without stack and followed', () => {
+    expect(vulnExtras(base(), null, [], [], now).watchlist).toBeNull();
+    expect(vulnExtras(null, null, [], [], now).watchlist).toBeNull();
+  });
+  it('matches stack keywords as whole words', () => {
+    const w = vulnExtras(base(), null, ['Fortinet'], [], now).watchlist!;
+    expect(w.map(x => x.cve)).toEqual(['CVE-F']);
+    expect(w[0]).toMatchObject({ tags: ['KEV'], epss: 0.9, title: 'Fortinet FortiOS' });
+    expect(vulnExtras(base(), null, ['contoso'], [], now).watchlist!.map(x => x.cve)).toEqual(['CVE-C1']);
+  });
+  it('followed CVEs come first and survive missing data', () => {
+    const w = vulnExtras(base(), null, ['Fortinet'], ['CVE-GONE', 'CVE-F'], now).watchlist!;
+    expect(w.map(x => x.cve)).toEqual(['CVE-GONE', 'CVE-F']);
+    expect(w[1].tags).toEqual(['Followed', 'KEV']);
+    expect(w[0]).toEqual({ cve: 'CVE-GONE', title: 'CVE-GONE', tags: ['Followed'] });
+    expect(vulnExtras(base(), null, [], ['CVE-X'], now).watchlist![0].epss).toBe(0.5);
+  });
+  it('cvssSpread buckets whole scores and skips old CVEs', () => {
+    const v = base({ notable: [...base().notable, { id: 'CVE-T', published: '2026-10-29T00:00:00Z', score: 10.0 }] });
+    expect(vulnExtras(v, null, [], [], now).cvssSpread).toEqual([
+      { score: 7, count: 1 }, { score: 8, count: 0 }, { score: 9, count: 1 }, { score: 10, count: 2 },
+    ]);
+  });
+  it('top vendors and latest critical', () => {
+    const v = base({
+      kev: [kevE('CVE-C1', 'Contoso', 'S', '2026-10-28')],
+      notable: [...base().notable, { id: 'CVE-P', published: '2026-10-28T00:00:00Z', score: 9.1, products: ['globex thing'] }],
+    });
+    const r = vulnExtras(v, null, [], [], now);
+    expect(r.topVendors).toEqual([['Contoso', 1], ['globex', 1]]);
+    expect(r.latestCritical.map(c => c.cve)).toEqual(['CVE-C1', 'CVE-P', 'CVE-C2', 'CVE-C3']);
+  });
+  it('patchBreakdown counts by severity', () => {
+    const c = (severity: string, exploited = false, publiclyDisclosed = false) => ({ cve: 'x', title: '', severity, exploited, publiclyDisclosed });
+    const msrc = { months: [{ id: 'm', title: 'October 2026 Security Updates', released: '', cves: [c('Critical', true), c('Important', false, true), c('Moderate'), c('Low'), c('Important')] }] };
+    expect(vulnExtras(null, msrc as any, [], [], now).patchBreakdown).toEqual({ month: 'October 2026', critical: 1, important: 2, moderate: 1, low: 1, exploited: 1, disclosed: 1 });
+    expect(vulnExtras(null, null, [], [], now).patchBreakdown).toBeNull();
+  });
+  it('kevRansomware lists only ransomware entries', () => {
+    expect(vulnExtras(base(), null, [], [], now).kevRansomware).toEqual([{ cve: 'CVE-R', title: 'Acme Widget', dateAdded: '2026-10-25' }]);
+  });
+});
+
+describe('ransomExtras', () => {
+  const D = 24 * H;
+  it('newGroups excludes a group seen 10 days ago', () => {
+    const v = [vic('1', H, { group: 'fresh' }), vic('2', H, { group: 'old' }), vic('3', 10 * D, { group: 'old' })];
+    expect(ransomExtras(v, null, now).newGroups).toEqual([{ group: 'fresh', victims: 1 }]);
+  });
+  it('sectors, spotlight and shapes', () => {
+    const v = [1, 2, 3, 4, 5, 6, 7].map(i => vic(String(i), i * H, { group: 'big', sector: 'Health' })).concat([vic('o', H, { group: 'small', sector: 'Tech' })]);
+    const r = ransomExtras(v, null, now);
+    expect(r.topSectors[0]).toEqual(['Health', 7]);
+    expect(r.spotlight!.group).toBe('big');
+    expect(r.spotlight!.count).toBe(7);
+    expect(r.spotlight!.victims.map(x => x.id)).toEqual(['1', '2', '3', '4', '5']);
+    expect(r.weekday.map(w => w.day)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(r.weekday.find(w => w.day === 'Fri')!.count).toBe(8);
+    expect(r.weekly90).toHaveLength(13);
+    expect(r.weekly90[12]).toEqual({ week: '2026-10-26', count: 8 });
+  });
+  it('accepts empty', () => {
+    const r = ransomExtras([], null, now);
+    expect(r.spotlight).toBeNull();
+    expect(r.newGroups).toEqual([]);
   });
 });
