@@ -82,6 +82,7 @@ Pre-configured with curated, verified security feeds organized by category:
 ### 7. Instant Search, Combinable Filters & Sorting
 - Client-side full-text search (MiniSearch) across titles, summaries, sources, tags, CVEs and authors: ranked, prefix-matching and typo-tolerant (`ransomwar atack` still finds ransomware attacks). Sort by **Relevance** while searching, and star a query to keep it as a **saved search**.
 - **Mute rules**: muted keywords hide articles everywhere (bookmarks excepted), and whole categories can be left off the newspaper front page (Settings → Mute Rules).
+- **Categories in use** (Settings → Intelligence): turn news categories off for the whole app, including tabs, search, Briefing, trends, alerts and TV mode. Bookmarks are kept, and at least one category stays on.
 - Unread counts per category in the category menu, and per feed on the Sources page.
 - Combinable filters:
   - Category (Security News, Threat Intel, Vulnerabilities, Malware, Red Team, Blue Team, Research)
@@ -158,14 +159,21 @@ Every article is enriched in the browser while its feed is parsed, and the resul
 - **Failing-feed backoff**: a feed that fails 5 refreshes in a row is only retried hourly during automatic refreshes (manual refresh still tries it).
 
 ### 14. TV & Dashboard Modes
-- **TV mode**: a full-screen wall of 5–6 large news tiles (a 3×2 grid of 1×1 and 2×1 tiles) that rotates through the top stories. It is available on the front page / Latest, Briefing and Ransomware pages; Ransomware mixes in leak-site victim tiles, about one in three. Enter it with the **TV** button next to the layout buttons. Leave with the × in the top-right corner (it hides after 3 seconds without mouse movement), <kbd>Esc</kbd>, or by leaving browser full screen. The screen is kept awake (Wake Lock) where supported. If fewer than 5 stories are newer than 24 hours, the window widens to 72 hours, then 7 days.
-- **Dashboard mode**: a figures-first view for screens. **Vulns** shows critical CVEs and CISA KEV additions over 7 days, public exploits over 7 days, the latest Patch Tuesday, "Exploited right now" and a 90-day weekly trend. **Ransomware** shows victims over 24 hours and 7 days, active groups, the most-hit sector, top groups, victims per day, top countries and the latest victims. Open it with the **Dashboard** button on those pages.
+- **TV mode**: a full-screen wall of news tiles that rotates through the top stories. It is available on the front page / Latest, Briefing and Ransomware pages; Ransomware mixes in leak-site victim tiles, about one in three. Enter it with the **TV** button next to the layout buttons. Leave with the × in the top-right corner (it hides after 3 seconds without mouse movement), <kbd>Esc</kbd>, or by leaving browser full screen. The screen is kept awake (Wake Lock) where supported. If fewer than 5 stories are newer than 24 hours, the window widens to 72 hours, then 7 days.
+  - Tiles swap one at a time. A wide tile can become two small ones, and two small ones can merge into a wide one. Large tile size can also show a big 2×2 tile.
+  - The **Page x of y** counter at the bottom right counts pages of stories. After the last page it starts over with fresh news.
+- **Dashboard mode**: a figures-first view for screens, opened with the **Dashboard** button on those pages. Its panels swap the same way as the TV wall, with their own page counter. Numbers count up, bars grow and chart lines draw in. Panels without data are skipped, and history charts fill in over time.
+  - **Vulns**: Critical CVEs 7 d, Added to KEV 7 d, Public exploits 7 d, Patch Tuesday, Exploited right now, 90-day trend, Watchlist (your "My stack" vendors from the last 30 days plus your followed CVEs), Top vendors 7 d, Latest critical CVEs, Patch Tuesday breakdown, CVSS spread, KEV used by ransomware.
+  - **Ransomware**: Victims 24 h, Victims 7 d, Active groups, Most hit sector, Top groups, Victims per day 30 d, Top countries, Latest victims, Top sectors, New groups this week, Group spotlight, Victims by weekday, Victims 90 days (weekly).
 - **Kiosk URLs** (prefix with `https://jozeta.github.io/ThreatFeed/`):
   - `#/latest?tv=1`, `#/briefing?tv=1`, `#/ransomware?tv=1`: TV mode
   - `#/vulns?dash=1`, `#/ransomware?dash=1`: dashboard mode
 
   A URL opened directly may not reach true full screen without a click, so for a dedicated display use the browser's kiosk mode or F11.
-- **Settings → TV & dashboard**: rotation interval of 1–30 minutes (default 2), and transition **Fade**, **Slide** or **Reveal** (default Reveal). Reduce motion forces a plain fade.
+- **Settings → TV & dashboard**:
+  - **Tile size**: **Large** (3–5 tiles), **Medium** (5–7, default) or **Small** (6–10). Applies to TV mode and dashboards.
+  - **Interval**: 30 s to 5 min in 30 s steps (default 1 min). Each tile varies by up to ±20 s, less at 30 s so nothing stays under 20 s.
+  - **Transition**: **Fade**, **Slide** or **Reveal** (default Reveal, which pops tiles in one by one). Reduce motion gives a quick plain fade.
 - **Trend history**: dashboard trends are built from `stats.json` (see [Feed Snapshot](#-feed-snapshot--cve-intelligence)), so they fill in over the coming weeks. "vs last week" figures stay hidden until there is history to compare against.
 
 ---
