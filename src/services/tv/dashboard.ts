@@ -277,11 +277,11 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
     if (stack.length > 0) {
       const matches = (text: string) => stack.some(t => containsTerm(text, t));
       for (const k of kev) {
-        if (out.has(k.cve) || !(recent(k.dateAdded, since30) || hasExploit(k.cve))) continue;
+        if (out.has(k.cve) || !recent(k.dateAdded, since30)) continue;
         if (matches([k.vendor, k.product, ...(k.products ?? [])].join(' ; '))) out.set(k.cve, describe(k.cve));
       }
       for (const r of notable) {
-        if (out.has(r.id) || !(hasExploit(r.id) || ((r.score ?? 0) >= 9 && recent(r.published, since30)))) continue;
+        if (out.has(r.id) || !(recent(r.published, since30) && (hasExploit(r.id) || (r.score ?? 0) >= 9))) continue;
         if (matches([...(r.products ?? []), r.description ?? ''].join(' ; '))) out.set(r.id, describe(r.id));
       }
     }

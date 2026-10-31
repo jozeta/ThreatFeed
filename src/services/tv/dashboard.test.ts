@@ -127,6 +127,15 @@ describe('vulnExtras', () => {
     expect(w[0]).toEqual({ cve: 'CVE-GONE', title: 'CVE-GONE', tags: ['Followed'] });
     expect(vulnExtras(base(), null, [], ['CVE-X'], now).watchlist![0].epss).toBe(0.5);
   });
+  it('limits stack candidates to the last 30 days but always keeps followed CVEs', () => {
+    const v = base({
+      kev: [kevE('CVE-OLD', 'Fortinet', 'FortiOS', '2026-04-14'), kevE('CVE-NEW', 'Fortinet', 'FortiGate', '2026-10-25'), kevE('CVE-2020', 'Other', 'Thing', '2020-01-01')],
+      notable: [],
+      exploits: { 'CVE-OLD': { pocs: 3 } },
+    });
+    expect(vulnExtras(v, null, ['Fortinet'], [], now).watchlist!.map(x => x.cve)).toEqual(['CVE-NEW']);
+    expect(vulnExtras(v, null, ['Fortinet'], ['CVE-2020'], now).watchlist!.map(x => x.cve)).toEqual(['CVE-2020', 'CVE-NEW']);
+  });
   it('cvssSpread buckets whole scores and skips old CVEs', () => {
     const v = base({ notable: [...base().notable, { id: 'CVE-T', published: '2026-10-29T00:00:00Z', score: 10.0 }] });
     expect(vulnExtras(v, null, [], [], now).cvssSpread).toEqual([
