@@ -13,6 +13,8 @@ interface TextArticleProps {
   onOpen: () => void;
   showDivider?: boolean;
   className?: string;
+  /** A brief: severity, source · age, a two-line headline and one summary line; no tags or actions */
+  compact?: boolean;
 }
 
 export const TextArticle: React.FC<TextArticleProps> = ({
@@ -20,6 +22,7 @@ export const TextArticle: React.FC<TextArticleProps> = ({
   onOpen,
   showDivider = true,
   className = '',
+  compact = false,
 }) => {
   const { settings } = useSettings();
   const watchlistMatch = useMemo(
@@ -30,15 +33,27 @@ export const TextArticle: React.FC<TextArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`lift-flat group cursor-pointer flex flex-col ${
+      // A compact brief has no actions row (with its "open in reader" button), so the brief itself opens by keyboard;
+      // the focus ring is inset because a filler clips what sticks out of it
+      {...(compact && {
+        role: 'button',
+        tabIndex: 0,
+        'aria-label': article.title,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          onOpen();
+        },
+      })}
+      className={`lift-flat group cursor-pointer flex flex-col ${compact ? 'rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-accent' : ''} ${
         showDivider ? 'border-b border-theme-border/70 pb-4 mb-4' : 'pb-2'
       } ${article.read ? 'opacity-80' : 'opacity-100'} ${className}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-        <div className="flex flex-wrap items-center gap-1">
+      <div className={`flex items-center justify-between gap-1 mb-1 ${compact ? 'min-w-0' : 'flex-wrap'}`}>
+        <div className={`flex items-center gap-1 ${compact ? 'min-w-0' : 'flex-wrap'}`}>
           <SeverityBadge severity={article.severity} />
-          <StackBadge article={article} />
-          {watchlistMatch.matched && (
+          {!compact && <StackBadge article={article} />}
+          {!compact && watchlistMatch.matched && (
             <WatchlistBadge terms={watchlistMatch.matchedTerms} />
           )}
           <span className="font-mono text-[10px] font-semibold text-theme-accent uppercase tracking-wider truncate">
@@ -55,17 +70,19 @@ export const TextArticle: React.FC<TextArticleProps> = ({
         </div>
       </div>
 
-      <h4 className="font-serif text-base sm:text-lg font-semibold text-theme-text group-hover:text-theme-accent transition-colors leading-snug mb-1.5">
+      <h4 className={`font-serif font-semibold text-theme-text group-hover:text-theme-accent transition-colors leading-snug mb-1.5 ${
+        compact ? 'text-base line-clamp-2' : 'text-base sm:text-lg'
+      }`}>
         {article.title}
       </h4>
 
       {article.description && (
-        <p className="font-serif text-xs sm:text-sm text-theme-text-muted leading-relaxed line-clamp-2 mb-2">
+        <p className={`font-serif text-xs sm:text-sm text-theme-text-muted leading-relaxed ${compact ? 'line-clamp-1' : 'line-clamp-2 mb-2'}`}>
           <EntityText text={article.description} context={article.title} />
         </p>
       )}
 
-      <div className="mt-auto flex items-center justify-between gap-2">
+      {!compact && <div className="mt-auto flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 overflow-hidden">
           {article.tags.slice(0, 2).map((tag) => (
             <TagChip
@@ -78,7 +95,7 @@ export const TextArticle: React.FC<TextArticleProps> = ({
           ))}
         </div>
         <ArticleActions article={article} compact onOpenReader={onOpen} />
-      </div>
+      </div>}
     </article>
   );
 };
