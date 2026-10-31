@@ -43,7 +43,7 @@ owner also wants control over density (tile size) and a faster default tempo.
 In the existing "TV & dashboard" section:
 
 - **Tile size** — Large / Medium / Small. Large: 3–5 tiles on screen. Medium: 5–7. Small: 6–10.
-  Default **Large** *(my call: matches what's live today)*.
+  Default **Medium** (owner decided).
 - **Interval** — 30 s to 5 min in 30 s steps, default **1 min**. Stored in seconds *(builder's call on the
   field name; the old `tvIntervalMinutes` is migrated: saved minutes × 60, clamped to 30–300 s, so a saved
   10 min becomes 5 min)*.
@@ -95,7 +95,9 @@ all that fits — the existing whole-line clamp rules apply).
 ### Per-tile transitions
 - **Fade:** the tile fades out, the new one fades in.
 - **Slide:** the tile slides out, the new one slides in.
-- **Reveal:** a wipe across the tile *(my call, owner agreed)*.
+- **Reveal:** arriving tiles pop in quickly **one by one** (owner decided): each arrival is a short
+  scale-and-fade, and when several tiles arrive together (a wide tile replaced by two singles, the first
+  screen, a new page's batch) they come in staggered, about 100–150 ms apart.
 - Reduce motion (app setting or OS): a quick plain fade, as today.
 
 ## Dashboards
@@ -166,6 +168,22 @@ Reduce motion → final values shown at once, plain quick fade.
 - **Settings field:** the interval is stored as `tvIntervalSeconds`; `tvIntervalMinutes` is read once to
   migrate and then no longer written. The UI is a select of the ten 30 s steps.
 
+## Categories in use (owner asked; applies to the whole app, not just TV)
+
+A new setting lists every news category (from the feeds' `category`), all on by default. A category that is
+turned off is gone from the **whole app**: every tab and category tab, search, the newspaper, Briefing,
+trends, alerts and desktop notifications, and the TV wall.
+
+- Articles from feeds in an off category are dropped where articles are loaded, so no view has to filter
+  them itself *(my call)*.
+- Live fetches skip feeds in off categories *(my call)*.
+- Bookmarked articles stay visible in Bookmarks even if their category is off, like muted keywords
+  *(my call)*.
+- The existing "Categories on the front page" setting stays for categories wanted in the app but not on the
+  front page; off categories disappear from that list *(my call)*.
+- At least one category must stay on *(my call)*.
+- Stored as a list of turned-off category names, so categories added later are on by default.
+
 ## Unchanged from v1
 
 Entry/exit, URL params, full screen + overlay fallback, wake lock, auto-hiding × and pointer, suppressed app
@@ -189,10 +207,8 @@ rules.
 
 ## Calls I made (owner can override)
 
-- Default tile size Large.
 - Old saved intervals over 5 min become 5 min.
 - Jitter = min(20 s, interval − 20 s).
 - Two singles merge by leaving together when the first one's timer fires.
-- Reveal is a per-tile wipe.
 - Headline numbers are swappable 1-cell panels; charts/lists are wide.
 - Panels with no data are skipped; the watchlist shows a quiet message instead when the stack is set.
