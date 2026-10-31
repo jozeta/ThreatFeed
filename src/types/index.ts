@@ -435,7 +435,9 @@ export interface UserSettings {
   reducedMotion: boolean;
   maxArticlesPerFeed: number; // default: 25 (0 = unlimited)
   maxArticleAgeDays: number; // default: 30 (0 = unlimited)
-  tvIntervalMinutes: number; // TV mode: how long each set stays up (1–30, default 2)
+  tvIntervalSeconds: number; // TV mode: how long a tile stays up (30–300, default 60)
+  tvTileSize: TvTileSize; // TV mode and dashboards: how many tiles fit on screen
+  disabledCategories: string[]; // news categories hidden app-wide
   tvTransition: TvTransition; // TV mode: how a set gives way to the next
   autoRefreshFeedCooldownHours: number; // default: 4 (hours: 0, 2, 4, 6, 12, 24)
   watchlistKeywords: string[];
@@ -472,6 +474,7 @@ export interface FilterState {
 }
 
 export type TvTransition = 'fade' | 'slide' | 'reveal';
+export type TvTileSize = 'large' | 'medium' | 'small';
 
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 

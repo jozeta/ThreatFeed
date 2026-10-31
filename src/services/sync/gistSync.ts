@@ -38,7 +38,7 @@ export function mergeAlertRules(local: AlertRule[], remote: AlertRule[]): AlertR
 
 /**
  * Merges two devices' data: per-article state takes whichever side changed it last; feeds and
- * bookmarked articles are unioned (local wins on conflicts); settings stay local except keyword
+ * bookmarked articles are unioned (local wins on conflicts); settings stay local (disabled categories too) except keyword
  * lists, which are unioned so a term added on either device survives.
  */
 export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncData {

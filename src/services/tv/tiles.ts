@@ -4,6 +4,7 @@ import { classifyIncident, isLeakSitePost } from '../intelligence/incidents';
 import { clusterArticles } from '../articles/clustering';
 import { calculateImportance } from '../articles/importance';
 import { countryName } from '../../utils/countries';
+import { EngineItem, Shape } from './tileEngine';
 
 export type TvTileKind = 'story' | 'victim' | 'kev' | 'breach' | 'trend';
 export type TvTone = 'critical' | 'high' | 'info' | 'ransomware';
@@ -19,12 +20,7 @@ export interface TvTile {
   weight: number;
 }
 
-export interface TvSet {
-  tiles: (TvTile & { col: 1 | 2 | 3; row: 1 | 2 })[];
-}
-
 const HOUR_MS = 60 * 60 * 1000;
-const SET_SIZE = 5;
 
 /** Plain text from feed HTML: tags dropped, common entities decoded, whitespace collapsed */
 function plainText(html?: string): string | undefined {
@@ -172,35 +168,9 @@ export function tilesForRansomware(news: Article[], victims: LeakSiteVictim[], g
   return out.slice(0, max);
 }
 
-/**
- * Groups tiles into screens and sizes each so the 3×2 grid is exactly filled. Full screens hold five: the
- * heaviest tile spans two columns, four are single cells. A leftover of fewer than four is dropped when a full
- * screen exists (tiles are ranked, so it holds the least important); otherwise the span table below fills the grid.
- */
-export function chunkSets(tiles: TvTile[]): TvSet[] {
-  const chunks: TvTile[][] = [];
-  for (let i = 0; i < tiles.length; i += SET_SIZE) chunks.push(tiles.slice(i, i + SET_SIZE));
-  if (chunks.length > 1 && chunks[chunks.length - 1].length < 4) chunks.pop();
-  return chunks.map(chunk => {
-    // The heaviest tile (earliest wins ties) gets the double width: in a full set of 5, or the 4-tile tail's two heaviest
-    const wide = chunk.length === 5 ? 1 : chunk.length === 4 ? 2 : 0;
-    const widest = new Set(
-      chunk
-        .map((t, idx) => ({ idx, w: t.weight }))
-        .sort((a, b) => b.w - a.w || a.idx - b.idx)
-        .slice(0, wide)
-        .map(x => x.idx)
-    );
-    return {
-      tiles: chunk.map((t, idx) => {
-        let col: 1 | 2 | 3 = 1;
-        let row: 1 | 2 = 1;
-        if (chunk.length === 3) row = 2;
-        else if (chunk.length === 2) col = 3;
-        else if (chunk.length === 1) { col = 3; row = 2; }
-        else if (widest.has(idx)) col = 2;
-        return { ...t, col, row };
-      }),
-    };
-  });
+const STORY_SHAPES: Shape[] = ['1x1', '2x1', '2x2'];
+
+/** Wall items for the tile engine: every TV tile can take any shape; its rank weight is kept */
+export function toEngineItems(tiles: TvTile[]): EngineItem[] {
+  return tiles.map(t => ({ id: t.id, weight: t.weight, shapes: [...STORY_SHAPES] }));
 }

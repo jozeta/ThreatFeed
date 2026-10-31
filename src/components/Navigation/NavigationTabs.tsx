@@ -58,8 +58,8 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({ activeTab, onSel
   const categories = useMemo(() => {
     const feedCategories = Array.from(new Set(feeds.map((f) => f.category))).filter(Boolean);
     const combined = Array.from(new Set([...ORDERED_PRIMARY_CATEGORIES.slice(1), ...feedCategories]));
-    return ['All', ...combined];
-  }, [feeds]);
+    return ['All', ...combined.filter((c) => !settings.disabledCategories.includes(c))];
+  }, [feeds, settings.disabledCategories]);
 
   // Unread articles per feed category, shown in the category dropdown
   const unreadByCategory = useMemo(() => {

@@ -51,6 +51,11 @@ export const App: React.FC = () => {
   const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
   const { settings } = useSettings();
   const { filters, updateFilter } = useFilter();
+  // A category filter whose category was turned off would leave an empty list: go back to All
+  useEffect(() => {
+    if (filters.selectedCategory && settings.disabledCategories.includes(filters.selectedCategory)) updateFilter('selectedCategory', null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.selectedCategory, settings.disabledCategories]);
 
   // The page lives in the URL hash (#/vulns, #/briefing…) so views can be bookmarked and Back works
   const [route, navigate] = useHashRoute();

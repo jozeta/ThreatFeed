@@ -24,6 +24,7 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
+import { feedsInUse, inUse, withoutDisabledCategories } from '../services/articles/categories';
 import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
 
@@ -318,11 +319,13 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Work out the DB changes from the ref snapshot: title/date-based dedup and the age cutoff
       // don't depend on read state, so it agrees with the state update below.
       const before = articlesRef.current;
-      const mergedSnapshot = mergeFetchedArticles(before, newItems, maxAgeDays);
+      // Articles of turned-off categories stay in state but never win a near-duplicate check over shown ones
+      const shown = inUse(feedsRef.current, settings.disabledCategories ?? []);
+      const mergedSnapshot = mergeFetchedArticles(before, newItems, maxAgeDays, shown);
       const after = new Set(mergedSnapshot.map(a => a.id));
       // Progressive merges can run several times before React re-renders; keep the ref current for the next one
       articlesRef.current = mergedSnapshot;
-      setArticles(prev => mergeFetchedArticles(prev, newItems, maxAgeDays));
+      setArticles(prev => mergeFetchedArticles(prev, newItems, maxAgeDays, shown));
       // Persist fetched items that survived (near-duplicates of existing ones are dropped)
       await saveArticlesToDB(newItems.filter(a => after.has(a.id)));
       // Delete articles the merge pruned (expired), so they don't come back on reload
@@ -361,6 +364,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setRefreshProgress({ completed: 1, total: 1 });
       } else {
+        // Turned-off categories are not fetched at all
+        feedsToFetch = feedsInUse(feedsToFetch, settings.disabledCategories ?? []);
         let fetchedLive = false;
 
         if (options.useSnapshot && settings.dataSource !== 'live') {
@@ -731,6 +736,12 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const entityMatcher = useMemo(() => buildEntityMatcher(entities), [entities]);
 
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
+  // Consumers see only the categories in use; the raw state stays whole so turning one back on restores it
+  const visibleArticles = useMemo(
+    () => withoutDisabledCategories(articles, feeds, settings.disabledCategories ?? []),
+    [articles, feeds, settings.disabledCategories],
+  );
+
   const value = useMemo<FeedContextType>(() => ({
     feeds,
     cveIntel,
@@ -749,7 +760,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ensureTrends,
     stats,
     ensureStats,
-    articles,
+    articles: visibleArticles,
     feedHealth,
     isRefreshing,
     initialSyncDone,
@@ -774,7 +785,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, visibleArticles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { findDemoBookmarks, mergeFetchedArticles } from './merge';
 import { deduplicateArticles } from './deduplication';
 import { article } from '../../test/fixtures';
+import type { Article } from '../../types';
 
 describe('mergeFetchedArticles', () => {
   const existing = [
@@ -30,6 +31,17 @@ describe('mergeFetchedArticles', () => {
     const old = article('e', { publishedAt: '2020-01-01T00:00:00Z' });
     const oldBookmark = article('f', { publishedAt: '2020-01-01T00:00:00Z', bookmarked: true });
     expect(mergeFetchedArticles([old, oldBookmark], [], 30).map(a => a.id)).toEqual(['f']);
+  });
+});
+
+describe('mergeFetchedArticles with articles of turned-off categories', () => {
+  it('lets a shown copy win the near-duplicate check over a hidden earlier one', () => {
+    const hidden = article('h', { sourceId: 'off-feed', title: 'Fortinet patches critical FortiOS flaw today' });
+    const fresh = article('s', { sourceId: 'on-feed', title: 'Fortinet patches critical FortiOS flaw today!' });
+    const shown = (a: Article) => a.sourceId !== 'off-feed';
+    expect(mergeFetchedArticles([hidden], [fresh], 30).map(a => a.id)).toEqual(['h']); // without the predicate the earlier copy wins
+    const merged = mergeFetchedArticles([hidden, article('k', { sourceId: 'off-feed', title: 'Unrelated hidden story' })], [fresh], 30, shown);
+    expect(merged.map(a => a.id)).toEqual(['k', 's']);
   });
 });
 

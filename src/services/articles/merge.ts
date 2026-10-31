@@ -42,11 +42,14 @@ export function isExpired(article: Article, maxAgeDays: number): boolean {
  * - Existing articles come first, so when a new item is a near-duplicate of one the user
  *   already has (possibly read or bookmarked), the existing one is kept.
  * - Articles older than maxAgeDays are dropped unless bookmarked.
+ * - With `shown`, articles that are shown win near-duplicate checks over hidden ones (disabled categories), so a
+ *   story isn't hidden because a copy from a turned-off category came first.
  */
 export function mergeFetchedArticles(
   existing: Article[],
   fetched: Article[],
-  maxAgeDays: number
+  maxAgeDays: number,
+  shown?: (a: Article) => boolean
 ): Article[] {
   const fetchedById = new Map(fetched.map(a => [a.id, a]));
 
@@ -58,5 +61,8 @@ export function mergeFetchedArticles(
   });
   merged.push(...fetchedById.values());
 
-  return deduplicateArticles(merged).filter(a => a.bookmarked || !isExpired(a, maxAgeDays));
+  const kept = shown
+    ? new Set(deduplicateArticles([...merged.filter(shown), ...merged.filter(a => !shown(a))]))
+    : new Set(deduplicateArticles(merged));
+  return merged.filter(a => kept.has(a) && (a.bookmarked || !isExpired(a, maxAgeDays)));
 }
