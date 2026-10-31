@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement, Fragment } from 'react';
 import { LeakSiteVictim, MsrcData, StatsData, VulnData } from '../../types';
-import { ransomPanels, vulnPanels, VulnCtx, WATCHLIST_EMPTY } from './dashPanels';
+import { ransomPanels, vulnNumberPanels, vulnPanels, VulnCtx, WATCHLIST_EMPTY } from './dashPanels';
 
 const now = Date.parse('2026-10-30T12:00:00Z');
 const H = 3600e3;
@@ -16,6 +16,18 @@ const vulns = {
 } as unknown as VulnData;
 const msrc = { months: [{ title: 'October 2026 Security Updates', cves: [{ severity: 'Critical', exploited: true, publiclyDisclosed: false }] }] } as unknown as MsrcData;
 const ctx = (p: Partial<VulnCtx> = {}): VulnCtx => ({ vulns: null, msrc: null, stats: null, stackKeywords: [], watchedCves: [], now, ...p });
+
+describe('vulnNumberPanels', () => {
+  it('is the four Vulns number panels, all 1×1, in the dashboard order', () => {
+    const p = vulnNumberPanels(ctx({ vulns, msrc }));
+    expect(ids(p)).toEqual(['critical7d', 'kev7d', 'exploits7d', 'patchTuesday']);
+    expect(p.every(x => x.shapes.join(',') === '1x1')).toBe(true);
+  });
+  it('has none without Vulns data, and no Patch Tuesday without MSRC', () => {
+    expect(vulnNumberPanels(ctx())).toEqual([]);
+    expect(ids(vulnNumberPanels(ctx({ vulns })))).toEqual(['critical7d', 'kev7d', 'exploits7d']);
+  });
+});
 
 describe('vulnPanels', () => {
   it('has no panels without data', () => {

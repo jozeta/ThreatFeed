@@ -22,6 +22,7 @@ import {
   Activity,
   Star,
   Tv,
+  Hash,
   LayoutDashboard
 } from 'lucide-react';
 import { LayoutMode, ActiveNavTab } from '../../types';
@@ -376,6 +377,21 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden xl:inline">{kind === 'tv' ? 'TV' : 'Dashboard'}</span>
             </button>
           ))}
+          {/* Mixed mode: Latest news with the Vulns numbers mixed in */}
+          {route.page === 'latest' && (
+            <button
+              onClick={() => enterTv('tv', { mix: '1' })}
+              title="TV with numbers"
+              aria-label="TV with numbers"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text text-xs font-mono transition-colors flex items-center gap-1"
+            >
+              <span className="relative">
+                <Tv className="w-4 h-4" />
+                <Hash className="w-2.5 h-2.5 absolute -right-1 -bottom-1 bg-theme-card rounded-sm" strokeWidth={3} />
+              </span>
+              <span className="hidden xl:inline">TV+</span>
+            </button>
+          )}
 
           <div className="w-[1px] h-5 bg-theme-border mx-1 hidden sm:block" />
 

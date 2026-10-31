@@ -30,13 +30,13 @@ export function tvFromParams(page: ActiveNavTab, params: URLSearchParams): TvKin
   return null;
 }
 
-/** Enters a mode with a history entry (Back leaves it), closing any panels, and asks for full screen where allowed */
-export function enterTv(kind: TvKind): void {
+/** Enters a mode with a history entry (Back leaves it), closing any panels, and asks for full screen where allowed. `extra` adds link params (e.g. mix=1) */
+export function enterTv(kind: TvKind, extra: Record<string, string> = {}): void {
   resetTvExit();
   // The pushed entry is marked, so exitTv can tell it from one reached by a shared link or a reload-less edit
   const push = () => {
     const prev = window.history.state;
-    setHashParams({ [kind]: '1' }, true, { ...(prev && typeof prev === 'object' ? prev : {}), [TV_MARK]: true });
+    setHashParams({ ...extra, [kind]: '1' }, true, { ...(prev && typeof prev === 'object' ? prev : {}), [TV_MARK]: true });
   };
   if (PANEL_PARAMS.some((key) => parseHash(window.location.hash).params.has(key))) {
     // Closing panels may go Back, which lands later: add the entry once the hash has settled
@@ -63,7 +63,7 @@ export function exitTv(): void {
   exited = true;
   const state = window.history.state;
   if (state && typeof state === 'object' && (state as Record<string, unknown>)[TV_MARK] === true) window.history.back();
-  else setHashParams({ tv: '', dash: '' });
+  else setHashParams({ tv: '', dash: '', mix: '' });
   leaveFullscreen();
 }
 

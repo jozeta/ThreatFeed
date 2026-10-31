@@ -8,14 +8,21 @@ import { useLeakSiteVictims } from '../../hooks/useLeakSiteVictims';
 import { filterAndSortArticles } from '../../services/articles/filterSort';
 import { buildBriefing } from '../../services/intelligence/briefing';
 import { tilesForBriefing, tilesForFront, tilesForRansomware, toEngineItems, TvTile } from '../../services/tv/tiles';
-import { GRIDS, Slot } from '../../services/tv/tileEngine';
+import { EngineItem, GRIDS, Slot } from '../../services/tv/tileEngine';
+import { mixItems } from '../../services/tv/mix';
 import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
 import TvFooter from './TvFooter';
 import { useLivingWall } from './useLivingWall';
 import { useBreakingDetection, useBreakingNews } from './useBreakingNews';
 import { kevAddedMap } from '../../services/tv/breaking';
-import { SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
+import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
+import { PanelDef } from './DashboardWall';
+import { VulnCtx, vulnNumberPanels } from './dashPanels';
+
+/** Mixed mode's number panels: ids kept apart from story ids */
+const NUM = 'num:';
+const NONE: string[] = []; // stable, so the panels' data memo still hits when a setting is missing
 
 const NO_FILTERS = {
   searchQuery: '', selectedCategory: null, selectedSourceId: null, selectedTag: null,
@@ -43,20 +50,34 @@ function Empty() {
 }
 
 export default function TvWall({ page }: { page: ActiveNavTab }) {
-  const { articles, feeds, cveIntel, incidents, initialSyncDone } = useFeeds();
+  const { articles, feeds, cveIntel, incidents, initialSyncDone, msrc, stats, ensureMsrc, ensureStats, snapshotGeneratedAt } = useFeeds();
   const vulns = useVulns();
   const { victims } = useLeakSiteVictims();
   const { settings } = useSettings();
   const tv = useTvSettings();
   const reduced = useReducedMotion();
+  // Mixed mode (Latest only): the Vulns number panels join the queue; Patch Tuesday and the stats load only then
+  const mixed = page === 'latest' && tv.mix;
+  useEffect(() => {
+    if (!mixed) return;
+    void ensureMsrc();
+    void ensureStats();
+  }, [mixed, ensureMsrc, ensureStats, snapshotGeneratedAt]);
 
   // The wall rebuilds on its own schedule (refills, data signature); it reads the latest data through this ref
-  const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings };
+  const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings, mixed, msrc, stats };
   const ref = useRef(latest);
   ref.current = latest;
   // Tile content by id: every build's tiles, with the on-screen copy winning for tiles still on screen
   const tilesById = useRef(new Map<string, TvTile>());
   const onScreen = useRef<Slot[]>([]);
+  // Mixed mode's number panels by item id ('num:…'), kept the same way
+  const panelsById = useRef(new Map<string, PanelDef>());
+  const vulnCtx = (): VulnCtx => {
+    const d = ref.current;
+    return { vulns: d.vulns, msrc: d.msrc, stats: d.stats, stackKeywords: d.settings.stackKeywords ?? NONE, watchedCves: d.settings.watchedCves ?? NONE, now: Date.now() };
+  };
+  const numbers = (): PanelDef[] => (ref.current.mixed ? vulnNumberPanels(vulnCtx(), vulnCtx) : []);
 
   const build = (): TvTile[] => {
     const d = ref.current;
@@ -93,12 +114,20 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
         if (t) next.set(t.id, t);
       }
       tilesById.current = next;
-      return toEngineItems(tiles);
+      const panels = numbers();
+      const nextPanels = new Map(panels.map(p => [NUM + p.id, p]));
+      for (const s of onScreen.current) {
+        const p = panelsById.current.get(s.itemId);
+        if (p) nextPanels.set(s.itemId, p);
+      }
+      panelsById.current = nextPanels;
+      const numberItems: EngineItem[] = panels.map(p => ({ id: NUM + p.id, weight: p.weight, shapes: p.shapes }));
+      return mixItems(toEngineItems(tiles), numberItems);
     },
     size,
     tv.intervalSeconds * 1000,
     {
-      signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
+      signature: `${page}|${mixed ? `mix|${msrc ? 'm' : '-'}|${stats ? 's' : '-'}|` : ''}${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
       outMs: wallOutMs(reduced, tv.transition, tv.speed),
     }
   );
@@ -120,19 +149,34 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   });
 
   const now = Date.now();
-  const shown = slots.filter(s => tilesById.current.has(s.itemId));
+  const shown = slots.filter(s => tilesById.current.has(s.itemId) || panelsById.current.has(s.itemId));
   if (shown.length === 0) return <Empty />;
 
   const grid = GRIDS[size];
+  const transition = wallTransition(reduced, tv.transition);
   return (
     <>
       <div
         className="tv-wall"
         data-size={size}
-        data-transition={wallTransition(reduced, tv.transition)}
+        data-transition={transition}
         style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[tv.speed] } as CSSProperties}
       >
-        {shown.map(s => (
+        {shown.map(s => panelsById.current.has(s.itemId) ? (
+          // A number panel: the dashboard's cell and count-up, as on the Vulns dashboard
+          <div
+            key={s.key}
+            className="tv-cell tv-slot"
+            data-size={size}
+            data-panel={s.itemId}
+            data-leaving={leaving.has(s.key) ? '1' : undefined}
+            style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
+          >
+            <CellDelayContext.Provider value={cellDelayMs(transition, s.order, tv.speed)}>
+              {panelsById.current.get(s.itemId)!.render()}
+            </CellDelayContext.Provider>
+          </div>
+        ) : (
           <TvTileCard
             key={s.key}
             tile={tilesById.current.get(s.itemId)!}

@@ -75,3 +75,18 @@ describe('enterTv / exitTv history', () => {
     back.mockRestore();
   });
 });
+
+describe('enterTv extra params / exitTv mix', () => {
+  beforeEach(() => resetTvExit());
+  it('adds the extra params to the pushed hash', () => {
+    window.history.replaceState(null, '', '/#/latest');
+    enterTv('tv', { mix: '1' });
+    expect(window.location.hash).toContain('tv=1');
+    expect(window.location.hash).toContain('mix=1');
+  });
+  it('exit in place clears mix too', () => {
+    window.history.replaceState(null, '', '/#/latest?tv=1&mix=1');
+    exitTv();
+    expect(window.location.hash).toBe('#/latest');
+  });
+});

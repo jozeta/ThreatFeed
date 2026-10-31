@@ -80,10 +80,11 @@ const shortDate = (iso: string) => {
 export const WATCHLIST_EMPTY = 'Nothing new for your vendors';
 const SEVERITY_COLOR: Record<string, string> = { Critical: '#ef4444', Important: '#fb923c', Moderate: '#fbbf24', Low: '#64748b' };
 
-export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): PanelDef[] {
-  const { out, add, first: { d, x } } = pool(ctx, fresh, vulnData);
-  const any = !!ctx.vulns || !!ctx.stats;
+type AddPanel<D> = (id: string, wide: boolean, has: boolean, view: (d: D, now: number) => ReactNode) => void;
+type VulnD = ReturnType<typeof vulnData>;
 
+/** The four Vulns number panels (also mixed into the Latest TV wall) */
+function addVulnNumbers(add: AddPanel<VulnD>, d: VulnD['d'], any: boolean) {
   add('critical7d', false, any, ({ d }) => <StatCard label="Critical CVEs · 7 days" figure={d.critical7d} color="#f87171" />);
   add('kev7d', false, any, ({ d }) => <StatCard label="Added to CISA KEV · 7 days" figure={d.kev7d} color="#fb923c" />);
   add('exploits7d', false, any, ({ d }) => <StatCard label="Public exploits · 7 days" figure={d.exploits7d} color="#fbbf24" />);
@@ -95,6 +96,20 @@ export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): Pane
       note={pt ? `${pt.critical} critical · ${plural(pt.zeroDays, 'zero-day')}` : 'No data yet'}
     />
   ));
+}
+
+/** Just the Vulns number panels (1×1), for mixed mode; none without Vulns data */
+export function vulnNumberPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): PanelDef[] {
+  const { out, add, first: { d } } = pool(ctx, fresh, vulnData);
+  addVulnNumbers(add, d, !!ctx.vulns || !!ctx.stats);
+  return out;
+}
+
+export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): PanelDef[] {
+  const { out, add, first: { d, x } } = pool(ctx, fresh, vulnData);
+  const any = !!ctx.vulns || !!ctx.stats;
+
+  addVulnNumbers(add, d, any);
   add('exploitedNow', true, d.exploitedNow.length > 0, ({ d }) => (
     <ListPanel
       label="Exploited right now"

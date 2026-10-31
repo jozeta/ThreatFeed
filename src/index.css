@@ -73,7 +73,7 @@
   margin-bottom: 1.5rem !important;
   gap: 1rem !important;
 }
-.spacing-mode-compact article {
+.spacing-mode-compact article:not(.tv-tile) {
   padding-bottom: 0.75rem !important;
   margin-bottom: 0.75rem !important;
 }
@@ -82,7 +82,7 @@
   margin-bottom: 2.75rem !important;
   gap: 2rem !important;
 }
-.spacing-mode-comfortable article {
+.spacing-mode-comfortable article:not(.tv-tile) {
   padding-bottom: 1.25rem !important;
   margin-bottom: 1.25rem !important;
 }
@@ -91,7 +91,7 @@
   margin-bottom: 4rem !important;
   gap: 2.75rem !important;
 }
-.spacing-mode-spacious article {
+.spacing-mode-spacious article:not(.tv-tile) {
   padding-bottom: 2rem !important;
   margin-bottom: 2rem !important;
 }
@@ -813,7 +813,7 @@ button.tag-chip {
 .tv-wall[data-transition='reduced'] .tv-cell[data-leaving] { animation: tv-fade-out 200ms linear both; }
 
 /* Dashboard mode: panels on the same living wall as TV mode (.tv-wall tracks, .tv-cell transitions); sizes in vw */
-.tv-dash-wall { font-family: system-ui, sans-serif; }
+.tv-dash-wall, .tv-slot { font-family: system-ui, sans-serif; }
 .tv-slot {
   --s: 1; /* type scale for the big numbers: Small grid 0.8, like the tiles */
   --d: 0ms; /* when the cell itself appears; the arrival animations inside wait for it */
