@@ -1,6 +1,8 @@
 import { CSSProperties, useLayoutEffect, useRef } from 'react';
 import { TvTileSize } from '../../types';
 import { TvTile, TvTone } from '../../services/tv/tiles';
+import TvQr from './TvQr';
+import { useTvSettings } from './useTvSettings';
 
 export const TONE_COLOR: Record<TvTone, string> = {
   critical: '#ef4444',
@@ -38,6 +40,9 @@ export default function TvTileCard({ tile, size, area, leaving, isNew, now, styl
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
+  const { qr } = useTvSettings();
+  const showQr = qr && area >= 2 && !!tile.url;
   // Show only whole lines: the headline as many as the tile has room for (up to its CSS cap), the summary as many as
   // the height left allows, or none when fewer than two fit
   useLayoutEffect(() => {
@@ -53,7 +58,11 @@ export default function TvTileCard({ tile, size, area, leaving, isNew, now, styl
         const room = art.clientHeight - parseFloat(acs.paddingTop) - parseFloat(acs.paddingBottom)
           - (meta ? meta.offsetHeight + parseFloat(acs.rowGap || '0') : 0);
         const cap = parseInt(hcs.getPropertyValue('--tv-headline-lines'), 10) || 4;
-        const lines = Math.max(1, Math.min(cap, Math.floor((room + 0.5) / hLine)));
+        // The corner code keeps its height clear of the headline too
+        const qrEl = qrRef.current;
+        const reserve = qrEl ? qrEl.offsetHeight + parseFloat(acs.rowGap || '0') : 0;
+        let lines = Math.max(1, Math.min(cap, Math.floor((room + 0.5) / hLine)));
+        if (reserve && lines * hLine > room - reserve) lines = Math.max(1, Math.floor((room - reserve + 0.5) / hLine));
         h.style.webkitLineClamp = String(lines);
         h.style.maxHeight = `${lines * hLine}px`;
       }
@@ -71,7 +80,7 @@ export default function TvTileCard({ tile, size, area, leaving, isNew, now, styl
     ro.observe(art);
     if (boxRef.current) ro.observe(boxRef.current);
     return () => ro.disconnect();
-  }, [size, area]);
+  }, [size, area, showQr]);
   const age = shortAge(tile.time, now);
   return (
     <article
@@ -90,9 +99,12 @@ export default function TvTileCard({ tile, size, area, leaving, isNew, now, styl
       </div>
       <h2 ref={headlineRef} className="tv-tile-headline">{tile.headline}</h2>
       {tile.summary && (
-        <div ref={boxRef} className="tv-tile-summary-box">
+        <div ref={boxRef} className="tv-tile-summary-box" data-qr={showQr ? '1' : undefined}>
           <p ref={summaryRef} className="tv-tile-summary">{tile.summary}</p>
         </div>
+      )}
+      {showQr && (
+        <div ref={qrRef} className="tv-qr-corner"><TvQr url={tile.url!} /></div>
       )}
     </article>
   );

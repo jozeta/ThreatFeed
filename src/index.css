@@ -756,6 +756,16 @@ button.tag-chip {
   overflow: hidden;
 }
 .tv-tile-summary-box { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.tv-tile-summary-box[data-qr] { padding-right: calc(max(88px, 7.5vmin) + 2vmin); } /* the code sits in the corner */
+.tv-qr-corner {
+  position: absolute;
+  right: 2vmin;
+  bottom: 2vmin;
+  width: max(88px, 7.5vmin);
+  height: max(88px, 7.5vmin);
+  line-height: 0;
+}
+.tv-qr { width: 100%; height: 100%; display: block; }
 .tv-tile-summary {
   margin: 0;
   font-size: clamp(calc(1rem * var(--s)), calc(1.5vw * var(--s)), calc(4rem * var(--s)));
