@@ -4,9 +4,15 @@ import type { Article, Feed } from '../../types';
 // articles whose feed is gone (nothing to say which category they were in).
 export function withoutDisabledCategories(articles: Article[], feeds: Feed[], disabled: string[]): Article[] {
   if (disabled.length === 0) return articles;
+  return articles.filter(inUse(feeds, disabled));
+}
+
+/** Whether an article is shown (see withoutDisabledCategories). */
+export function inUse(feeds: Feed[], disabled: string[]): (a: Article) => boolean {
+  if (disabled.length === 0) return () => true;
   const off = new Set(disabled);
   const categoryOf = new Map(feeds.map(f => [f.id, f.category]));
-  return articles.filter(a => a.bookmarked || !off.has(categoryOf.get(a.sourceId) ?? ''));
+  return a => a.bookmarked || !off.has(categoryOf.get(a.sourceId) ?? '');
 }
 
 export function feedsInUse(feeds: Feed[], disabled: string[]): Feed[] {
