@@ -69,6 +69,9 @@ export default function TvTileCard({ tile, size, area, leaving, isNew, now, styl
       const el = summaryRef.current;
       const box = boxRef.current;
       if (!el || !box) return;
+      // The summary runs beside the code, never under it: pad it by the code's width (which follows the tile's height)
+      const qrBox = qrRef.current;
+      box.style.paddingRight = qrBox ? `${qrBox.offsetWidth + (parseFloat(getComputedStyle(qrBox).right) || 0)}px` : '';
       const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
       const lines = lineHeight > 0 ? Math.floor((box.clientHeight + 0.5) / lineHeight) : 0;
       el.style.webkitLineClamp = String(Math.max(lines, 1));

@@ -756,15 +756,18 @@ button.tag-chip {
   overflow: hidden;
 }
 .tv-tile-summary-box { flex: 1 1 0; min-height: 0; overflow: hidden; }
-.tv-tile-summary-box[data-qr] { padding-right: calc(max(88px, 7.5vmin) + 2vmin); } /* the code sits in the corner */
+/* The QR code scales with the tile so a phone reads it from 2–3 m: 40% of a wide tile's height, 35% of the hero's, never
+   under 88px. A percentage height on an absolutely placed box is of the tile's height. TvTileCard keeps the headline
+   above it and pads the summary clear of it (by its measured width) */
 .tv-qr-corner {
   position: absolute;
   right: 2vmin;
   bottom: 2vmin;
-  width: max(88px, 7.5vmin);
-  height: max(88px, 7.5vmin);
+  height: max(88px, 40%);
+  aspect-ratio: 1;
   line-height: 0;
 }
+.tv-tile[data-area='4'] .tv-qr-corner { height: max(88px, 35%); }
 .tv-qr { width: 100%; height: 100%; display: block; }
 .tv-tile-summary {
   margin: 0;
