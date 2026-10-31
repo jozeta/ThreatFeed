@@ -1,8 +1,9 @@
-import { CSSProperties, ReactNode, useLayoutEffect, useRef, useState } from 'react';
+import { CSSProperties, ReactNode, useContext, useLayoutEffect, useRef, useState } from 'react';
 import { useCountUp } from '../../hooks/useCountUp';
 import { useReducedMotion } from '../Common/SidePanel';
 import { monotonePath } from '../charts/MentionsArea';
 import { Figure } from '../../services/tv/dashboard';
+import { CellDelayContext } from './wallMotion';
 
 /** Dashboard building blocks: all sizes in vw so the screen scales from 1280 to 3840 wide */
 
@@ -61,7 +62,8 @@ export function StatCard({ label, figure, value, color, versus = 'vs last week',
   label: string; figure?: Figure; value?: number; color?: string; versus?: string; note?: string; text?: string;
 }) {
   const reduced = useReducedMotion();
-  const n = useCountUp(figure?.value ?? value ?? 0, reduced, 0, COUNT_UP_DASH_MS);
+  // Starts when the cell itself appears (reveal staggers cells), so the visible count begins at 0
+  const n = useCountUp(figure?.value ?? value ?? 0, reduced, useContext(CellDelayContext), COUNT_UP_DASH_MS);
   return (
     <section className="tv-panel">
       <div className="tv-label">{label}</div>
@@ -118,25 +120,24 @@ export function HBarList({ label, data, color, format, note }: {
   );
 }
 
-/** Vertical bars that grow from the bottom, one after another; value above, label under */
-export function VBars({ label, data, color, legend }: {
-  label: string; data: { label: string; n: number }[]; color: string | ((i: number) => string); legend?: ReactNode;
+/** Vertical bars that grow from the bottom, one after another; value above, label under. A null value has no bar and no value (no history yet). */
+export function VBars({ label, data, color }: {
+  label: string; data: { label: string; n: number | null }[]; color: string | ((i: number) => string);
 }) {
-  const max = Math.max(1, ...data.map(d => d.n));
+  const max = Math.max(1, ...data.map(d => d.n ?? 0));
   return (
     <Panel label={label}>
       <div className="tv-vbars" role="img" aria-label={label}>
         {data.map((d, i) => (
           <div key={d.label + i} className="tv-vbar">
-            <span className="tv-vbar-n">{d.n}</span>
+            <span className="tv-vbar-n">{d.n ?? '\u00a0'}</span>
             <span className="tv-vbar-track">
-              <i className="tv-grow-y" style={{ ...nth(i), height: `${d.n ? Math.max(2, (d.n / max) * 100) : 0}%`, background: typeof color === 'string' ? color : color(i) }} />
+              {d.n !== null && <i className="tv-grow-y" style={{ ...nth(i), height: `${d.n ? Math.max(2, (d.n / max) * 100) : 0}%`, background: typeof color === 'string' ? color : color(i) }} />}
             </span>
             <span className="tv-vbar-label">{d.label}</span>
           </div>
         ))}
       </div>
-      {legend}
     </Panel>
   );
 }

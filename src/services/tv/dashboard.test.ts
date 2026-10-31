@@ -180,8 +180,22 @@ describe('ransomExtras', () => {
     expect(r.weekly90).toHaveLength(13);
     expect(r.weekly90[12]).toEqual({ week: '2026-10-26', count: 8 });
   });
+  it('weekly90 has no count for weeks before the first victim day, live or stats', () => {
+    const v = [vic('a', H), vic('b', 15 * 24 * H)]; // 2026-10-30 and 2026-10-15
+    const live = ransomExtras(v, null, now).weekly90;
+    expect(live.slice(0, 10).every(w => w.count === null)).toBe(true);
+    expect(live[10]).toEqual({ week: '2026-10-12', count: 1 }); // the week holding the first day
+    expect(live[11]).toEqual({ week: '2026-10-19', count: 0 }); // a real zero after history starts
+    expect(live[12]).toEqual({ week: '2026-10-26', count: 1 });
+    const s = stats({ '2026-09-02': day({ victims: ['x'] }) });
+    const withStats = ransomExtras(v, s, now).weekly90;
+    expect(withStats.findIndex(w => w.count !== null)).toBe(withStats.findIndex(w => w.week === '2026-08-31'));
+    expect(withStats[4]).toEqual({ week: '2026-08-31', count: 1 });
+    expect(withStats[5]).toEqual({ week: '2026-09-07', count: 0 });
+  });
   it('accepts empty', () => {
     const r = ransomExtras([], null, now);
+    expect(r.weekly90.every(w => w.count === 0)).toBe(true);
     expect(r.spotlight).toBeNull();
     expect(r.newGroups).toEqual([]);
   });

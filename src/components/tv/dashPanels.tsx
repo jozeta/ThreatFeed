@@ -234,7 +234,7 @@ export function ransomPanels(ctx: RansomCtx, fresh: () => RansomCtx = () => ctx)
   add('weekday', true, x.weekday.some(w => w.count > 0), ({ x }) => (
     <VBars label="Victims by weekday · last 4 weeks" data={x.weekday.map(w => ({ label: w.day, n: w.count }))} color={PURPLE} />
   ));
-  add('weekly90', true, chartReady(x.weekly90.map(w => [w.count])), ({ x }) => (
+  add('weekly90', true, chartReady(x.weekly90.map(w => [w.count ?? 0])), ({ x }) => (
     <VBars label="Victims · 90 days (weekly)" data={x.weekly90.map(w => ({ label: shortDate(w.week), n: w.count }))} color={PURPLE} />
   ));
   return out;

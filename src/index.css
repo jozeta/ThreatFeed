@@ -832,7 +832,6 @@ button.tag-chip {
 .tv-stat .tv-delta { font-size: calc(max(0.7rem, 1vw) * max(1, var(--s, 1))); }
 .tv-legend { flex: none; font-size: max(0.7rem, 1vw); color: #8a95a3; }
 .tv-panel-sub { flex: none; font-size: max(0.8rem, 1.3vw); color: #aab3bf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tv-purple { background: #4c1d95; color: #e9d5ff; }
 .tv-followed { background: #1e3a5f; color: #bfdbfe; }
 .tv-epss { flex: none; font-size: 0.8em; color: #8a95a3; font-variant-numeric: tabular-nums; }
 /* Vertical bars: value on top, bar, label under */

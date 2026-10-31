@@ -232,7 +232,8 @@ export interface RansomExtras {
   newGroups: { group: string; victims: number }[];
   spotlight: { group: string; count: number; victims: LeakSiteVictim[] } | null;
   weekday: { day: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'; count: number }[];
-  weekly90: { week: string; count: number }[];
+  /** count is null for weeks that end before the first day with any victim data (no bar, rather than a misleading zero) */
+  weekly90: { week: string; count: number | null }[];
 }
 
 const shortTitle = (r: { id: string; description?: string }) => (r.description ?? r.id).slice(0, 60);
@@ -351,6 +352,8 @@ export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null,
   const groupsBefore = sum(dayRange(now, 29, 7), 'groups');
   const topGroup = top(groups7, 1)[0];
   const weekSet = new Set(week);
+  // The first day with any victim data, live or stats
+  const start = minDay([...vic].filter(([, ids]) => ids.size > 0).map(([d]) => d));
 
   const spotlight = topGroup
     ? {
@@ -374,6 +377,6 @@ export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null,
       .map(([g, n]) => ({ group: g, victims: n })),
     spotlight,
     weekday: WEEKDAYS.map((day, i) => ({ day, count: perWeekday[i] })),
-    weekly90: weekStarts(now, 13).map(days => ({ week: days[0], count: countIn(vic, days) })),
+    weekly90: weekStarts(now, 13).map(days => ({ week: days[0], count: start !== '' && days[6] < start ? null : countIn(vic, days) })),
   };
 }

@@ -3,8 +3,8 @@ import { useReducedMotion } from '../Common/SidePanel';
 import { TvTileSize } from '../../types';
 import { EngineItem, Rng, Slot, WallState, Swap, applySwap, initWall, nextDue, pageLabel, planSwap, refill, shiftDue } from '../../services/tv/tileEngine';
 
-export const SWAP_OUT_MS = 450; // reduced motion: 200
-const REDUCED_OUT_MS = 200;
+export const SWAP_OUT_MS = 450;
+export const REDUCED_OUT_MS = 200;
 
 interface Options {
   /** Changes when the data behind `build` changes; rebuilds the wall until the first swap completes (or while it is empty/fallback) */
