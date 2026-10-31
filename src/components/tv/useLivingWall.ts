@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from '../Common/SidePanel';
 import { TvTileSize } from '../../types';
-import { EngineItem, Rng, Slot, WallState, Swap, applySwap, initWall, nextDue, pageLabel, planSwap, refill, shiftDue } from '../../services/tv/tileEngine';
+import { EngineItem, Rng, Slot, WallState, Swap, applySwap, initWall, nextDue, pageLabel, planSwap, prioritize as prioritizeItem, refill, shiftDue } from '../../services/tv/tileEngine';
 
 export const SWAP_OUT_MS = 450;
 export const REDUCED_OUT_MS = 200;
@@ -20,9 +20,9 @@ interface Options {
 
 /**
  * A wall of tiles that swap one at a time. One timer is armed at a time, for the next due slot; a swap has an out phase
- * (`leaving`) and then lands. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
+ * (`leaving`) and then lands. `build(full)` is told whether it starts a wall (initial build, rebuild) or refills one. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
  */
-export function useLivingWall(build: () => EngineItem[], size: TvTileSize, intervalMs: number, opts: Options = {}) {
+export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTileSize, intervalMs: number, opts: Options = {}) {
   const buildRef = useRef(build);
   buildRef.current = build;
   const optsRef = useRef(opts);
@@ -34,7 +34,7 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
   const now = () => (optsRef.current.now ?? Date.now)();
   const rng: Rng = () => (optsRef.current.rng ?? Math.random)();
 
-  const [wall, setWallState] = useState<WallState>(() => initWall(build(), size, now(), intervalMs, rng));
+  const [wall, setWallState] = useState<WallState>(() => initWall(build(true), size, now(), intervalMs, rng));
   const wallRef = useRef(wall);
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
   const [epoch, setEpoch] = useState(0); // bumped when the wall is replaced, so the timer starts over
@@ -56,7 +56,7 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
   const rebuildForData = () => {
     const w = wallRef.current;
     if (settled.current && w.slots.length > 0 && !w.fallback) return;
-    const next = initWall(buildRef.current(), w.size, now(), intervalMs, rng, w.cycle + 1, w.seq);
+    const next = initWall(buildRef.current(true), w.size, now(), intervalMs, rng, w.cycle + 1, w.seq);
     const ids = new Set(w.slots.map(t => t.itemId));
     if (w.slots.length > 0 && next.slots.length === ids.size && next.slots.every(t => ids.has(t.itemId))) return;
     rebuild(next);
@@ -77,7 +77,7 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
     if (changed) {
       clearDebounce();
       settled.current = false;
-      rebuild(initWall(buildRef.current(), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
+      rebuild(initWall(buildRef.current(true), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
       return;
     }
     if (!signed) return;
@@ -116,7 +116,7 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
       const slot = nextDue(w);
       if (!slot) return;
       if (w.cursor >= w.queue.length) {
-        w = refill(w, buildRef.current(), now(), intervalMs, rng);
+        w = refill(w, buildRef.current(false), now(), intervalMs, rng);
         setWall(w);
       }
       const swap = planSwap(w, slot.key, now(), intervalMs, rng);
@@ -162,5 +162,12 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epoch, intervalMs]);
 
-  return { slots: wall.slots, leaving, label: pageLabel(wall), fallback: wall.fallback };
+  /** Breaking items jump the queue: each takes the next due tile, in order, one per swap. Changes only the live wall state (no re-render) */
+  const prioritize = useRef((list: EngineItem[]) => {
+    let w = wallRef.current;
+    for (const item of list) w = prioritizeItem(w, item);
+    wallRef.current = w;
+  }).current;
+
+  return { slots: wall.slots, leaving, label: pageLabel(wall), fallback: wall.fallback, prioritize };
 }

@@ -25,13 +25,15 @@ interface Props {
   /** Cells covered (w × h); sets the type scale: 1 a single cell, 2 a wide or tall tile, 4 the hero */
   area: number;
   leaving: boolean;
+  /** Breaking news in its first round: a red NEW badge by the source line */
+  isNew?: boolean;
   now: number;
   style?: CSSProperties;
 }
 
 const areaClass = (area: number) => (area >= 4 ? 4 : area >= 2 ? 2 : 1);
 
-export default function TvTileCard({ tile, size, area, leaving, now, style }: Props) {
+export default function TvTileCard({ tile, size, area, leaving, isNew, now, style }: Props) {
   const tileRef = useRef<HTMLElement>(null);
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const summaryRef = useRef<HTMLParagraphElement>(null);
@@ -82,6 +84,7 @@ export default function TvTileCard({ tile, size, area, leaving, now, style }: Pr
     >
       <span className="tv-tile-bar" style={{ background: TONE_COLOR[tile.tone] }} />
       <div className="tv-tile-meta">
+        {isNew && <span className="tv-new-badge">New</span>}
         {tile.source}
         {age && ` · ${age}`}
       </div>

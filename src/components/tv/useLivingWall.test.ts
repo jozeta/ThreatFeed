@@ -17,7 +17,7 @@ const items = (n: number): EngineItem[] =>
   Array.from({ length: n }, (_, i) => ({ id: `s${i}`, weight: 1, shapes: ['1x1', '2x1', '2x2'] }));
 
 let Harness: () => null;
-function mount(build: () => EngineItem[], interval = 60000, signature?: () => number) {
+function mount(build: (full: boolean) => EngineItem[], interval = 60000, signature?: () => number) {
   Harness = function H() {
     result = useLivingWall(build, 'medium', interval, { signature: signature?.(), outMs: 450, rng: () => 0.5 });
     return null;
@@ -72,6 +72,26 @@ describe('useLivingWall', () => {
     } finally {
       window.removeEventListener(TV_QUIET_EVENT, quiet);
     }
+  });
+
+  it('prioritize puts the item on screen at the next due swap, without a re-render of its own', () => {
+    mount(() => items(30));
+    const before = result;
+    result.prioritize([{ id: 'hot', weight: 1, shapes: ['1x1', '2x1', '2x2'] }]);
+    expect(result).toBe(before); // no re-render
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(false);
+    advance(60000);
+    advance(450);
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(true);
+  });
+
+  it('tells build whether it starts a wall (true) or refills one (false)', () => {
+    const calls: boolean[] = [];
+    mount(full => { calls.push(full); return items(6); });
+    expect(calls[0]).toBe(true);
+    for (let i = 0; i < 20; i++) advance(60000);
+    expect(calls.slice(1)).toContain(false);
+    expect(calls.slice(1).every(c => c === false)).toBe(true);
   });
 
   it('rebuilds on a signature change before the first swap', () => {

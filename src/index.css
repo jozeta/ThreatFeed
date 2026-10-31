@@ -729,6 +729,20 @@ button.tag-chip {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.tv-new-badge {
+  display: inline-block;
+  margin-right: 0.6em;
+  padding: 0.1em 0.55em;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-weight: 700;
+  font-variant: small-caps;
+  text-transform: lowercase; /* "New" drawn in small caps */
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  vertical-align: baseline;
+}
 .tv-tile-headline {
   margin: 0;
   font-weight: 700;

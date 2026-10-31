@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applySwap, drawDue, shiftDue, EngineItem, GRIDS, initWall, jitterMs, nextDue, pageLabel, planSwap, refill, Rng, Shape, WallState,
+  applySwap, drawDue, shiftDue, EngineItem, GRIDS, initWall, jitterMs, nextDue, pageLabel, planSwap, prioritize, refill, Rng, Shape, Slot, WallState,
 } from './tileEngine';
 import { TvTileSize } from '../../types';
 
@@ -252,6 +252,108 @@ describe('swaps', () => {
     const due = nextDue(s)!;
     planSwap(s, due.key, due.dueAt, MIN, mulberry32(3));
     expect(JSON.stringify(s)).toBe(before);
+  });
+});
+
+describe('prioritize', () => {
+  const hot = (id = 'hot'): EngineItem => ({ id, weight: 0, shapes: ALL });
+  const isSingle = (t: Slot) => t.w === 1 && t.h === 1;
+  /** A medium wall (and its due single) where that single has exactly one single neighbour beside it; `atMin` picks the tile count. */
+  function wallWithSingle(atMin: boolean): { s: WallState; due: Slot } {
+    const g = GRIDS.medium;
+    // Walk a seeded wall until it reaches such a state
+    const rng = mulberry32(3);
+    let s = initWall(stories(30), 'medium', 0, MIN, rng);
+    for (let i = 0; i < 2000; i++) {
+      if ((s.slots.length === g.min) === atMin) {
+        for (const due of s.slots.filter(isSingle)) {
+          const mates = s.slots.filter(t => t !== due && isSingle(t) && t.row === due.row && Math.abs(t.col - due.col) === 1);
+          if (mates.length === 1) return { s, due };
+        }
+      }
+      const next = nextDue(s)!;
+      s = applySwap(s, planSwap(s, next.key, next.dueAt, MIN, rng));
+      if (s.cursor >= s.queue.length) s = refill(s, stories(30), next.dueAt, MIN, rng);
+    }
+    throw new Error('no such wall');
+  }
+
+  it('puts the item at the front of the unused queue, dropping an older unused copy', () => {
+    const s = initWall(stories(30), 'medium', 0, MIN, mulberry32(1));
+    const later = s.queue[s.queue.length - 1].item;
+    const p = prioritize(s, later);
+    expect(p.queue).toHaveLength(s.queue.length);
+    expect(p.queue[p.cursor].item.id).toBe(later.id);
+    expect(p.queue[p.cursor].priority).toBe(true);
+    expect(p.queue.filter(q => q.item.id === later.id && !q.used)).toHaveLength(1);
+    expect(s.queue[s.cursor].priority).toBeUndefined(); // not mutated
+  });
+
+  it('merges a due single with a neighbour that arrived 5 s ago into a wide tile for the priority item', () => {
+    const { s, due } = wallWithSingle(false);
+    const now = 100000;
+    const young = { ...s, slots: s.slots.map(t => ({ ...t, arrivedAt: now - 5000 })) };
+    const swap = planSwap(prioritize(young, hot()), due.key, now, MIN, mulberry32(1));
+    expect(swap.leaving).toHaveLength(2);
+    expect(swap.leaving).toContain(due.key);
+    expect(swap.arriving).toHaveLength(1);
+    expect(swap.arriving[0]).toMatchObject({ itemId: 'hot', w: 2, h: 1, row: due.row });
+  });
+
+  it('with the tile count at the minimum it replaces the due tile in place', () => {
+    const { s, due } = wallWithSingle(true);
+    const swap = planSwap(prioritize(s, hot()), due.key, 100000, MIN, mulberry32(1));
+    expect(swap.leaving).toEqual([due.key]);
+    expect(swap.arriving).toHaveLength(1);
+    expect(swap.arriving[0]).toMatchObject({ itemId: 'hot', col: due.col, row: due.row, w: 1, h: 1 });
+  });
+
+  it('two priority items arrive in order, one per swap', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const rng = mulberry32(seed);
+      let s = initWall(stories(30), 'small', 0, MIN, rng);
+      s = prioritize(prioritize(s, hot('a')), hot('b'));
+      const arrived: string[][] = [];
+      for (let i = 0; i < 2; i++) {
+        const due = nextDue(s)!;
+        const swap = planSwap(s, due.key, due.dueAt, MIN, rng);
+        arrived.push(swap.arriving.map(t => t.itemId).filter(id => id === 'a' || id === 'b'));
+        s = applySwap(s, swap);
+      }
+      expect(arrived).toEqual([['a'], ['b']]);
+    }
+  });
+
+  it.each(SIZES)('%s soak keeps every invariant with a priority item every 50 swaps', size => {
+    const g = GRIDS[size];
+    const items = stories(30);
+    const rng = mulberry32(17);
+    let s = initWall(items, size, 0, MIN, rng);
+    let pending: string | null = null;
+    let wide = 0, injected = 0;
+    for (let i = 0; i < 2000; i++) {
+      if (i % 50 === 0) {
+        pending = `hot${i}`;
+        s = prioritize(s, hot(pending));
+        injected++;
+      }
+      const due = nextDue(s)!;
+      const swap = planSwap(s, due.key, due.dueAt, MIN, rng);
+      const hots = swap.arriving.filter(t => t.itemId.startsWith('hot'));
+      expect(hots.length).toBeLessThanOrEqual(1);
+      if (pending) {
+        expect(hots.map(t => t.itemId)).toEqual([pending]); // takes the next due tile
+        if (hots[0].w * hots[0].h >= 2) wide++;
+        pending = null;
+      }
+      s = applySwap(s, swap);
+      if (s.cursor >= s.queue.length) s = refill(s, items, due.dueAt, MIN, rng);
+      expectCovered(s);
+      expect(s.slots.length).toBeGreaterThanOrEqual(g.min);
+      expect(s.slots.length).toBeLessThanOrEqual(g.max);
+      expectDistinct(s);
+    }
+    expect(wide).toBeGreaterThan(injected / 3);
   });
 });
 

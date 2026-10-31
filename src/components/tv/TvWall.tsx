@@ -13,6 +13,8 @@ import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
 import TvFooter from './TvFooter';
 import { useLivingWall } from './useLivingWall';
+import { useBreakingNews } from './useBreakingNews';
+import { kevAddedMap } from '../../services/tv/breaking';
 import { SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
 const NO_FILTERS = {
@@ -78,10 +80,12 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     return [];
   };
 
+  const news = useBreakingNews();
   const size = tv.size;
-  const { slots, leaving, label } = useLivingWall(
-    () => {
+  const { slots, leaving, label, prioritize } = useLivingWall(
+    full => {
       const tiles = build();
+      if (full) news.markSeen(tiles);
       const next = new Map(tiles.map(t => [t.id, t]));
       // Tiles on screen keep their content until they swap out
       for (const s of onScreen.current) {
@@ -99,6 +103,23 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     }
   );
   onScreen.current = slots;
+
+  // Breaking news: on every data change (the wall's own rebuilds stop after its first swap), stories that arrived since
+  // the wall started jump the queue. A page change starts over: its tiles are not news.
+  const detectedPage = useRef(page);
+  useEffect(() => {
+    const tiles = build();
+    if (detectedPage.current !== page) {
+      detectedPage.current = page;
+      news.markSeen(tiles);
+      return;
+    }
+    const found = news.detect(tiles, kevAddedMap(vulns, cveIntel), Date.now());
+    if (!found.length) return;
+    for (const t of found) tilesById.current.set(t.id, t);
+    prioritize(toEngineItems(found));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, articles, vulns, cveIntel, victims, incidents]);
 
   const now = Date.now();
   const shown = slots.filter(s => tilesById.current.has(s.itemId));
@@ -120,6 +141,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
             size={size}
             area={s.w * s.h}
             leaving={leaving.has(s.key)}
+            isNew={news.isNew(s)}
             now={now}
             style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
           />

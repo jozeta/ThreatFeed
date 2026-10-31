@@ -26,6 +26,15 @@ describe('tilesForFront', () => {
     expect(tiles.map(t => t.id)).toEqual(['fresh']);
   });
 
+  it('story tiles carry CVEs, critical and the link for breaking news and QR codes', () => {
+    const [t] = tilesForFront(
+      [article('crit', { title: 'Zebra firmware overflow disclosed', publishedAt: ago(1), severity: 'critical', cves: ['CVE-2026-1'], url: 'https://x.test/a' })],
+      [],
+      NOW
+    );
+    expect(t).toMatchObject({ cves: ['CVE-2026-1'], critical: true, url: 'https://x.test/a' });
+  });
+
   it('widens to 72h, then 7 days, while fewer than 5 stories are fresh', () => {
     const mk = (id: string, h: number) => article(id, { title: `Distinct headline number ${id} about topic ${id}x`, publishedAt: ago(h) });
     expect(tilesForFront([mk('a', 2), mk('b', 30), mk('c', 100)], [], NOW).map(t => t.id).sort()).toEqual(['a', 'b', 'c']);
