@@ -1,6 +1,6 @@
 import { CSSProperties, ReactNode, useContext, useLayoutEffect, useRef, useState } from 'react';
 import { useCountUp } from '../../hooks/useCountUp';
-import { useSettings } from '../../context/SettingsContext';
+import { useTvSettings } from './useTvSettings';
 import { useReducedMotion } from '../Common/SidePanel';
 import { monotonePath } from '../charts/MentionsArea';
 import { Figure } from '../../services/tv/dashboard';
@@ -63,9 +63,9 @@ export function StatCard({ label, figure, value, color, versus = 'vs last week',
   label: string; figure?: Figure; value?: number; color?: string; versus?: string; note?: string; text?: string;
 }) {
   const reduced = useReducedMotion();
-  const { settings } = useSettings();
+  const tv = useTvSettings();
   // Starts when the cell itself appears (reveal staggers cells), so the visible count begins at 0
-  const n = useCountUp(figure?.value ?? value ?? 0, reduced, useContext(CellDelayContext), COUNT_UP_DASH_MS * SPEED_FACTOR[settings.tvAnimationSpeed]);
+  const n = useCountUp(figure?.value ?? value ?? 0, reduced, useContext(CellDelayContext), COUNT_UP_DASH_MS * SPEED_FACTOR[tv.speed]);
   return (
     <section className="tv-panel">
       <div className="tv-label">{label}</div>

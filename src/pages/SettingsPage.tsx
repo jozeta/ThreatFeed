@@ -625,6 +625,23 @@ export const SettingsPage: React.FC = () => {
             ))}
           </div>
         </div>
+
+        <div>
+          <span className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">QR codes on tiles</span>
+          <p className="text-xs font-serif text-theme-text-muted mb-2">Adds a QR code to wide and big news tiles so people can open the story on their phone.</p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.tvQrCodes}
+            aria-label="QR codes on tiles"
+            onClick={() => updateSettings({ tvQrCodes: !settings.tvQrCodes })}
+            className={`px-3 py-1.5 rounded text-xs font-mono border border-theme-border transition-colors ${
+              settings.tvQrCodes ? 'bg-theme-accent-subtle text-theme-accent font-bold' : 'bg-theme-card text-theme-text-muted hover:text-theme-text'
+            }`}
+          >
+            {settings.tvQrCodes ? 'On' : 'Off'}
+          </button>
+        </div>
       </section>
 
       {/* SECTION 4: INGESTION & GATEWAY */}

@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode, useRef } from 'react';
-import { useSettings } from '../../context/SettingsContext';
+import { useTvSettings } from './useTvSettings';
 import { GRIDS, Shape, Slot } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
 import PageCounter from './PageCounter';
@@ -18,13 +18,13 @@ export const WIDE_SHAPES: Shape[] = ['2x1', '2x2'];
  * returns the panels that have data (asked again at every cycle); `signature` changes when data arrives late.
  */
 export default function DashboardWall({ build, signature }: { build: () => PanelDef[]; signature?: string | number }) {
-  const { settings } = useSettings();
+  const tv = useTvSettings();
   const reduced = useReducedMotion();
   // Panels by id: every build's panels, with the on-screen copy winning for panels still on screen
   const panelsById = useRef(new Map<string, PanelDef>());
   const onScreen = useRef<Slot[]>([]);
 
-  const size = settings.tvTileSize;
+  const size = tv.size;
   const { slots, leaving, label } = useLivingWall(
     () => {
       const panels = build();
@@ -38,8 +38,8 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
       return panels.map(({ id, weight, shapes }) => ({ id, weight, shapes }));
     },
     size,
-    settings.tvIntervalSeconds * 1000,
-    { signature, outMs: wallOutMs(reduced, settings.tvTransition, settings.tvAnimationSpeed) }
+    tv.intervalSeconds * 1000,
+    { signature, outMs: wallOutMs(reduced, tv.transition, tv.speed) }
   );
   onScreen.current = slots;
 
@@ -53,14 +53,14 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
   }
 
   const grid = GRIDS[size];
-  const transition = wallTransition(reduced, settings.tvTransition);
+  const transition = wallTransition(reduced, tv.transition);
   return (
     <>
       <div
         className="tv-wall tv-dash-wall"
         data-size={size}
         data-transition={transition}
-        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[settings.tvAnimationSpeed] } as CSSProperties}
+        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[tv.speed] } as CSSProperties}
       >
         {shown.map(s => (
           <div
@@ -71,7 +71,7 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
             data-leaving={leaving.has(s.key) ? '1' : undefined}
             style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
           >
-            <CellDelayContext.Provider value={cellDelayMs(transition, s.order, settings.tvAnimationSpeed)}>
+            <CellDelayContext.Provider value={cellDelayMs(transition, s.order, tv.speed)}>
               {panelsById.current.get(s.itemId)!.render()}
             </CellDelayContext.Provider>
           </div>

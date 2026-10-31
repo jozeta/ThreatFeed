@@ -2,6 +2,7 @@ import { CSSProperties, useEffect, useRef, useState } from 'react';
 import { ActiveNavTab } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
 import { useSettings } from '../../context/SettingsContext';
+import { useTvSettings } from './useTvSettings';
 import { useVulns } from '../../hooks/useVulns';
 import { useLeakSiteVictims } from '../../hooks/useLeakSiteVictims';
 import { filterAndSortArticles } from '../../services/articles/filterSort';
@@ -44,6 +45,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const vulns = useVulns();
   const { victims } = useLeakSiteVictims();
   const { settings } = useSettings();
+  const tv = useTvSettings();
   const reduced = useReducedMotion();
 
   // The wall rebuilds on its own schedule (refills, data signature); it reads the latest data through this ref
@@ -76,7 +78,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     return [];
   };
 
-  const size = settings.tvTileSize;
+  const size = tv.size;
   const { slots, leaving, label } = useLivingWall(
     () => {
       const tiles = build();
@@ -90,10 +92,10 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
       return toEngineItems(tiles);
     },
     size,
-    settings.tvIntervalSeconds * 1000,
+    tv.intervalSeconds * 1000,
     {
       signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
-      outMs: wallOutMs(reduced, settings.tvTransition, settings.tvAnimationSpeed),
+      outMs: wallOutMs(reduced, tv.transition, tv.speed),
     }
   );
   onScreen.current = slots;
@@ -108,8 +110,8 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
       <div
         className="tv-wall"
         data-size={size}
-        data-transition={wallTransition(reduced, settings.tvTransition)}
-        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[settings.tvAnimationSpeed] } as CSSProperties}
+        data-transition={wallTransition(reduced, tv.transition)}
+        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[tv.speed] } as CSSProperties}
       >
         {shown.map(s => (
           <TvTileCard
