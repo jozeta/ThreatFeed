@@ -772,27 +772,30 @@ button.tag-chip {
 @keyframes tv-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes tv-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(4vw); } }
 
-/* Per tile: arriving tiles animate in on mount; leaving tiles keep their cells and animate out (keyframes, so the
+/* Per cell (TV tiles and dashboard panels): arriving cells animate in on mount; leaving ones keep their cells and animate out (keyframes, so the
    in-animation's fill never holds them visible) until removed */
-.tv-wall[data-transition='fade'] .tv-tile { animation: tv-fade-in 450ms ease both; }
-.tv-wall[data-transition='fade'] .tv-tile[data-leaving] { animation: tv-fade-out 450ms ease both; }
-.tv-wall[data-transition='slide'] .tv-tile { animation: tv-slide-in 450ms ease both; }
-.tv-wall[data-transition='slide'] .tv-tile[data-leaving] { animation: tv-slide-out 450ms ease both; }
-.tv-wall[data-transition='reveal'] .tv-tile { animation: tv-tile-in 350ms ease-out both; animation-delay: calc(var(--i, 0) * 120ms); }
-.tv-wall[data-transition='reveal'] .tv-tile[data-leaving] { animation: tv-fade-out 250ms ease both; }
-.tv-wall[data-transition='reduced'] .tv-tile { animation: tv-fade-in 200ms linear both; }
-.tv-wall[data-transition='reduced'] .tv-tile[data-leaving] { animation: tv-fade-out 200ms linear both; }
+.tv-wall[data-transition='fade'] .tv-cell { animation: tv-fade-in 450ms ease both; }
+.tv-wall[data-transition='fade'] .tv-cell[data-leaving] { animation: tv-fade-out 450ms ease both; }
+.tv-wall[data-transition='slide'] .tv-cell { animation: tv-slide-in 450ms ease both; }
+.tv-wall[data-transition='slide'] .tv-cell[data-leaving] { animation: tv-slide-out 450ms ease both; }
+.tv-wall[data-transition='reveal'] .tv-cell { animation: tv-tile-in 350ms ease-out both; animation-delay: calc(var(--i, 0) * 120ms); }
+.tv-wall[data-transition='reveal'] .tv-cell[data-leaving] { animation: tv-fade-out 250ms ease both; }
+.tv-wall[data-transition='reduced'] .tv-cell { animation: tv-fade-in 200ms linear both; }
+.tv-wall[data-transition='reduced'] .tv-cell[data-leaving] { animation: tv-fade-out 200ms linear both; }
 
-/* Dashboard mode: 4-column grid filling the screen; every size in vw */
-.tv-dash {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.9vw;
-  padding: 2.5vw 1.2vw 1.2vw;
-  font-family: system-ui, sans-serif;
+/* Dashboard mode: panels on the same living wall as TV mode (.tv-wall tracks, .tv-cell transitions); sizes in vw */
+.tv-dash-wall { font-family: system-ui, sans-serif; }
+.tv-slot {
+  --s: 1; /* type scale for the big numbers: Small grid 0.8, like the tiles */
+  --d: 0ms; /* when the cell itself appears; the arrival animations inside wait for it */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
 }
+.tv-slot[data-size='large'] { --s: 1.4; }
+.tv-slot[data-size='small'] { --s: 0.8; }
+.tv-slot > .tv-panel { flex: 1 1 auto; }
+.tv-wall[data-transition='reveal'] .tv-slot { --d: calc(var(--i, 0) * 120ms); }
 .tv-panel {
   min-width: 0;
   min-height: 0;
@@ -805,8 +808,8 @@ button.tag-chip {
   border-radius: 0.7vw;
 }
 .tv-label { flex: none; font-size: max(0.7rem, 0.95vw); letter-spacing: 0.08em; text-transform: uppercase; color: #7d8a9a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tv-big { flex: none; font-size: max(1.6rem, 4.6vw); font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tv-big-text { font-size: max(1.2rem, 2.6vw); line-height: 1.6; }
+.tv-big { flex: none; font-size: calc(max(1.6rem, 4.6vw) * var(--s, 1)); font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-big-text { font-size: calc(max(1.2rem, 2.6vw) * var(--s, 1)); line-height: 1.6; }
 .tv-delta { flex: none; font-size: max(0.7rem, 1vw); color: #8a95a3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tv-note { flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: max(0.8rem, 1.2vw); color: #7d8a9a; }
 .tv-fit { flex: 1 1 0; min-height: 0; overflow: hidden; }
@@ -818,9 +821,36 @@ button.tag-chip {
 .tv-kev { background: #7f1d1d; color: #fecaca; }
 .tv-poc { background: #78350f; color: #fde68a; }
 .tv-hbar { justify-content: flex-start; }
-.tv-hbar-name { flex: none; width: 7.5vw; overflow: hidden; text-overflow: ellipsis; }
+.tv-hbar-name { flex: none; width: 11vw; overflow: hidden; text-overflow: ellipsis; }
 .tv-hbar-track { flex: 1 1 0; min-width: 0; }
 .tv-hbar-track i { display: block; height: 0.8vw; border-radius: 0.2vw; }
 .tv-hbar-n { flex: none; min-width: 2.5vw; text-align: right; font-variant-numeric: tabular-nums; color: #aab3bf; }
-.tv-chart { flex: 1 1 0; min-height: 0; width: 100%; display: block; }
+.tv-chart { flex: 1 1 0; min-height: 0; width: 100%; display: block; overflow: hidden; }
+.tv-chart > svg { display: block; }
+/* A number panel: the figure and its note sit together in the middle of the cell */
+.tv-stat { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.6vw; padding-bottom: 1.5vw; }
+.tv-stat .tv-delta { font-size: calc(max(0.7rem, 1vw) * max(1, var(--s, 1))); }
 .tv-legend { flex: none; font-size: max(0.7rem, 1vw); color: #8a95a3; }
+.tv-panel-sub { flex: none; font-size: max(0.8rem, 1.3vw); color: #aab3bf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-purple { background: #4c1d95; color: #e9d5ff; }
+.tv-followed { background: #1e3a5f; color: #bfdbfe; }
+.tv-epss { flex: none; font-size: 0.8em; color: #8a95a3; font-variant-numeric: tabular-nums; }
+/* Vertical bars: value on top, bar, label under */
+.tv-vbars { flex: 1 1 0; min-height: 0; display: flex; align-items: stretch; gap: 0.6vw; }
+.tv-vbar { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 0.3vw; }
+.tv-vbar-n { flex: none; font-size: max(0.7rem, 1vw); color: #aab3bf; font-variant-numeric: tabular-nums; }
+.tv-vbar-track { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.tv-vbar-track i { display: block; width: 72%; border-radius: 0.2vw 0.2vw 0 0; }
+.tv-vbar-label { flex: none; font-size: max(0.65rem, 0.9vw); color: #8a95a3; white-space: nowrap; }
+
+/* Arrival animations inside a panel (transform and opacity only); --j is the bar/row index, --d the cell's own delay */
+@keyframes tv-grow-x { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes tv-grow-y { from { transform: scaleY(0); } to { transform: none; } }
+@keyframes tv-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes tv-row-in { from { opacity: 0; transform: translateY(0.6vw); } to { opacity: 1; transform: none; } }
+.tv-grow-x { transform-origin: left center; animation: tv-grow-x 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 60ms); }
+.tv-grow-y { transform-origin: center bottom; transform-box: fill-box; animation: tv-grow-y 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 60ms); }
+.tv-draw { stroke-dasharray: 1 1; animation: tv-draw 900ms ease-out both; animation-delay: var(--d, 0ms); }
+.tv-area-in { animation: tv-fade-in 400ms ease both; animation-delay: calc(var(--d, 0ms) + 800ms); }
+.tv-row-in { animation: tv-row-in 400ms ease-out both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 70ms); }
+.tv-wall[data-transition='reduced'] :is(.tv-grow-x, .tv-grow-y, .tv-draw, .tv-area-in, .tv-row-in) { animation: none; }

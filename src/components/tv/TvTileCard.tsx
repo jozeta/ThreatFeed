@@ -74,7 +74,7 @@ export default function TvTileCard({ tile, size, area, leaving, now, style }: Pr
   return (
     <article
       ref={tileRef}
-      className="tv-tile"
+      className="tv-cell tv-tile"
       data-size={size}
       data-area={areaClass(area)}
       data-leaving={leaving ? '1' : undefined}
