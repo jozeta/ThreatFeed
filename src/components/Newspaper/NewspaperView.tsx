@@ -93,7 +93,7 @@ const SectionOverflow: React.FC<{ articles: Article[]; onOpenArticle: (article: 
 };
 
 // The lead row's filler is two columns wide: up to two rows of briefs
-const LEAD_FILL_POOL = 4;
+const LEAD_FILL_POOL = 6;
 
 type ClusterProps = { clusterCount?: number; clusterSources?: string[]; onOpenCluster?: () => void };
 
