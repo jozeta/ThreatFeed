@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useReducedMotion } from '../Common/SidePanel';
 import { TvTileSize } from '../../types';
 import { EngineItem, Rng, Slot, WallState, Swap, applySwap, initWall, nextDue, pageLabel, planSwap, refill, shiftDue } from '../../services/tv/tileEngine';
 
@@ -13,18 +14,19 @@ interface Options {
   rng?: Rng;
 }
 
-const defaultOutMs = () =>
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? REDUCED_OUT_MS : SWAP_OUT_MS;
-
 /**
  * A wall of tiles that swap one at a time. One timer is armed at a time, for the next due slot; a swap has an out phase
- * (`leaving`) and then lands. The clock stops while the tab is hidden and resumes with every due time pushed back.
+ * (`leaving`) and then lands. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
  */
 export function useLivingWall(build: () => EngineItem[], size: TvTileSize, intervalMs: number, opts: Options = {}) {
   const buildRef = useRef(build);
   buildRef.current = build;
   const optsRef = useRef(opts);
   optsRef.current = opts;
+  const reduced = useReducedMotion();
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+  const generation = useRef(0); // bumped synchronously when the wall is replaced; timers of an older generation do nothing
   const now = () => (optsRef.current.now ?? Date.now)();
   const rng: Rng = () => (optsRef.current.rng ?? Math.random)();
 
@@ -47,6 +49,8 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
     const signed = p.signature !== opts.signature && (!settled.current || w.slots.length === 0 || w.fallback);
     prev.current = { size, intervalMs, signature: opts.signature };
     if (!changed && !signed) return;
+    generation.current++;
+    if (changed) settled.current = false;
     setWall(initWall(buildRef.current(), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
     setLeaving(new Set());
     setEpoch(e => e + 1);
@@ -54,14 +58,15 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
   }, [size, intervalMs, opts.signature]);
 
   useEffect(() => {
+    const gen = generation.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let pending: Swap | null = null; // the swap in its out phase
     let hiddenAt: number | null = null;
-    const outMs = () => optsRef.current.outMs ?? defaultOutMs();
+    const outMs = () => optsRef.current.outMs ?? (reducedRef.current ? REDUCED_OUT_MS : SWAP_OUT_MS);
 
     const land = () => {
       timer = undefined;
-      if (!pending) return;
+      if (!pending || gen !== generation.current) return;
       const next = applySwap(wallRef.current, pending);
       pending = null;
       settled.current = true;
@@ -71,6 +76,7 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
     };
     const fire = () => {
       timer = undefined;
+      if (gen !== generation.current) return;
       let w = wallRef.current;
       const slot = nextDue(w);
       if (!slot) return;
