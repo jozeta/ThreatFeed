@@ -229,6 +229,8 @@ export interface VulnExtras {
 }
 export interface RansomExtras {
   topSectors: [string, number][];
+  /** Victim totals per country code over the last 7 days (every country, not just the top ones) */
+  countries7d: Record<string, number>;
   newGroups: { group: string; victims: number }[];
   spotlight: { group: string; count: number; victims: LeakSiteVictim[] } | null;
   weekday: { day: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'; count: number }[];
@@ -371,6 +373,7 @@ export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null,
 
   return {
     topSectors: top(sum(week, 'sectors')),
+    countries7d: Object.fromEntries(sum(week, 'countries')),
     newGroups: [...groups7]
       .filter(([g]) => !groupsBefore.has(g))
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

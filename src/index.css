@@ -882,4 +882,11 @@ button.tag-chip {
 .tv-draw { stroke-dasharray: 1 1; animation: tv-draw calc(900ms * var(--k, 1)) ease-out both; animation-delay: var(--d, 0ms); }
 .tv-area-in { animation: tv-fade-in calc(400ms * var(--k, 1)) ease both; animation-delay: calc(var(--d, 0ms) + 800ms * var(--k, 1)); }
 .tv-row-in { animation: tv-row-in calc(400ms * var(--k, 1)) ease-out both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 70ms * var(--k, 1)); }
-.tv-wall[data-transition='reduced'] :is(.tv-grow-x, .tv-grow-y, .tv-draw, .tv-area-in, .tv-row-in) { animation: none; }
+.tv-wall[data-transition='reduced'] :is(.tv-grow-x, .tv-grow-y, .tv-draw, .tv-area-in, .tv-row-in, .tv-map-in) { animation: none; }
+
+/* World map panel: the map fills the box, the top 3 sit under it; shaded countries fade in by rank (--j) */
+.tv-map { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 0.6vw; }
+.tv-map svg { flex: 1 1 0; min-height: 0; width: 100%; display: block; }
+.tv-map-top { flex: none; display: flex; justify-content: center; gap: 2.4vw; font-size: max(0.8rem, 1.25vw); color: #cbd3dd; white-space: nowrap; overflow: hidden; }
+.tv-map-top b { color: #c084fc; margin-left: 0.3em; }
+.tv-map-in { animation: tv-fade-in calc(600ms * var(--k, 1)) ease both; animation-delay: calc(min(var(--j, 0), 12) * 60ms * var(--k, 1)); }

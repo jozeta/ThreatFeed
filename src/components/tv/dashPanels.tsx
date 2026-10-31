@@ -4,6 +4,7 @@ import { ransomDashboard, ransomExtras, vulnDashboard, vulnExtras } from '../../
 import { chartReady, DailyArea, flagOf, HBarList, ListPanel, StatCard, VBars, WeeklyBarsLine } from './dashParts';
 import { NUMBER_SHAPES, PanelDef, WIDE_SHAPES } from './DashboardWall';
 import { shortAge } from './TvTileCard';
+import { WorldMap } from './WorldMap';
 
 /**
  * The panel pools of the two dashboards, in show order (v1 panels first, then the new ones). A pool builder decides
@@ -206,6 +207,9 @@ export function ransomPanels(ctx: RansomCtx, fresh: () => RansomCtx = () => ctx)
   add('daily30', true, chartReady(d.daily.map(p => [p.count])), ({ d }) => <DailyArea label="Victims per day · 30 days" daily={d.daily} color={PURPLE} />);
   add('topCountries', true, d.topCountries.length > 0, ({ d }) => (
     <HBarList label="Top countries · 7 days" data={d.topCountries} color="#6366f1" format={c => <>{flagOf(c)} {c.toUpperCase()}</>} />
+  ));
+  add('countryMap', true, Object.keys(x.countries7d).length > 0, ({ x }) => (
+    <WorldMap label="Victims by country · 7 days" counts={x.countries7d} />
   ));
   add('latestVictims', true, d.latest.length > 0, ({ d }, now) => (
     <ListPanel
