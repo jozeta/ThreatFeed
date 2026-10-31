@@ -1,0 +1,228 @@
+import { describe, expect, it } from 'vitest';
+import {
+  applySwap, drawDue, shiftDue, EngineItem, GRIDS, initWall, jitterMs, nextDue, pageLabel, planSwap, refill, Rng, Shape, WallState,
+} from './tileEngine';
+import { TvTileSize } from '../../types';
+
+/** Seeded [0,1) generator so every run is reproducible. */
+function mulberry32(seed: number): Rng {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const ALL: Shape[] = ['1x1', '2x1', '2x2'];
+const stories = (n: number): EngineItem[] => Array.from({ length: n }, (_, i) => ({ id: `s${i}`, weight: (i * 37) % 11, shapes: ALL }));
+const SIZES: TvTileSize[] = ['large', 'medium', 'small'];
+const MIN = 60000;
+
+/** Every cell covered exactly once, nothing outside the grid. */
+function expectCovered(s: WallState) {
+  const { cols, rows } = GRIDS[s.size];
+  const hits = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (const t of s.slots) for (let r = t.row; r < t.row + t.h; r++) for (let c = t.col; c < t.col + t.w; c++) {
+    expect(r < rows && c < cols).toBe(true);
+    hits[r][c]++;
+  }
+  expect(hits.flat().every(n => n === 1)).toBe(true);
+}
+const expectDistinct = (s: WallState) => expect(new Set(s.slots.map(t => t.itemId)).size).toBe(s.slots.length);
+
+describe('timers', () => {
+  it('jitter is min(20 s, interval − 20 s)', () => {
+    expect(jitterMs(60000)).toBe(20000);
+    expect(jitterMs(30000)).toBe(10000);
+    expect(jitterMs(300000)).toBe(20000);
+  });
+  it('draws a due time within interval ± jitter', () => {
+    expect(drawDue(0, 60000, () => 0)).toBe(40000);
+    expect(drawDue(0, 60000, () => 0.999999)).toBeCloseTo(80000, -1);
+  });
+});
+
+describe('initWall', () => {
+  it.each(SIZES)('%s with 30 stories fills the grid from page 0', size => {
+    const g = GRIDS[size];
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = initWall(stories(30), size, 0, MIN, mulberry32(seed));
+      expect(s.fallback).toBe(false);
+      expectCovered(s);
+      expect(s.slots.length).toBeGreaterThanOrEqual(g.min);
+      expect(s.slots.length).toBeLessThanOrEqual(g.max);
+      expectDistinct(s);
+      expect(s.slots.every(t => t.page === 0)).toBe(true);
+      expect(pageLabel(s)).toEqual({ page: 1, of: Math.ceil(30 / g.ideal) });
+    }
+  });
+
+  it('large with 3 items uses a 2×2 hero', () => {
+    const s = initWall(stories(3), 'large', 0, MIN, mulberry32(7));
+    expect(s.fallback).toBe(false);
+    expect(s.slots).toHaveLength(3);
+    expectCovered(s);
+    expect(s.slots.some(t => t.w === 2 && t.h === 2)).toBe(true);
+  });
+
+  it('medium with 2 items falls back to 2 full-height columns', () => {
+    const s = initWall(stories(2), 'medium', 0, MIN, mulberry32(7));
+    expect(s.fallback).toBe(true);
+    expect(s.slots).toHaveLength(2);
+    expect(s.slots.every(t => t.h === 2)).toBe(true);
+    expectCovered(s);
+  });
+
+  it('large with 2 items splits 3 columns as 2 + 1', () => {
+    const s = initWall(stories(2), 'large', 0, MIN, mulberry32(7));
+    expect(s.slots.map(t => t.w).sort()).toEqual([1, 2]);
+    expectCovered(s);
+  });
+
+  it('numbers arrival order 0..n-1', () => {
+    const s = initWall(stories(30), 'small', 0, MIN, mulberry32(3));
+    expect(s.slots.map(t => t.order).sort((a, b) => a - b)).toEqual(s.slots.map((_, i) => i));
+  });
+});
+
+/** Drives the wall like the hook would; returns per-step observations. */
+function run(size: TvTileSize, items: EngineItem[], steps: number, seed: number, onStep?: (s: WallState, kind: string, refilled: boolean) => void) {
+  const rng = mulberry32(seed);
+  let s = initWall(items, size, 0, MIN, rng);
+  let splits = 0, merges = 0;
+  for (let i = 0; i < steps; i++) {
+    const due = nextDue(s)!;
+    const swap = planSwap(s, due.key, due.dueAt, MIN, rng);
+    expect(swap.arriving.length).toBeGreaterThan(0);
+    const kind = swap.leaving.length === 1 && swap.arriving.length === 2 ? 'split' : swap.leaving.length === 2 ? 'merge' : 'replace';
+    if (kind === 'split') splits++;
+    if (kind === 'merge') merges++;
+    s = applySwap(s, swap);
+    let refilled = false;
+    if (s.cursor >= s.queue.length) { s = refill(s, items); refilled = true; }
+    onStep?.(s, kind, refilled);
+  }
+  return { s, splits, merges };
+}
+
+describe('swaps', () => {
+  it.each(SIZES)('%s soak keeps every invariant', size => {
+    const g = GRIDS[size];
+    const { splits, merges } = run(size, stories(30), 2000, 11, s => {
+      expectCovered(s);
+      expect(s.slots.length).toBeGreaterThanOrEqual(g.min);
+      expect(s.slots.length).toBeLessThanOrEqual(g.max);
+      expectDistinct(s);
+      for (const t of s.slots) {
+        expect(Math.abs(t.dueAt - t.arrivedAt - MIN)).toBeLessThanOrEqual(jitterMs(MIN) + 1e-6);
+        expect(t.w === 2 && t.h === 2 ? g.shapes.includes('2x2') : true).toBe(true);
+      }
+    });
+    expect(splits).toBeGreaterThan(0);
+    expect(merges).toBeGreaterThan(0);
+  });
+
+  it('never merges with a neighbour that arrived 5 s ago', () => {
+    const now = 100000;
+    let merged = 0, control = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const base = initWall(stories(30), 'medium', 0, MIN, mulberry32(seed));
+      const young = { ...base, slots: base.slots.map(t => ({ ...t, arrivedAt: now - 5000 })) };
+      const old = { ...base, slots: base.slots.map(t => ({ ...t, arrivedAt: now - 25000 })) };
+      const key = base.slots[0].key;
+      if (planSwap(young, key, now, MIN, mulberry32(seed)).leaving.length === 2) merged++;
+      if (planSwap(old, key, now, MIN, mulberry32(seed)).leaving.length === 2) control++;
+    }
+    expect(merged).toBe(0);
+    expect(control).toBeGreaterThan(0);
+  });
+
+  it('keeps swapping a 4-panel all-wide medium pool', () => {
+    const items = Array.from({ length: 4 }, (_, i): EngineItem => ({ id: `c${i}`, weight: 1, shapes: ['2x1'] }));
+    run('medium', items, 200, 5, s => expectCovered(s));
+  });
+
+  it('keeps swapping a mixed 2 numbers + 2 charts medium pool', () => {
+    const items: EngineItem[] = [
+      { id: 'n0', weight: 1, shapes: ['1x1'] }, { id: 'n1', weight: 1, shapes: ['1x1'] },
+      { id: 'c0', weight: 1, shapes: ['2x1'] }, { id: 'c1', weight: 1, shapes: ['2x1'] },
+    ];
+    run('medium', items, 200, 5, s => expectCovered(s));
+  });
+
+  it('keeps swapping a dashboard-like pool of numbers and charts', () => {
+    const items: EngineItem[] = [
+      ...Array.from({ length: 6 }, (_, i): EngineItem => ({ id: `n${i}`, weight: 1, shapes: ['1x1'] })),
+      ...Array.from({ length: 5 }, (_, i): EngineItem => ({ id: `c${i}`, weight: 2, shapes: ['2x1', '2x2'] })),
+    ];
+    for (const size of SIZES) run(size, items, 300, 9, s => { expectCovered(s); expectDistinct(s); });
+  });
+
+  it.each(SIZES)('%s shows every item of a cycle before the next refill', size => {
+    const items = stories(30);
+    const seen = new Set(initWall(items, size, 0, MIN, mulberry32(4)).slots.map(t => t.itemId));
+    let refills = 0;
+    run(size, items, 400, 4, (s, _kind, refilled) => {
+      for (const t of s.slots) if (t.cycle === refills) seen.add(t.itemId);
+      if (refilled) {
+        if (refills < 2) expect(seen.size).toBe(30);
+        refills++;
+        seen.clear();
+      }
+    });
+    expect(refills).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps the page counter on the old cycle until its tiles are gone', () => {
+    let sawOld = false, sawNew = false;
+    run('medium', stories(30), 300, 8, (s, _kind, refilled) => {
+      const label = pageLabel(s)!;
+      const oldest = Math.min(...s.slots.map(t => t.cycle));
+      const lowest = s.slots.filter(t => t.cycle === oldest).reduce((m, t) => Math.min(m, t.page), Infinity);
+      expect(label.page).toBe(lowest + 1);
+      if (refilled && oldest < s.cycle) {
+        sawOld = true;
+        expect(label.page).toBeGreaterThan(1);
+      }
+      if (oldest === s.cycle && s.cycle > 0) sawNew = true;
+    });
+    expect(sawOld && sawNew).toBe(true);
+  });
+
+  it('planSwap does not mutate the state', () => {
+    const s = initWall(stories(30), 'small', 0, MIN, mulberry32(2));
+    const before = JSON.stringify(s);
+    const due = nextDue(s)!;
+    planSwap(s, due.key, due.dueAt, MIN, mulberry32(3));
+    expect(JSON.stringify(s)).toBe(before);
+  });
+});
+
+describe('refill', () => {
+  it('upgrades a fallback wall once there are enough items', () => {
+    const s = initWall(stories(2), 'medium', 0, MIN, mulberry32(1));
+    const r = refill(s, stories(30), 1000, MIN, mulberry32(1));
+    expect(r.fallback).toBe(false);
+    expect(r.cycle).toBe(s.cycle + 1);
+    expectCovered(r);
+  });
+
+  it('keeps a fallback wall in place while the items stay the same', () => {
+    const s = initWall(stories(2), 'medium', 0, MIN, mulberry32(1));
+    const r = refill(s, stories(2), 1000, MIN, mulberry32(1));
+    expect(r.slots).toEqual(s.slots);
+    expect(r.cycle).toBe(1);
+  });
+});
+
+describe('shiftDue', () => {
+  it('moves every due time, leaving arrivals alone', () => {
+    const s = initWall(stories(30), 'large', 0, MIN, mulberry32(1));
+    const t = shiftDue(s, 5000);
+    expect(t.slots.map(x => x.dueAt - 5000)).toEqual(s.slots.map(x => x.dueAt));
+    expect(t.slots.map(x => x.arrivedAt)).toEqual(s.slots.map(x => x.arrivedAt));
+  });
+});
