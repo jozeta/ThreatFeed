@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Article, StoryCluster, NewspaperSectionConfig, ThreatSeverity } from '../../types';
 import { HeroArticle } from '../ArticleCard/HeroArticle';
 import { FeatureArticle } from '../ArticleCard/FeatureArticle';
@@ -17,7 +17,7 @@ import { TrendingStrip } from './TrendingStrip';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../Common/LoadMoreButton';
 import { fitGridItems, newspaperModes } from '../../utils/layout';
-import { partitionStream, FILL_POOL, type BlockFill } from './streamBlocks';
+import { partitionStream, mergeFills, pruneFills, FILL_POOL } from './streamBlocks';
 import {
   Flame,
   ShieldAlert,
@@ -92,63 +92,81 @@ const SectionOverflow: React.FC<{ articles: Article[]; onOpenArticle: (article: 
   );
 };
 
+// The lead row's filler is two columns wide: up to two rows of briefs
+const LEAD_FILL_POOL = 4;
+
 type ClusterProps = { clusterCount?: number; clusterSources?: string[]; onOpenCluster?: () => void };
+
+/** Same stories, same objects (a read or bookmark change makes a new object, which must re-render) */
+function sameItems<T>(a: T[], b: T[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+interface StoryFillerProps {
+  articles: Article[];
+  shown: number; // how many of them the page shows here (the stream after them starts there)
+  columns: 1 | 2;
+  onMeasure: (fits: number) => void;
+  onOpenArticle: (article: Article) => void;
+}
 
 /**
  * Fills the height a column has left under its own stories (the other column of the row being
  * taller) with the stories that follow, as compact briefs: only whole rows that fit, nothing below
  * lg (one column, no gap to fill). flex: 1 1 0 + min-height: 0 + overflow: hidden, so it takes only
- * the height the row already has and can never make the row taller. Reports how many it shows so
- * the stories after it start there.
+ * the height the row already has and can never make the row taller.
+ * It measures how many fit and reports that (from a ResizeObserver or passive effect, so reports
+ * never chain synchronously); the page decides how many it shows (`shown`), so a story is never
+ * shown both here and in what follows. Stories past those shown stay laid out to be measured.
  */
-const StoryFiller: React.FC<{
-  articles: Article[];
-  columns: 1 | 2;
-  onFit: (count: number) => void;
-  onOpenArticle: (article: Article) => void;
-}> = ({ articles, columns, onFit, onOpenArticle }) => {
+const StoryFiller = React.memo(function StoryFiller({ articles, shown, columns, onMeasure, onOpenArticle }: StoryFillerProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  const [count, setCount] = useState(0);
+  const reported = useRef(-1);
   // Re-measure when the stories change, not on every render's fresh slice of them
   const storyKey = articles.map((a) => a.id).join('|');
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const box = boxRef.current;
     const grid = gridRef.current;
     if (!box || !grid) return;
+    reported.current = -1; // new stories or a new receiver: report afresh
     const measure = () => {
       // Below lg the box is display:none and measures 0, so nothing fits
       const heights = Array.from(grid.children, (el) => (el as HTMLElement).offsetHeight);
       const style = getComputedStyle(grid);
-      const columns = style.gridTemplateColumns.split(' ').length;
+      const gridColumns = style.gridTemplateColumns.split(' ').length;
       // The last row's bottom margin (the spacing setting's, on every article) is blank, so it may be clipped
       const article = grid.querySelector('article');
       const margin = article ? parseFloat(getComputedStyle(article).marginBottom) || 0 : 0;
       const room = box.clientHeight > 0 ? box.clientHeight + margin : 0;
-      setCount(fitGridItems(room, heights, columns, parseFloat(style.rowGap) || 0));
+      const fits = fitGridItems(room, heights, gridColumns, parseFloat(style.rowGap) || 0);
+      if (fits !== reported.current) {
+        reported.current = fits;
+        onMeasure(fits);
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(box);
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [storyKey]);
+  }, [storyKey, onMeasure]);
 
-  useLayoutEffect(() => onFit(count), [count, onFit]);
-  useLayoutEffect(() => () => onFit(0), [onFit]);
+  // Gone (no stories left to offer, or the row changed shape): it shows none
+  useEffect(() => () => onMeasure(0), [onMeasure]);
 
   if (articles.length === 0) return null;
   return (
-    <div ref={boxRef} className="hidden lg:block" style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }} data-lead-filler>
+    <div ref={boxRef} className="hidden lg:block" style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }} data-story-filler>
       <div ref={gridRef} className={columns === 2 ? 'grid grid-cols-2 gap-x-8 gap-y-3 items-stretch' : 'grid grid-cols-1'}>
         {articles.map((story, i) => (
-          // Stories past the ones that fit stay laid out (to be measured) but hidden and inert.
+          // Keyed by position: when stories shift through the row the slots stay and only their content changes.
           // A single column continues the stack above it, divider and all
           <div
-            key={story.id}
-            className={`min-w-0 ${columns === 1 ? 'border-t border-theme-border/60 pt-3' : ''} ${i < count ? '' : 'invisible'}`}
-            aria-hidden={i < count ? undefined : true}
+            key={i}
+            className={`min-w-0 ${columns === 1 ? 'border-t border-theme-border/60 pt-3' : ''} ${i < shown ? '' : 'invisible'}`}
+            aria-hidden={i < shown ? undefined : true}
           >
             <TextArticle article={story} compact showDivider={false} onOpen={() => onOpenArticle(story)} />
           </div>
@@ -156,55 +174,68 @@ const StoryFiller: React.FC<{
       </div>
     </div>
   );
-};
+}, (a, b) =>
+  sameItems(a.articles, b.articles) && a.shown === b.shown && a.columns === b.columns
+  && a.onMeasure === b.onMeasure && a.onOpenArticle === b.onOpenArticle);
+
+interface FeatureStackRowProps {
+  main: Article;
+  side: Article[];
+  rightPool: Article[];
+  rightShown: number;
+  leftPool: Article[];
+  leftShown: number;
+  onMeasureRight: (fits: number) => void;
+  onMeasureLeft: (fits: number) => void;
+  onOpenArticle: (article: Article) => void;
+  clusterProps: (article: Article) => ClusterProps;
+}
 
 /**
  * Feature story on the left, a stack of stories on the right. Both columns keep their stories at
  * their natural height from the top, and whichever column is shorter fills the rest with the stories
  * that follow (the right column first; the left one gets those after what the right one shows).
+ * Memoized: a fill elsewhere on a long page re-renders only the rows whose stories it moved.
  */
-const FeatureStackRow: React.FC<{
-  main: Article;
-  side: Article[];
-  rightPool: Article[];
-  leftPool: Article[];
-  onFitRight: (count: number) => void;
-  onFitLeft: (count: number) => void;
-  onOpenArticle: (article: Article) => void;
-  clusterProps: (article: Article) => ClusterProps;
-}> = ({ main, side, rightPool, leftPool, onFitRight, onFitLeft, onOpenArticle, clusterProps }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-    <div className="lg:col-span-7 lg:border-r lg:border-theme-border lg:pr-8 flex flex-col">
-      <FeatureArticle
-        article={main}
-        orientation="vertical"
-        showBorder={false}
-        onOpen={() => onOpenArticle(main)}
-        {...clusterProps(main)}
-      />
-      <StoryFiller articles={leftPool} columns={2} onFit={onFitLeft} onOpenArticle={onOpenArticle} />
-    </div>
-    <div className="lg:col-span-5 flex flex-col">
-      <div className="flex flex-col divide-y divide-theme-border/60">
-        {side.map((story, sIdx) => (
-          <div key={story.id} className="py-3 first:pt-0">
-            {sIdx === 0 ? (
-              <ThumbnailArticle
-                article={story}
-                variant="newspaper"
-                showBorder={false}
-                onOpen={() => onOpenArticle(story)}
-              />
-            ) : (
-              <TextArticle article={story} showDivider={false} onOpen={() => onOpenArticle(story)} />
-            )}
-          </div>
-        ))}
+const FeatureStackRow = React.memo(function FeatureStackRow(props: FeatureStackRowProps) {
+  const { main, side, rightPool, rightShown, leftPool, leftShown, onMeasureRight, onMeasureLeft, onOpenArticle, clusterProps } = props;
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+      <div className="lg:col-span-7 lg:border-r lg:border-theme-border lg:pr-8 flex flex-col">
+        <FeatureArticle
+          article={main}
+          orientation="vertical"
+          showBorder={false}
+          onOpen={() => onOpenArticle(main)}
+          {...clusterProps(main)}
+        />
+        <StoryFiller articles={leftPool} shown={leftShown} columns={2} onMeasure={onMeasureLeft} onOpenArticle={onOpenArticle} />
       </div>
-      <StoryFiller articles={rightPool} columns={1} onFit={onFitRight} onOpenArticle={onOpenArticle} />
+      <div className="lg:col-span-5 flex flex-col">
+        <div className="flex flex-col divide-y divide-theme-border/60">
+          {side.map((story, sIdx) => (
+            <div key={sIdx} className="py-3 first:pt-0">
+              {sIdx === 0 ? (
+                <ThumbnailArticle
+                  article={story}
+                  variant="newspaper"
+                  showBorder={false}
+                  onOpen={() => onOpenArticle(story)}
+                />
+              ) : (
+                <TextArticle article={story} showDivider={false} onOpen={() => onOpenArticle(story)} />
+              )}
+            </div>
+          ))}
+        </div>
+        <StoryFiller articles={rightPool} shown={rightShown} columns={1} onMeasure={onMeasureRight} onOpenArticle={onOpenArticle} />
+      </div>
     </div>
-  </div>
-);
+  );
+}, (a, b) =>
+  a.main === b.main && sameItems(a.side, b.side) && sameItems(a.rightPool, b.rightPool) && sameItems(a.leftPool, b.leftPool)
+  && a.rightShown === b.rightShown && a.leftShown === b.leftShown && a.onMeasureRight === b.onMeasureRight
+  && a.onMeasureLeft === b.onMeasureLeft && a.onOpenArticle === b.onOpenArticle && a.clusterProps === b.clusterProps);
 
 const SEVERITY_RANK: Record<ThreatSeverity, number> = {
   critical: 4,
@@ -252,25 +283,37 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     : updateSetting('clusteringEnabled', !modes.clustering);
   const [selectedCluster, setSelectedCluster] = useState<StoryCluster | null>(null);
   const [isCustomizingSections, setIsCustomizingSections] = useState(false);
-  // How many stories after the lead row's five fill the space under its hero (LeadFiller reports it)
-  const [leadFill, setLeadFill] = useState(0);
-  // How many following stories fill each column of the feature + stack rows, keyed by the row
-  // (`section:<id>`, or the main story's id in the stream); each filler reports through fitFor
-  const [blockFills, setBlockFills] = useState<Record<string, BlockFill>>({});
-  const fitters = useRef(new Map<string, (count: number) => void>());
-  const fitFor = useCallback((key: string, side: keyof BlockFill) => {
-    const id = `${key}|${side}`;
-    let fit = fitters.current.get(id);
-    if (!fit) {
-      fit = (count: number) =>
-        setBlockFills((prev) => {
-          const cur = prev[key] ?? { right: 0, left: 0 };
-          return cur[side] === count ? prev : { ...prev, [key]: { ...cur, [side]: count } };
+  // How many following stories fill the space each filler has: `lead` (under the lead row's hero),
+  // `section:<id>:right|left` (a section's feature + stack row) and `stream:<n>:right|left` (the n-th
+  // feature + stack block of the stream). Fillers report what fits; all reports of a frame are applied
+  // in one update, so a fill that moves the stories after it never sets off a synchronous chain.
+  const [fills, setFills] = useState<Record<string, number>>({});
+  const pendingFills = useRef(new Map<string, number>());
+  const fillFrame = useRef(0);
+  const reporters = useRef(new Map<string, (fits: number) => void>());
+  const reportFor = useCallback((key: string) => {
+    let report = reporters.current.get(key);
+    if (!report) {
+      report = (fits: number) => {
+        pendingFills.current.set(key, fits);
+        if (fillFrame.current) return;
+        fillFrame.current = requestAnimationFrame(() => {
+          fillFrame.current = 0;
+          const reports = pendingFills.current;
+          pendingFills.current = new Map();
+          setFills((prev) => mergeFills(prev, reports));
         });
-      fitters.current.set(id, fit);
+      };
+      reporters.current.set(key, report);
     }
-    return fit;
+    return report;
   }, []);
+  useEffect(() => () => {
+    // Reset too: a remount (StrictMode runs effects twice) must be able to schedule the next flush
+    cancelAnimationFrame(fillFrame.current);
+    fillFrame.current = 0;
+  }, []);
+  const leadFill = fills.lead ?? 0;
 
   // Clustering only depends on which articles are shown and their severity/image (primary pick),
   // not on read/bookmark state, so key the expensive pass on that and map results to live copies.
@@ -318,8 +361,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     return articles.filter((a) => !clusteredSecondaryIds.has(a.id));
   }, [articles, clusteredSecondaryIds, modes.clustering]);
 
-  // Helper to extract cluster props for any article
-  const getClusterProps = (article: Article) => {
+  // Helper to extract cluster props for any article (stable, so the memoized rows can skip renders)
+  const getClusterProps = useCallback((article: Article): ClusterProps => {
     const cluster = clusterMap.get(article.id);
     if (!cluster || cluster.clusterSize <= 1) return {};
     return {
@@ -327,7 +370,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
       clusterSources: cluster.relatedArticles.map((r) => r.sourceName),
       onOpenCluster: () => setSelectedCluster(cluster),
     };
-  };
+  }, [clusterMap]);
 
   // Chronological sort of all articles (newest first)
   const chronologicalStories = useMemo(() => {
@@ -335,13 +378,16 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   }, [primaryDisplayArticles]);
 
   // The stream below the lead row (its five stories and those filling under the hero) is rendered in pages
-  const streamStart = 5 + leadFill;
+  const streamStart = 5 + Math.min(leadFill, LEAD_FILL_POOL);
   const { visibleCount, hasMore, remaining, showMore } = usePagedCount(chronologicalStories.length - streamStart, STREAM_PAGE_SIZE);
 
   // Partition the visible part of the stream into gap-free blocks; stories filling a block's columns leave the stream there
   const chronologicalBlocks = useMemo(
-    () => partitionStream(chronologicalStories.slice(streamStart, streamStart + visibleCount), blockFills),
-    [chronologicalStories, streamStart, visibleCount, blockFills]
+    () => partitionStream(chronologicalStories.slice(streamStart, streamStart + visibleCount), (n) => ({
+      right: fills[`stream:${n}:right`] ?? 0,
+      left: fills[`stream:${n}:left`] ?? 0,
+    })),
+    [chronologicalStories, streamStart, visibleCount, fills]
   );
 
   // Group articles by user configured sections
@@ -404,6 +450,26 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
     return groups;
   }, [primaryDisplayArticles, settings.newspaperSections, modes.sections, settings.stackKeywords]);
+
+  // Forget the fills of rows no longer on the page (a section gone, the stream shorter or switched off)
+  const liveFillRows = useMemo(() => {
+    const rows = new Set<string>(['lead']);
+    if (modes.sections) {
+      sectionedGroups?.forEach((g, i) => {
+        if (i > 0 && g.articles.length >= 5) rows.add(`section:${g.config.id}`);
+      });
+    } else {
+      chronologicalBlocks.forEach((b) => {
+        if (b.type === 'feature-left-stack-right') rows.add(`stream:${b.ordinal}`);
+      });
+    }
+    return rows;
+  }, [modes.sections, sectionedGroups, chronologicalBlocks]);
+  useEffect(() => {
+    const live = (key: string) => liveFillRows.has(key.replace(/:(right|left)$/, ''));
+    setFills((prev) => pruneFills(prev, live));
+    for (const key of reporters.current.keys()) if (!live(key)) reporters.current.delete(key);
+  }, [liveFillRows]);
 
   if (isLoading && articles.length === 0) {
     return <NewspaperSkeleton />;
@@ -494,9 +560,9 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
             const isFirstSection = gIdx === 0;
             // Stories filling the shorter column of the 5+ layout (reported by its fillers)
             const rowKey = `section:${group.config.id}`;
-            const reported = blockFills[rowKey] ?? { right: 0, left: 0 };
-            const rightFill = Math.min(reported.right, Math.max(items.length - 4, 0));
-            const rowFill = { right: rightFill, left: Math.min(reported.left, Math.max(items.length - 4 - rightFill, 0)) };
+            const rightFill = Math.min(fills[`${rowKey}:right`] ?? 0, FILL_POOL, Math.max(items.length - 4, 0));
+            const leftFill = Math.min(fills[`${rowKey}:left`] ?? 0, FILL_POOL, Math.max(items.length - 4 - rightFill, 0));
+            const rowFill = { right: rightFill, left: leftFill };
 
             return (
               <section key={group.config.id} className="pt-2">
@@ -533,9 +599,10 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                         {...getClusterProps(items[0])}
                       />
                       <StoryFiller
-                        articles={items.slice(5, 5 + FILL_POOL)}
+                        articles={items.slice(5, 5 + LEAD_FILL_POOL)}
+                        shown={Math.min(leadFill, LEAD_FILL_POOL)}
                         columns={2}
-                        onFit={setLeadFill}
+                        onMeasure={reportFor('lead')}
                         onOpenArticle={onOpenArticle}
                       />
                     </div>
@@ -637,9 +704,11 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                     main={items[0]}
                     side={items.slice(1, 4)}
                     rightPool={items.slice(4, 4 + FILL_POOL)}
+                    rightShown={rowFill.right}
                     leftPool={items.slice(4 + rowFill.right, 4 + rowFill.right + FILL_POOL)}
-                    onFitRight={fitFor(rowKey, 'right')}
-                    onFitLeft={fitFor(rowKey, 'left')}
+                    leftShown={rowFill.left}
+                    onMeasureRight={reportFor(`${rowKey}:right`)}
+                    onMeasureLeft={reportFor(`${rowKey}:left`)}
                     onOpenArticle={onOpenArticle}
                     clusterProps={getClusterProps}
                   />
@@ -649,7 +718,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                     5+ layout 4 plus those filling its columns, smaller layouts all */}
                 <SectionOverflow
                   articles={items.slice(
-                    isFirstSection ? 5 + leadFill : items.length >= 5 ? 4 + rowFill.right + rowFill.left : items.length
+                    isFirstSection ? 5 + Math.min(leadFill, LEAD_FILL_POOL) : items.length >= 5 ? 4 + rowFill.right + rowFill.left : items.length
                   )}
                   onOpenArticle={onOpenArticle}
                 />
@@ -681,9 +750,10 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                   {...getClusterProps(chronologicalStories[0])}
                 />
                 <StoryFiller
-                  articles={chronologicalStories.slice(5, 5 + FILL_POOL)}
+                  articles={chronologicalStories.slice(5, 5 + LEAD_FILL_POOL)}
+                  shown={Math.min(leadFill, LEAD_FILL_POOL)}
                   columns={2}
-                  onFit={setLeadFill}
+                  onMeasure={reportFor('lead')}
                   onOpenArticle={onOpenArticle}
                 />
               </div>
@@ -729,9 +799,9 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
           {/* Flowing Chronological Blocks for Remaining Articles */}
           <div className="space-y-12">
-            {chronologicalBlocks.map((blk) => (
-              // Keyed by the block's first story: a filled block moves the ones after it, which then start anew
-              <div key={blk.type === 'feature-left-stack-right' ? blk.main.id : blk.items[0].id} className="pt-6 border-t border-theme-border/80">
+            {chronologicalBlocks.map((blk, bIdx) => (
+              // Keyed by position: when a fill moves the stories after it, the blocks stay and only their content changes
+              <div key={bIdx} className="pt-6 border-t border-theme-border/80">
                 {blk.type === 'full-banner' && (
                   <div className="w-full">
                     <BannerArticle
@@ -769,9 +839,9 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
                 {blk.type === 'trio-columns' && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-                    {blk.items.map((story) => (
+                    {blk.items.map((story, sIdx) => (
                       <div
-                        key={story.id}
+                        key={sIdx}
                         className="p-4 rounded-lg bg-theme-surface border border-theme-border flex flex-col justify-between h-full"
                       >
                         <QuarterBriefArticle
@@ -786,8 +856,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
                 {blk.type === 'quad-briefs' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
-                    {blk.items.map((story) => (
-                      <div key={story.id} className="h-full">
+                    {blk.items.map((story, sIdx) => (
+                      <div key={sIdx} className="h-full">
                         <QuarterBriefArticle
                           article={story}
                           onOpen={() => onOpenArticle(story)}
@@ -803,9 +873,11 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                     main={blk.main}
                     side={blk.side}
                     rightPool={blk.rightPool}
+                    rightShown={blk.rightFill}
                     leftPool={blk.leftPool}
-                    onFitRight={fitFor(blk.main.id, 'right')}
-                    onFitLeft={fitFor(blk.main.id, 'left')}
+                    leftShown={blk.leftFill}
+                    onMeasureRight={reportFor(`stream:${blk.ordinal}:right`)}
+                    onMeasureLeft={reportFor(`stream:${blk.ordinal}:left`)}
                     onOpenArticle={onOpenArticle}
                     clusterProps={getClusterProps}
                   />

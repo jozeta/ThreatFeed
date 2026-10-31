@@ -33,7 +33,19 @@ export const TextArticle: React.FC<TextArticleProps> = ({
   return (
     <article
       onClick={onOpen}
-      className={`lift-flat group cursor-pointer flex flex-col ${
+      // A compact brief has no actions row (with its "open in reader" button), so the brief itself opens by keyboard;
+      // the focus ring is inset because a filler clips what sticks out of it
+      {...(compact && {
+        role: 'button',
+        tabIndex: 0,
+        'aria-label': article.title,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          onOpen();
+        },
+      })}
+      className={`lift-flat group cursor-pointer flex flex-col ${compact ? 'rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-accent' : ''} ${
         showDivider ? 'border-b border-theme-border/70 pb-4 mb-4' : 'pb-2'
       } ${article.read ? 'opacity-80' : 'opacity-100'} ${className}`}
     >
