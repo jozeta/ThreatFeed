@@ -80,32 +80,39 @@ function tilings(size: TvTileSize): Rect[][] {
   return out;
 }
 
-/** Queue index for a rect: heaviest of the next 3 fitting entries for larger rects, the first fitting one for 1×1; -1 if none. */
-function pick(queue: QueueEntry[], cursor: number, shape: Shape, excluded: Set<string>, taken: Set<number>): number {
+/**
+ * Queue index for a rect: heaviest of the next 3 fitting entries for larger rects, the first fitting one for 1×1; -1 if
+ * none. Looks at unused entries, or with `used` at already-shown ones (fillers).
+ */
+function pick(queue: QueueEntry[], from: number, shape: Shape, excluded: Set<string>, taken: Set<number>, used = false): number {
   const found: number[] = [];
   const want = shape === '1x1' ? 1 : 3;
-  for (let i = cursor; i < queue.length && found.length < want; i++) {
+  for (let i = from; i < queue.length && found.length < want; i++) {
     const q = queue[i];
-    if (!q.used && !taken.has(i) && !excluded.has(q.item.id) && q.item.shapes.includes(shape)) found.push(i);
+    if (q.used === used && !taken.has(i) && !excluded.has(q.item.id) && q.item.shapes.includes(shape)) found.push(i);
   }
   if (!found.length) return -1;
   return found.reduce((best, i) => (queue[i].item.weight > queue[best].item.weight ? i : best));
 }
 
-/** Distinct queue indexes for `rects` (larger rects choose first), or null when one finds nothing. */
-function assign(queue: QueueEntry[], cursor: number, rects: Rect[], excluded: Set<string>): number[] | null {
+/**
+ * Distinct queue indexes for `rects` (larger rects choose first), or null when one finds nothing. With `filler`, a rect
+ * with no unused fit may take an already-shown entry, as long as at least one unused entry is placed.
+ */
+function assign(queue: QueueEntry[], cursor: number, rects: Rect[], excluded: Set<string>, filler = false): number[] | null {
   const ex = new Set(excluded);
   const taken = new Set<number>();
   const out: number[] = Array(rects.length);
   const byArea = rects.map((_, i) => i).sort((a, b) => area(rects[b]) - area(rects[a]) || a - b);
   for (const i of byArea) {
-    const j = pick(queue, cursor, shapeOf(rects[i]), ex, taken);
+    let j = pick(queue, cursor, shapeOf(rects[i]), ex, taken);
+    if (j < 0 && filler) j = pick(queue, 0, shapeOf(rects[i]), ex, taken, true);
     if (j < 0) return null;
     out[i] = j;
     taken.add(j);
     ex.add(queue[j].item.id);
   }
-  return out;
+  return filler && out.every(j => queue[j].used) ? null : out;
 }
 
 const firstUnused = (queue: QueueEntry[], from = 0) => {
@@ -132,7 +139,8 @@ function columns(n: number, { cols, rows }: GridSpec): Rect[] {
   return out;
 }
 
-export function initWall(items: EngineItem[], size: TvTileSize, now: number, intervalMs: number, rng: Rng, cycle = 0): WallState {
+/** A fresh wall; `seq` continues the key sequence of a wall it replaces, so keys never repeat. */
+export function initWall(items: EngineItem[], size: TvTileSize, now: number, intervalMs: number, rng: Rng, cycle = 0, seq = 0): WallState {
   const g = GRIDS[size];
   const queue = items.map((item, i) => ({ item, page: Math.floor(i / g.ideal), used: false }));
   const pageCount = Math.max(1, Math.ceil(items.length / g.ideal));
@@ -157,11 +165,9 @@ export function initWall(items: EngineItem[], size: TvTileSize, now: number, int
   const slots = order.map((i, n) => {
     const q = queue[picks![i]];
     q.used = true;
-    return makeSlot(rects[i], q.item.id, n, cycle, q.page, pageCount, now, intervalMs, rng, n);
+    return makeSlot(rects[i], q.item.id, seq + n, cycle, q.page, pageCount, now, intervalMs, rng, n);
   });
-  // A fallback wall only re-arrives in place, so its whole queue counts as used and the hook keeps refilling it.
-  if (fallback) for (const q of queue) q.used = true;
-  return { size, fallback, queue, cursor: firstUnused(queue), cycle, pageCount, seq: slots.length, slots };
+  return { size, fallback, queue, cursor: firstUnused(queue), cycle, pageCount, seq: seq + slots.length, slots };
 }
 
 export function nextDue(state: WallState): Slot | undefined {
@@ -183,49 +189,60 @@ function joined(a: Rect, b: Rect): Rect | null {
   return null;
 }
 
-export function planSwap(state: WallState, slotKey: string, now: number, intervalMs: number, rng: Rng): Swap {
-  const slot = state.slots.find(t => t.key === slotKey);
-  if (!slot) return { leaving: [], arriving: [] };
-  const g = GRIDS[state.size];
-  const again = (): Swap => ({
-    leaving: [slot.key],
-    arriving: [makeSlot(rectOf(slot), slot.itemId, state.seq, slot.cycle, slot.page, slot.pageCount, now, intervalMs, rng, 0)],
-  });
-  if (state.fallback) return again();
+interface Move { weight: number; leaving: Slot[]; rects: Rect[]; picks: number[] }
 
-  const options: { weight: number; leaving: Slot[]; rects: Rect[]; picks: number[] }[] = [];
+/**
+ * Moves for `slot` that bring in queue items: replace, split (a filler may complete it), merge. With `now` null, merges
+ * ignore the neighbour's age (used to tell a stuck wall from one that is only waiting).
+ */
+function moves(state: WallState, slot: Slot, now: number | null): Move[] {
+  const g = GRIDS[state.size];
+  const out: Move[] = [];
   const consider = (weight: number, leaving: Slot[], rects: Rect[]) => {
     if (rects.some(r => !g.shapes.includes(shapeOf(r)))) return;
     const onScreen = new Set(state.slots.filter(t => !leaving.includes(t)).map(t => t.itemId));
-    const picks = assign(state.queue, state.cursor, rects, onScreen);
-    if (picks) options.push({ weight, leaving, rects, picks });
+    const picks = assign(state.queue, state.cursor, rects, onScreen) ?? (rects.length > 1 ? assign(state.queue, state.cursor, rects, onScreen, true) : null);
+    if (picks) out.push({ weight, leaving, rects, picks });
   };
   const count = state.slots.length;
   consider(WEIGHTS.replace, [slot], [rectOf(slot)]);
   const split = halves(rectOf(slot));
   if (split && count + 1 <= g.max) consider(WEIGHTS.split, [slot], split);
   if (count - 1 >= g.min) {
-    const before = options.length;
+    const before = out.length;
     for (const mate of state.slots) {
-      const rect = mate.key !== slot.key && now - mate.arrivedAt >= MERGE_AGE_MS ? joined(slot, mate) : null;
+      const rect = mate.key !== slot.key && (now === null || now - mate.arrivedAt >= MERGE_AGE_MS) ? joined(slot, mate) : null;
       if (rect) consider(WEIGHTS.merge, [slot, mate], [rect]);
     }
     // Several feasible neighbours share the merge weight.
-    const merges = options.length - before;
-    for (let i = before; i < options.length; i++) options[i].weight /= merges;
+    for (let i = before; i < out.length; i++) out[i].weight /= out.length - before;
   }
-  if (!options.length) return again();
+  return out;
+}
 
+export function planSwap(state: WallState, slotKey: string, now: number, intervalMs: number, rng: Rng): Swap {
+  const slot = state.slots.find(t => t.key === slotKey);
+  if (!slot) return { leaving: [], arriving: [] };
+  const arrive = (rect: Rect, i: number, n: number) => {
+    const q = state.queue[i];
+    return makeSlot(rect, q.item.id, state.seq + n, state.cycle, q.page, state.pageCount, now, intervalMs, rng, n);
+  };
+  const again = (): Swap => ({
+    leaving: [slot.key],
+    arriving: [makeSlot(rectOf(slot), slot.itemId, state.seq, slot.cycle, slot.page, slot.pageCount, now, intervalMs, rng, 0)],
+  });
+  if (state.fallback) {
+    // Any item fills a column: the next unused one that is not already on screen.
+    const onScreen = new Set(state.slots.filter(t => t !== slot).map(t => t.itemId));
+    const i = state.queue.findIndex((q, i) => i >= state.cursor && !q.used && !onScreen.has(q.item.id));
+    return i < 0 ? again() : { leaving: [slot.key], arriving: [arrive(rectOf(slot), i, 0)] };
+  }
+  const options = moves(state, slot, now);
+  if (!options.length) return again();
   let r = rng() * options.reduce((s, o) => s + o.weight, 0);
   const op = options.find(o => (r -= o.weight) < 0) ?? options[options.length - 1];
   const order = op.rects.map((_, i) => i).sort((a, b) => readingOrder(op.rects[a], op.rects[b]));
-  return {
-    leaving: op.leaving.map(t => t.key),
-    arriving: order.map((i, n) => {
-      const q = state.queue[op.picks[i]];
-      return makeSlot(op.rects[i], q.item.id, state.seq + n, state.cycle, q.page, state.pageCount, now, intervalMs, rng, n);
-    }),
-  };
+  return { leaving: op.leaving.map(t => t.key), arriving: order.map((i, n) => arrive(op.rects[i], op.picks[i], n)) };
 }
 
 export function applySwap(state: WallState, swap: Swap): WallState {
@@ -236,30 +253,36 @@ export function applySwap(state: WallState, swap: Swap): WallState {
     const q = queue.find(e => !e.used && e.item.id === t.itemId);
     if (q) q.used = true;
   }
-  return {
+  const next = {
     ...state,
     queue,
     cursor: firstUnused(queue, state.cursor),
     seq: state.seq + swap.arriving.length,
     slots: [...state.slots.filter(t => !leaving.has(t.key)), ...swap.arriving],
   };
+  // Stuck: no tile can ever bring in what is left of the queue, so count it used and let the hook refill.
+  if (!next.fallback && next.cursor < queue.length && next.slots.every(t => !moves(next, t, null).length)) {
+    for (const q of queue) q.used = true;
+    next.cursor = queue.length;
+  }
+  return next;
 }
 
 /**
- * New cycle: queue rebuilt from `items`, slots kept. With `now`/`intervalMs`, a fallback wall that can now be tiled
- * (or whose items changed), or a tiled wall whose items dropped below the minimum, is laid out afresh instead.
+ * New cycle: queue rebuilt from `items`, slots kept. Laid out afresh instead when a fallback wall can now be tiled or
+ * needs a different number of columns, or a tiled wall's items dropped below the minimum.
  */
-export function refill(state: WallState, items: EngineItem[], now?: number, intervalMs?: number, rng: Rng = Math.random): WallState {
+export function refill(state: WallState, items: EngineItem[], now: number, intervalMs: number, rng: Rng): WallState {
   const g = GRIDS[state.size];
-  if (now !== undefined && intervalMs !== undefined && (state.fallback || items.length < g.min)) {
-    const fresh = initWall(items, state.size, now, intervalMs, rng, state.cycle + 1);
-    const ids = (s: WallState) => s.slots.map(t => t.itemId).sort().join('\n');
-    if (!state.fallback || !fresh.fallback || ids(fresh) !== ids(state)) return fresh;
+  if (state.fallback || items.length < g.min) {
+    const fresh = initWall(items, state.size, now, intervalMs, rng, state.cycle + 1, state.seq);
+    if (!state.fallback || !fresh.fallback || fresh.slots.length !== state.slots.length) return fresh;
   }
-  const queue = items.map((item, i) => ({ item, page: Math.floor(i / g.ideal), used: state.fallback }));
+  const queue = items.map((item, i) => ({ item, page: Math.floor(i / g.ideal), used: false }));
   return { ...state, queue, cursor: firstUnused(queue), cycle: state.cycle + 1, pageCount: Math.max(1, Math.ceil(items.length / g.ideal)) };
 }
 
+/** Pushes every due time back (e.g. after a pause). `arrivedAt` is intentionally kept: a paused screen stayed visible. */
 export function shiftDue(state: WallState, ms: number): WallState {
   return { ...state, slots: state.slots.map(t => ({ ...t, dueAt: t.dueAt + ms })) };
 }

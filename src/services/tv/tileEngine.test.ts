@@ -92,7 +92,9 @@ describe('initWall', () => {
 function run(size: TvTileSize, items: EngineItem[], steps: number, seed: number, onStep?: (s: WallState, kind: string, refilled: boolean) => void) {
   const rng = mulberry32(seed);
   let s = initWall(items, size, 0, MIN, rng);
-  let splits = 0, merges = 0;
+  let splits = 0, merges = 0, refills = 0;
+  const keys = new Set(s.slots.map(t => t.key));
+  onStep?.(s, 'init', false);
   for (let i = 0; i < steps; i++) {
     const due = nextDue(s)!;
     const swap = planSwap(s, due.key, due.dueAt, MIN, rng);
@@ -102,10 +104,14 @@ function run(size: TvTileSize, items: EngineItem[], steps: number, seed: number,
     if (kind === 'merge') merges++;
     s = applySwap(s, swap);
     let refilled = false;
-    if (s.cursor >= s.queue.length) { s = refill(s, items); refilled = true; }
+    if (s.cursor >= s.queue.length) { s = refill(s, items, due.dueAt, MIN, rng); refilled = true; refills++; }
+    for (const t of s.slots) if (t.arrivedAt === due.dueAt) {
+      expect(keys.has(t.key)).toBe(false); // keys never repeat
+      keys.add(t.key);
+    }
     onStep?.(s, kind, refilled);
   }
-  return { s, splits, merges };
+  return { s, splits, merges, refills };
 }
 
 describe('swaps', () => {
@@ -138,6 +144,54 @@ describe('swaps', () => {
     }
     expect(merged).toBe(0);
     expect(control).toBeGreaterThan(0);
+  });
+
+  const numbers = (n: number): EngineItem[] => Array.from({ length: n }, (_, i) => ({ id: `n${i}`, weight: 1, shapes: ['1x1'] }));
+  const charts = (n: number, shapes: Shape[] = ['2x1', '2x2']): EngineItem[] =>
+    Array.from({ length: n }, (_, i) => ({ id: `c${i}`, weight: 2, shapes }));
+
+  /** Drives a pool and checks the queue keeps moving: a refill at least every 100 swaps and (optionally) every item shown each cycle. */
+  function expectProgress(size: TvTileSize, items: EngineItem[], seed: number, everyItem: boolean) {
+    const seen = new Set<string>();
+    let cycle = 0, step = 0, last = 0;
+    run(size, items, 2000, seed, (s, _kind, refilled) => {
+      for (const t of s.slots) if (t.cycle === cycle) seen.add(t.itemId);
+      expect(step++ - last).toBeLessThanOrEqual(100);
+      if (refilled) {
+        if (everyItem) expect([...seen].sort()).toEqual(items.map(i => i.id).sort());
+        cycle++;
+        last = step;
+        seen.clear();
+      }
+    });
+  }
+
+  it.each(SIZES)('%s: 6 numbers + 8 charts keep cycling and all show', size => {
+    for (let seed = 1; seed <= 8; seed++) expectProgress(size, [...numbers(6), ...charts(8)], seed, true);
+  });
+
+  it('small: 6 wide-only charts + 1 number still refill (the number can never fit)', () => {
+    for (let seed = 1; seed <= 4; seed++) expectProgress('small', [...charts(6, ['2x1']), ...numbers(1)], seed, false);
+  });
+
+  it('small fallback with 5 items shows all 5 within a cycle', () => {
+    expectProgress('small', stories(5), 3, true);
+  });
+
+  it('keys never repeat across a fallback → tiled upgrade', () => {
+    const rng = mulberry32(5);
+    let s = initWall(stories(2), 'medium', 0, MIN, rng);
+    const keys = new Set(s.slots.map(t => t.key));
+    for (let i = 0; i < 5; i++) {
+      const due = nextDue(s)!;
+      s = applySwap(s, planSwap(s, due.key, due.dueAt, MIN, rng));
+      for (const t of s.slots) keys.add(t.key);
+    }
+    const before = keys.size;
+    const up = refill(s, stories(30), 400000, MIN, rng);
+    expect(up.fallback).toBe(false);
+    for (const t of up.slots) keys.add(t.key);
+    expect(keys.size).toBe(before + up.slots.length);
   });
 
   it('keeps swapping a 4-panel all-wide medium pool', () => {
