@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Article, StoryCluster, NewspaperSectionConfig, ThreatSeverity } from '../../types';
 import { HeroArticle } from '../ArticleCard/HeroArticle';
 import { FeatureArticle } from '../ArticleCard/FeatureArticle';
@@ -16,7 +16,7 @@ import { calculateImportance } from '../../services/articles/importance';
 import { TrendingStrip } from './TrendingStrip';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../Common/LoadMoreButton';
-import { newspaperModes } from '../../utils/layout';
+import { fitGridItems, newspaperModes } from '../../utils/layout';
 import {
   Flame,
   ShieldAlert,
@@ -99,6 +99,62 @@ const SectionOverflow: React.FC<{ articles: Article[]; onOpenArticle: (article: 
   );
 };
 
+// Stories the lead row offers to fill the space under its hero, at most
+const LEAD_FILL_POOL = 8;
+
+/**
+ * Fills the space left under the hero when the side stack makes the lead row taller, with the
+ * next stories as briefs: only whole rows that fit, nothing below lg (one column, no gap to fill).
+ * flex: 1 1 0 + min-height: 0 + overflow: hidden, so it takes only the height the row already has
+ * and can never make the row taller. Reports how many it shows so the stories after it start there.
+ */
+const LeadFiller: React.FC<{
+  articles: Article[];
+  onFit: (count: number) => void;
+  onOpenArticle: (article: Article) => void;
+}> = ({ articles, onFit, onOpenArticle }) => {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [count, setCount] = useState(0);
+  // Re-measure when the stories change, not on every render's fresh slice of them
+  const storyKey = articles.map((a) => a.id).join('|');
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const grid = gridRef.current;
+    if (!box || !grid) return;
+    const measure = () => {
+      // Below lg the box is display:none and measures 0, so nothing fits
+      const heights = Array.from(grid.children, (el) => (el as HTMLElement).offsetHeight);
+      const style = getComputedStyle(grid);
+      const columns = style.gridTemplateColumns.split(' ').length;
+      setCount(fitGridItems(box.clientHeight, heights, columns, parseFloat(style.rowGap) || 0));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [storyKey]);
+
+  useLayoutEffect(() => onFit(count), [count, onFit]);
+  useLayoutEffect(() => () => onFit(0), [onFit]);
+
+  if (articles.length === 0) return null;
+  return (
+    <div ref={boxRef} className="hidden lg:block" style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }} data-lead-filler>
+      <div ref={gridRef} className="grid grid-cols-2 gap-x-8 gap-y-3 items-stretch">
+        {articles.map((story, i) => (
+          // Stories past the ones that fit stay laid out (to be measured) but hidden and inert
+          <div key={story.id} className={i < count ? 'min-w-0' : 'min-w-0 invisible'} aria-hidden={i < count ? undefined : true}>
+            <TextArticle article={story} compact showDivider={false} onOpen={() => onOpenArticle(story)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const SEVERITY_RANK: Record<ThreatSeverity, number> = {
   critical: 4,
   high: 3,
@@ -145,6 +201,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     : updateSetting('clusteringEnabled', !modes.clustering);
   const [selectedCluster, setSelectedCluster] = useState<StoryCluster | null>(null);
   const [isCustomizingSections, setIsCustomizingSections] = useState(false);
+  // How many stories after the lead row's five fill the space under its hero (LeadFiller reports it)
+  const [leadFill, setLeadFill] = useState(0);
 
   // Clustering only depends on which articles are shown and their severity/image (primary pick),
   // not on read/bookmark state, so key the expensive pass on that and map results to live copies.
@@ -208,12 +266,13 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     return sortByTimeDesc(primaryDisplayArticles);
   }, [primaryDisplayArticles]);
 
-  // The stream below the lead row is rendered in pages
-  const { visibleCount, hasMore, remaining, showMore } = usePagedCount(chronologicalStories.length - 5, STREAM_PAGE_SIZE);
+  // The stream below the lead row (its five stories and those filling under the hero) is rendered in pages
+  const streamStart = 5 + leadFill;
+  const { visibleCount, hasMore, remaining, showMore } = usePagedCount(chronologicalStories.length - streamStart, STREAM_PAGE_SIZE);
 
   // Partition chronological remaining stories into gap-free blocks
   const chronologicalBlocks = useMemo(() => {
-    const remaining = chronologicalStories.slice(5, 5 + visibleCount);
+    const remaining = chronologicalStories.slice(streamStart, streamStart + visibleCount);
     const blocks: EditorialBlock[] = [];
     let idx = 0;
     let cycle = 0;
@@ -282,7 +341,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
     }
 
     return blocks;
-  }, [chronologicalStories, visibleCount]);
+  }, [chronologicalStories, streamStart, visibleCount]);
 
   // Group articles by user configured sections
   const sectionedGroups = useMemo(() => {
@@ -467,6 +526,11 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                         onOpen={() => onOpenArticle(items[0])}
                         {...getClusterProps(items[0])}
                       />
+                      <LeadFiller
+                        articles={items.slice(5, 5 + LEAD_FILL_POOL)}
+                        onFit={setLeadFill}
+                        onOpenArticle={onOpenArticle}
+                      />
                     </div>
 
                     {items.length > 1 && (
@@ -602,9 +666,9 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                   </div>
                 )}
 
-                {/* Articles beyond what the layout above shows: first section 5, 5+ layout 4, smaller layouts all */}
+                {/* Articles beyond what the layout above shows: first section 5 plus those under its hero, 5+ layout 4, smaller layouts all */}
                 <SectionOverflow
-                  articles={items.slice(isFirstSection ? 5 : items.length >= 5 ? 4 : items.length)}
+                  articles={items.slice(isFirstSection ? 5 + leadFill : items.length >= 5 ? 4 : items.length)}
                   onOpenArticle={onOpenArticle}
                 />
               </section>
@@ -633,6 +697,11 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
                   article={chronologicalStories[0]}
                   onOpen={() => onOpenArticle(chronologicalStories[0])}
                   {...getClusterProps(chronologicalStories[0])}
+                />
+                <LeadFiller
+                  articles={chronologicalStories.slice(5, 5 + LEAD_FILL_POOL)}
+                  onFit={setLeadFill}
+                  onOpenArticle={onOpenArticle}
                 />
               </div>
 
