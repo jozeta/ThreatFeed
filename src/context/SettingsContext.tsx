@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserSettings, NewspaperSectionConfig } from '../types';
 import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexeddb';
 import { ALERT_GAP_OPTIONS, createBuiltInRules, migrateAlertRules } from '../services/intelligence/alertRules';
-import { migrateTvInterval, parseTvTileSize } from '../services/tv/tvSettings';
+import { migrateTvInterval, parseTvAnimationSpeed, parseTvTileSize } from '../services/tv/tvSettings';
 import { DEFAULT_WATCHLIST_KEYWORDS, WATCHLIST_DEFAULTS_VERSION, upgradeWatchlistKeywords } from '../services/intelligence/watchlist';
 
 export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
@@ -87,6 +87,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   tvTileSize: 'medium',
   disabledCategories: [],
   tvTransition: 'reveal',
+  tvAnimationSpeed: 'fast',
   watchlistKeywords: DEFAULT_WATCHLIST_KEYWORDS,
   watchlistDefaultsVersion: WATCHLIST_DEFAULTS_VERSION,
   dataSource: 'snapshot',
@@ -139,6 +140,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           autoRefreshFeedCooldownHours: typeof saved.autoRefreshFeedCooldownHours === 'number' ? saved.autoRefreshFeedCooldownHours : DEFAULT_SETTINGS.autoRefreshFeedCooldownHours,
           tvIntervalSeconds: migrateTvInterval(saved),
           tvTileSize: parseTvTileSize(saved.tvTileSize),
+          tvAnimationSpeed: parseTvAnimationSpeed(saved.tvAnimationSpeed),
           disabledCategories: Array.isArray(saved.disabledCategories) ? saved.disabledCategories.filter((v: unknown) => typeof v === 'string') : [],
           tvTransition: saved.tvTransition === 'fade' || saved.tvTransition === 'slide' || saved.tvTransition === 'reveal' ? saved.tvTransition : DEFAULT_SETTINGS.tvTransition,
           watchlistKeywords: Array.isArray(saved.watchlistKeywords)

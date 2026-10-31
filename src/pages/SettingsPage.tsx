@@ -38,7 +38,7 @@ import {
   Tv
 } from 'lucide-react';
 import { TV_INTERVAL_STEPS } from '../services/tv/tvSettings';
-import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode, TvTileSize, TvTransition } from '../types';
+import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode, TvAnimationSpeed, TvTileSize, TvTransition } from '../types';
 
 const ACCENT_PRESETS = [
   { name: 'Crimson', color: '#e11d48' },
@@ -567,10 +567,10 @@ export const SettingsPage: React.FC = () => {
         <div>
           <span className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">Tile size</span>
           <p className="text-xs font-serif text-theme-text-muted mb-2">
-            Large: 3–5 tiles · Medium: 5–7 · Small: 6–10. Applies to TV mode and dashboards.
+            Large: 3–5 tiles · Medium: 5–7 · Small: 6–10 · X-Small: 12–16. Applies to TV mode and dashboards.
           </p>
           <div role="group" aria-label="TV tile size" className="inline-flex border border-theme-border rounded-md p-0.5 bg-theme-card">
-            {(['large', 'medium', 'small'] as TvTileSize[]).map((t) => (
+            {(['large', 'medium', 'small', 'xsmall'] as TvTileSize[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -580,7 +580,7 @@ export const SettingsPage: React.FC = () => {
                   settings.tvTileSize === t ? 'bg-theme-accent-subtle text-theme-accent font-bold' : 'text-theme-text-muted hover:text-theme-text'
                 }`}
               >
-                {t}
+                {t === 'xsmall' ? 'X-Small' : t}
               </button>
             ))}
           </div>
@@ -598,6 +598,26 @@ export const SettingsPage: React.FC = () => {
                 onClick={() => updateSettings({ tvTransition: t })}
                 className={`px-3 py-1.5 rounded text-xs font-mono capitalize transition-colors ${
                   settings.tvTransition === t ? 'bg-theme-accent-subtle text-theme-accent font-bold' : 'text-theme-text-muted hover:text-theme-text'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">Animation speed</span>
+          <p className="text-xs font-serif text-theme-text-muted mb-2">How fast tiles move and charts draw in. Fast is the original speed; Reduce motion still uses a quick plain fade.</p>
+          <div role="group" aria-label="TV animation speed" className="inline-flex border border-theme-border rounded-md p-0.5 bg-theme-card">
+            {(['slow', 'medium', 'fast'] as TvAnimationSpeed[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={settings.tvAnimationSpeed === t}
+                onClick={() => updateSettings({ tvAnimationSpeed: t })}
+                className={`px-3 py-1.5 rounded text-xs font-mono capitalize transition-colors ${
+                  settings.tvAnimationSpeed === t ? 'bg-theme-accent-subtle text-theme-accent font-bold' : 'text-theme-text-muted hover:text-theme-text'
                 }`}
               >
                 {t}

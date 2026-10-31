@@ -439,6 +439,7 @@ export interface UserSettings {
   tvTileSize: TvTileSize; // TV mode and dashboards: how many tiles fit on screen
   disabledCategories: string[]; // news categories hidden app-wide
   tvTransition: TvTransition; // TV mode: how a set gives way to the next
+  tvAnimationSpeed: TvAnimationSpeed; // TV mode and dashboards: how fast transitions and chart animations play (fast = the original speed)
   autoRefreshFeedCooldownHours: number; // default: 4 (hours: 0, 2, 4, 6, 12, 24)
   watchlistKeywords: string[];
   watchlistDefaultsVersion?: number; // which default keyword set the user has received
@@ -474,7 +475,8 @@ export interface FilterState {
 }
 
 export type TvTransition = 'fade' | 'slide' | 'reveal';
-export type TvTileSize = 'large' | 'medium' | 'small';
+export type TvAnimationSpeed = 'slow' | 'medium' | 'fast';
+export type TvTileSize = 'large' | 'medium' | 'small' | 'xsmall';
 
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 

@@ -12,7 +12,7 @@ import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
 import PageCounter from './PageCounter';
 import { useLivingWall } from './useLivingWall';
-import { wallOutMs, wallTransition } from './wallMotion';
+import { SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
 const NO_FILTERS = {
   searchQuery: '', selectedCategory: null, selectedSourceId: null, selectedTag: null,
@@ -93,7 +93,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     settings.tvIntervalSeconds * 1000,
     {
       signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
-      outMs: wallOutMs(reduced, settings.tvTransition),
+      outMs: wallOutMs(reduced, settings.tvTransition, settings.tvAnimationSpeed),
     }
   );
   onScreen.current = slots;
@@ -109,7 +109,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
         className="tv-wall"
         data-size={size}
         data-transition={wallTransition(reduced, settings.tvTransition)}
-        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[settings.tvAnimationSpeed] } as CSSProperties}
       >
         {shown.map(s => (
           <TvTileCard

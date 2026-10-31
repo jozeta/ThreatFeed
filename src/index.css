@@ -690,7 +690,7 @@ button.tag-chip {
   color: #e7ebf0;
 }
 
-/* TV wall: a grid of living tiles (3x2, 4x2 or 4x3 by data-size; TvWall sets the tracks); each tile swaps on its own */
+/* TV wall: a grid of living tiles (3x2, 4x2, 4x3 or 5x4 by data-size; TvWall sets the tracks); each tile swaps on its own */
 .tv-wall {
   position: absolute;
   inset: 0;
@@ -715,6 +715,7 @@ button.tag-chip {
   border-radius: 1vmin;
 }
 .tv-tile[data-size='small'] { --s: 0.8; padding: 2vmin 2vmin 2vmin 2.6vmin; gap: 1vmin; }
+.tv-tile[data-size='xsmall'] { --s: 0.62; padding: 1.5vmin 1.5vmin 1.5vmin 2vmin; gap: 0.7vmin; }
 .tv-tile[data-area='2'] { --tv-headline-lines: 5; }
 .tv-tile[data-area='4'] { --s: 1.25; --tv-headline-lines: 6; }
 .tv-tile-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0.8vmin; }
@@ -774,12 +775,12 @@ button.tag-chip {
 
 /* Per cell (TV tiles and dashboard panels): arriving cells animate in on mount; leaving ones keep their cells and animate out (keyframes, so the
    in-animation's fill never holds them visible) until removed */
-.tv-wall[data-transition='fade'] .tv-cell { animation: tv-fade-in 450ms ease both; }
-.tv-wall[data-transition='fade'] .tv-cell[data-leaving] { animation: tv-fade-out 450ms ease both; }
-.tv-wall[data-transition='slide'] .tv-cell { animation: tv-slide-in 450ms ease both; }
-.tv-wall[data-transition='slide'] .tv-cell[data-leaving] { animation: tv-slide-out 450ms ease both; }
-.tv-wall[data-transition='reveal'] .tv-cell { animation: tv-tile-in 350ms ease-out both; animation-delay: calc(var(--i, 0) * 120ms); }
-.tv-wall[data-transition='reveal'] .tv-cell[data-leaving] { animation: tv-fade-out 250ms ease both; }
+.tv-wall[data-transition='fade'] .tv-cell { animation: tv-fade-in calc(450ms * var(--k, 1)) ease both; }
+.tv-wall[data-transition='fade'] .tv-cell[data-leaving] { animation: tv-fade-out calc(450ms * var(--k, 1)) ease both; }
+.tv-wall[data-transition='slide'] .tv-cell { animation: tv-slide-in calc(450ms * var(--k, 1)) ease both; }
+.tv-wall[data-transition='slide'] .tv-cell[data-leaving] { animation: tv-slide-out calc(450ms * var(--k, 1)) ease both; }
+.tv-wall[data-transition='reveal'] .tv-cell { animation: tv-tile-in calc(350ms * var(--k, 1)) ease-out both; animation-delay: calc(var(--i, 0) * 120ms * var(--k, 1)); }
+.tv-wall[data-transition='reveal'] .tv-cell[data-leaving] { animation: tv-fade-out calc(250ms * var(--k, 1)) ease both; }
 .tv-wall[data-transition='reduced'] .tv-cell { animation: tv-fade-in 200ms linear both; }
 .tv-wall[data-transition='reduced'] .tv-cell[data-leaving] { animation: tv-fade-out 200ms linear both; }
 
@@ -794,8 +795,9 @@ button.tag-chip {
 }
 .tv-slot[data-size='large'] { --s: 1.4; }
 .tv-slot[data-size='small'] { --s: 0.8; }
+.tv-slot[data-size='xsmall'] { --s: 0.62; }
 .tv-slot > .tv-panel { flex: 1 1 auto; }
-.tv-wall[data-transition='reveal'] .tv-slot { --d: calc(var(--i, 0) * 120ms); }
+.tv-wall[data-transition='reveal'] .tv-slot { --d: calc(var(--i, 0) * 120ms * var(--k, 1)); }
 .tv-panel {
   min-width: 0;
   min-height: 0;
@@ -847,9 +849,9 @@ button.tag-chip {
 @keyframes tv-grow-y { from { transform: scaleY(0); } to { transform: none; } }
 @keyframes tv-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes tv-row-in { from { opacity: 0; transform: translateY(0.6vw); } to { opacity: 1; transform: none; } }
-.tv-grow-x { transform-origin: left center; animation: tv-grow-x 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 60ms); }
-.tv-grow-y { transform-origin: center bottom; transform-box: fill-box; animation: tv-grow-y 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 60ms); }
-.tv-draw { stroke-dasharray: 1 1; animation: tv-draw 900ms ease-out both; animation-delay: var(--d, 0ms); }
-.tv-area-in { animation: tv-fade-in 400ms ease both; animation-delay: calc(var(--d, 0ms) + 800ms); }
-.tv-row-in { animation: tv-row-in 400ms ease-out both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 70ms); }
+.tv-grow-x { transform-origin: left center; animation: tv-grow-x calc(700ms * var(--k, 1)) cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 60ms * var(--k, 1)); }
+.tv-grow-y { transform-origin: center bottom; transform-box: fill-box; animation: tv-grow-y calc(700ms * var(--k, 1)) cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 60ms * var(--k, 1)); }
+.tv-draw { stroke-dasharray: 1 1; animation: tv-draw calc(900ms * var(--k, 1)) ease-out both; animation-delay: var(--d, 0ms); }
+.tv-area-in { animation: tv-fade-in calc(400ms * var(--k, 1)) ease both; animation-delay: calc(var(--d, 0ms) + 800ms * var(--k, 1)); }
+.tv-row-in { animation: tv-row-in calc(400ms * var(--k, 1)) ease-out both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 70ms * var(--k, 1)); }
 .tv-wall[data-transition='reduced'] :is(.tv-grow-x, .tv-grow-y, .tv-draw, .tv-area-in, .tv-row-in) { animation: none; }

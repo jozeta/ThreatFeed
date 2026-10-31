@@ -8,12 +8,13 @@ export const GRIDS: Record<TvTileSize, GridSpec> = {
   large: { cols: 3, rows: 2, min: 3, max: 5, ideal: 4, shapes: ['1x1', '2x1', '2x2'] },
   medium: { cols: 4, rows: 2, min: 5, max: 7, ideal: 6, shapes: ['1x1', '2x1'] },
   small: { cols: 4, rows: 3, min: 6, max: 10, ideal: 8, shapes: ['1x1', '2x1'] },
+  xsmall: { cols: 5, rows: 4, min: 12, max: 16, ideal: 14, shapes: ['1x1', '2x1'] },
 };
 export interface EngineItem { id: string; weight: number; shapes: Shape[] } // stories: all shapes; number panels ['1x1']; charts/lists ['2x1','2x2']
 export interface Slot {
   key: string; // unique per arrival (`${itemId}#${seq}`); React key
   itemId: string;
-  col: number; row: number; w: 1 | 2 | 3 | 4; h: 1 | 2 | 3; // 0-based origin; fallback layout may use w>2 / h=rows
+  col: number; row: number; w: 1 | 2 | 3 | 4 | 5; h: 1 | 2 | 3 | 4; // 0-based origin; fallback layout may use w>2 / h=rows
   cycle: number; page: number; pageCount: number;
   arrivedAt: number; dueAt: number;
   order: number; // position within the arrival batch, for staggered reveal
