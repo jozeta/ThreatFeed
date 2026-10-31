@@ -3,7 +3,8 @@ import { act, createElement, StrictMode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineItem } from '../../services/tv/tileEngine';
-import { keepLive, TV_QUIET_EVENT, useLivingWall } from './useLivingWall';
+import { keepLive, pinSlots, TV_QUIET_EVENT, useLivingWall } from './useLivingWall';
+import { Slot } from '../../services/tv/tileEngine';
 
 vi.mock('../Common/SidePanel', () => ({ useReducedMotion: () => false }));
 
@@ -313,10 +314,56 @@ describe('useLivingWall', () => {
     on.forEach(id => expect(last.has(id)).toBe(true));
   });
 
-  it('keepLive keeps the old content of live ids only, old copy winning', () => {
-    const kept = new Map([['a', 'old-a'], ['b', 'old-b']]);
-    const out = keepLive(new Map([['a', 'new-a'], ['c', 'new-c']]), kept, new Set(['a', 'z']));
-    expect([...out.entries()]).toEqual([['a', 'old-a'], ['c', 'new-c']]);
+  it('a stable id gets the new build\'s content after a refill once it is off screen', () => {
+    let content = new Map<string, number>(); // id → the build that made its content
+    let gen = 0;
+    mount((_full, live) => {
+      const fresh = items(12);
+      content = keepLive(new Map(fresh.map(it => [it.id, gen] as [string, number])), content, live);
+      gen++;
+      return fresh;
+    });
+    for (let i = 0; i < 30; i++) advance(60000);
+    advance(450);
+    expect(gen).toBeGreaterThan(3);
+    const on = new Set(result.slots.map(s => s.itemId));
+    const off = [...content.entries()].filter(([id]) => !on.has(id));
+    expect(off.length).toBeGreaterThan(0);
+    off.forEach(([, made]) => expect(made).toBe(gen - 1));
+  });
+
+  it('a full rebuild (size change) gives every item the new build\'s content', () => {
+    let content = new Map<string, number>();
+    let gen = 0;
+    let size: 'medium' | 'small' = 'medium';
+    Harness = function H() {
+      result = useLivingWall((_full, live) => {
+        const fresh = items(12);
+        content = keepLive(new Map(fresh.map(it => [it.id, gen] as [string, number])), content, live);
+        gen++;
+        return fresh;
+      }, size, 60000, { outMs: 450, rng: () => 0.5 });
+      return null;
+    };
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    size = 'small';
+    act(() => root.render(createElement(Harness)));
+    result.slots.forEach(s => expect(content.get(s.itemId)).toBe(gen - 1));
+  });
+
+  it('keepLive: the new build wins; live ids it lacks keep their old content; others are dropped', () => {
+    const kept = new Map([['a', 'old-a'], ['b', 'old-b'], ['r', 'old-r']]);
+    const out = keepLive(new Map([['a', 'new-a'], ['c', 'new-c']]), kept, new Set(['a', 'r', 'z']));
+    expect(Object.fromEntries(out)).toEqual({ a: 'new-a', c: 'new-c', r: 'old-r' });
+  });
+
+  it('pinSlots: a slot keeps what it first showed; a new slot takes its item\'s current content', () => {
+    const slot = (key: string, itemId: string) => ({ key, itemId } as Slot);
+    const pins = new Map([['k1', 'old-a'], ['gone', 'old-x']]);
+    const content = new Map([['a', 'new-a'], ['b', 'new-b']]);
+    const out = pinSlots(pins, [slot('k1', 'a'), slot('k2', 'a'), slot('k3', 'b'), slot('k4', 'missing')], content);
+    expect(Object.fromEntries(out)).toEqual({ k1: 'old-a', k2: 'new-a', k3: 'new-b' });
   });
 
   it('runs two hours with refills and always one timer', () => {

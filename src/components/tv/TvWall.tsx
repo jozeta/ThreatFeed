@@ -13,7 +13,7 @@ import { mixItems } from '../../services/tv/mix';
 import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
 import TvFooter from './TvFooter';
-import { keepLive, useLivingWall } from './useLivingWall';
+import { keepLive, pinSlots, useLivingWall } from './useLivingWall';
 import { useBreakingDetection, useBreakingNews } from './useBreakingNews';
 import { kevAddedMap } from '../../services/tv/breaking';
 import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
@@ -68,10 +68,13 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings, mixed, msrc, stats };
   const ref = useRef(latest);
   ref.current = latest;
-  // Tile content by id: every build's tiles, with the kept copy winning for items the live wall still holds
+  // Tile content by id: the latest build's tiles, plus kept ones the live wall still references that it lacks
   const tilesById = useRef(new Map<string, TvTile>());
   // Mixed mode's number panels by item id ('num:…'), kept the same way
   const panelsById = useRef(new Map<string, PanelDef>());
+  // What each slot on screen shows, by slot key: fixed when it first renders, so a refill never changes a tile mid-show
+  const tilePins = useRef(new Map<string, TvTile>());
+  const panelPins = useRef(new Map<string, PanelDef>());
   const vulnCtx = (): VulnCtx => {
     const d = ref.current;
     return { vulns: d.vulns, msrc: d.msrc, stats: d.stats, stackKeywords: d.settings.stackKeywords ?? NONE, watchedCves: d.settings.watchedCves ?? NONE, now: Date.now() };
@@ -107,8 +110,8 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
       const tiles = build();
       if (full) news.markSeen(tiles);
       const panels = numbers();
-      // Items the live wall still holds (on screen, leaving, queued) keep their content until they leave it; `live` is
-      // the wall's state now, which can be ahead of the last render
+      // Items the live wall still references (on screen, leaving, queued) keep content when this build lacks them; `live`
+      // is the wall's state now, which can be ahead of the last render
       tilesById.current = keepLive(new Map(tiles.map(t => [t.id, t])), tilesById.current, live);
       panelsById.current = keepLive(new Map(panels.map(p => [NUM + p.id, p])), panelsById.current, live);
       const numberItems: EngineItem[] = panels.map(p => ({ id: NUM + p.id, weight: p.weight, shapes: p.shapes }));
@@ -138,7 +141,9 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   });
 
   const now = Date.now();
-  const shown = slots.filter(s => tilesById.current.has(s.itemId) || panelsById.current.has(s.itemId));
+  tilePins.current = pinSlots(tilePins.current, slots, tilesById.current);
+  panelPins.current = pinSlots(panelPins.current, slots, panelsById.current);
+  const shown = slots.filter(s => tilePins.current.has(s.key) || panelPins.current.has(s.key));
   if (shown.length === 0) return <Empty />;
 
   const grid = GRIDS[size];
@@ -151,7 +156,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
         data-transition={transition}
         style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[tv.speed] } as CSSProperties}
       >
-        {shown.map(s => panelsById.current.has(s.itemId) ? (
+        {shown.map(s => panelPins.current.has(s.key) ? (
           // A number panel: the dashboard's cell and count-up, as on the Vulns dashboard
           <div
             key={s.key}
@@ -162,13 +167,13 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
             style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
           >
             <CellDelayContext.Provider value={cellDelayMs(transition, s.order, tv.speed)}>
-              {panelsById.current.get(s.itemId)!.render()}
+              {panelPins.current.get(s.key)!.render()}
             </CellDelayContext.Provider>
           </div>
         ) : (
           <TvTileCard
             key={s.key}
-            tile={tilesById.current.get(s.itemId)!}
+            tile={tilePins.current.get(s.key)!}
             size={size}
             area={s.w * s.h}
             leaving={leaving.has(s.key)}

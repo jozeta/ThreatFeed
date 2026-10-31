@@ -10,11 +10,28 @@ export const DATA_DEBOUNCE_MS = 2500;
 /** Dispatched on window right after a swap lands: a quiet moment (no animation in flight) for an automatic reload */
 export const TV_QUIET_EVENT = 'threatfeed:tv-quiet';
 
-/** `next` plus the kept content of every live item id (the old copy wins, so on-screen content never changes mid-show) */
+/**
+ * Content by id for the next build: the new build's content, plus the kept content of every live item (on screen,
+ * leaving or queued, e.g. a breaking item) that the new build lacks. An id in the new build always takes the new content;
+ * what a tile already on screen shows is held per slot by pinSlots.
+ */
 export function keepLive<T>(next: Map<string, T>, kept: Map<string, T>, live: ReadonlySet<string>): Map<string, T> {
   for (const id of live) {
     const v = kept.get(id);
-    if (v !== undefined) next.set(id, v);
+    if (v !== undefined && !next.has(id)) next.set(id, v);
+  }
+  return next;
+}
+
+/**
+ * Content per slot on screen: a slot keeps what it showed when it first rendered (so a refill never changes a tile
+ * mid-show); a new slot takes the current content of its item. Slots without content are left out.
+ */
+export function pinSlots<T>(pins: Map<string, T>, slots: Slot[], content: Map<string, T>): Map<string, T> {
+  const next = new Map<string, T>();
+  for (const t of slots) {
+    const v = pins.get(t.key) ?? content.get(t.itemId);
+    if (v !== undefined) next.set(t.key, v);
   }
   return next;
 }
@@ -30,8 +47,8 @@ interface Options {
 /**
  * A wall of tiles that swap one at a time. One timer is armed at a time, for the next due slot; a swap has an out phase
  * (`leaving`) and then lands. `build(full, live)` is told whether it starts a wall (initial build, rebuild) or refills one,
- * and the ids of every item the live wall still references (its slots, leaving ones included, and its queue): content for
- * those must be kept even when the new build drops them, since builds can run before React re-renders. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
+ * and the ids the live wall still references (pass them to keepLive): builds can run before React re-renders, so content
+ * for those items must be kept even when the new build drops them. Render content per slot with pinSlots. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
  */
 export function useLivingWall(build: (full: boolean, live: ReadonlySet<string>) => EngineItem[], size: TvTileSize, intervalMs: number, opts: Options = {}) {
   const buildRef = useRef(build);
@@ -47,7 +64,7 @@ export function useLivingWall(build: (full: boolean, live: ReadonlySet<string>) 
 
   const [wall, setWallState] = useState<WallState>(() => initWall(build(true, new Set()), size, now(), intervalMs, rng));
   const wallRef = useRef(wall);
-  /** Every item id the live wall state references (read at build time, never the last render's) */
+  /** Every item id the live wall state references (slots, leaving ones included, and queue), read at build time */
   const liveIds = (): ReadonlySet<string> => {
     const w = wallRef.current;
     return new Set([...w.slots.map(t => t.itemId), ...w.queue.map(q => q.item.id)]);
