@@ -84,7 +84,7 @@ export default function TvTileCard({ tile, size, area, leaving, isNew, now, styl
     >
       <span className="tv-tile-bar" style={{ background: TONE_COLOR[tile.tone] }} />
       <div className="tv-tile-meta">
-        {isNew && <span className="tv-new-badge">New</span>}
+        {isNew && <span className="tv-new-badge">NEW</span>}
         {tile.source}
         {age && ` · ${age}`}
       </div>

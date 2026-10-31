@@ -6,6 +6,7 @@ import { TvTile } from './tiles';
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+/** Milliseconds of an ISO time; a date-only KEV date (YYYY-MM-DD) parses as UTC midnight of that day. */
 const timeOf = (s: string | undefined) => (s ? new Date(s).getTime() : NaN);
 
 /** CVE → KEV dateAdded (YYYY-MM-DD), from the KEV catalog and per-CVE intel. */

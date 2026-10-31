@@ -85,6 +85,31 @@ describe('useLivingWall', () => {
     expect(result.slots.some(s => s.itemId === 'hot')).toBe(true);
   });
 
+  it('a rebuild (size change) keeps a waiting priority item at the front', () => {
+    let size: 'medium' | 'small' = 'medium';
+    Harness = function H() {
+      result = useLivingWall(() => items(30), size, 60000, { outMs: 450, rng: () => 0.5 });
+      return null;
+    };
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    result.prioritize([{ id: 'hot', weight: 1, shapes: ['1x1', '2x1', '2x2'] }]);
+    size = 'small';
+    act(() => root.render(createElement(Harness)));
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(false);
+    advance(60000);
+    advance(450);
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(true);
+  });
+
+  it('accepts news only once the wall has settled', () => {
+    mount(() => items(30));
+    expect(result.acceptsNews()).toBe(false);
+    advance(60000);
+    advance(450);
+    expect(result.acceptsNews()).toBe(true);
+  });
+
   it('tells build whether it starts a wall (true) or refills one (false)', () => {
     const calls: boolean[] = [];
     mount(full => { calls.push(full); return items(6); });

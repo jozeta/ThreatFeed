@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { findBreaking } from '../../services/tv/breaking';
 import { TvTile } from '../../services/tv/tiles';
 import { Slot } from '../../services/tv/tileEngine';
@@ -35,4 +35,61 @@ export function useBreakingNews() {
       return round === slot.cycle;
     },
   }).current;
+}
+
+/** Detection runs at most this often (leading and trailing); the app's refresh can flush data about once a second. */
+export const DETECT_THROTTLE_MS = 5000;
+
+interface DetectionOptions {
+  page: string;
+  /** Identities of the data behind `build`; a change triggers a run */
+  data: unknown[];
+  /** The app's first sync has completed (FeedContext `initialSyncDone`); before that all data counts as seen */
+  synced: boolean;
+  build: () => TvTile[];
+  kevAdded: () => Map<string, string>;
+  /** The wall takes news (it has settled); before that data changes are part of its starting build */
+  acceptsNews: () => boolean;
+  onBreaking: (tiles: TvTile[]) => void;
+}
+
+/**
+ * Runs breaking-news detection on data changes, throttled. A change that happens before the app's first sync, before the
+ * wall settles, or with a page change counts as seen (not news), even when the run it schedules happens later.
+ */
+export function useBreakingDetection(news: ReturnType<typeof useBreakingNews>, opts: DetectionOptions) {
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastRun = useRef(-Infinity);
+  const page = useRef(opts.page);
+  const seenOnly = useRef(false); // a change since the last run happened while gated
+
+  useEffect(() => () => {
+    if (timer.current !== undefined) clearTimeout(timer.current);
+  }, []);
+
+  useEffect(() => {
+    const o = optsRef.current;
+    if (page.current !== o.page || !o.synced || !o.acceptsNews()) seenOnly.current = true;
+    page.current = o.page;
+    if (timer.current !== undefined) return; // the scheduled run reads the latest data
+    const run = () => {
+      timer.current = undefined;
+      lastRun.current = Date.now();
+      const cur = optsRef.current;
+      const tiles = cur.build();
+      if (seenOnly.current || !cur.synced || !cur.acceptsNews()) {
+        seenOnly.current = false;
+        news.markSeen(tiles);
+        return;
+      }
+      const found = news.detect(tiles, cur.kevAdded(), Date.now());
+      if (found.length) cur.onBreaking(found);
+    };
+    const wait = lastRun.current + DETECT_THROTTLE_MS - Date.now();
+    if (wait <= 0) run();
+    else timer.current = setTimeout(run, wait);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opts.page, opts.synced, ...opts.data]);
 }

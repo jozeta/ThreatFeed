@@ -46,7 +46,10 @@ export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTi
     setWallState(w);
   };
 
-  const rebuild = (next: WallState) => {
+  /** Replaces the wall; priority items still waiting in the old queue keep their place at the front of the new one */
+  const rebuild = (fresh: WallState) => {
+    let next = fresh;
+    for (const q of wallRef.current.queue) if (q.priority && !q.used) next = prioritizeItem(next, q.item);
     generation.current++;
     setWall(next);
     setLeaving(new Set());
@@ -169,5 +172,8 @@ export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTi
     wallRef.current = w;
   }).current;
 
-  return { slots: wall.slots, leaving, label: pageLabel(wall), fallback: wall.fallback, prioritize };
+  /** Whether data changes are news to this wall: once it has settled (a swap landed) and is tiled; before that they are part of the starting build */
+  const acceptsNews = useRef(() => settled.current && wallRef.current.slots.length > 0 && !wallRef.current.fallback).current;
+
+  return { slots: wall.slots, leaving, label: pageLabel(wall), fallback: wall.fallback, prioritize, acceptsNews };
 }

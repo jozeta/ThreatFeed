@@ -737,8 +737,7 @@ button.tag-chip {
   background: #ef4444;
   color: #fff;
   font-weight: 700;
-  font-variant: small-caps;
-  text-transform: lowercase; /* "New" drawn in small caps */
+  text-transform: uppercase;
   letter-spacing: 0.06em;
   line-height: 1.2;
   vertical-align: baseline;

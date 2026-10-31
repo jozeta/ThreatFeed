@@ -289,6 +289,12 @@ describe('prioritize', () => {
     expect(s.queue[s.cursor].priority).toBeUndefined(); // not mutated
   });
 
+  it('does not queue an item that is already on screen', () => {
+    const s = initWall(stories(30), 'medium', 0, MIN, mulberry32(1));
+    const shown = stories(30).find(i => i.id === s.slots[0].itemId)!;
+    expect(prioritize(s, shown)).toBe(s);
+  });
+
   it('merges a due single with a neighbour that arrived 5 s ago into a wide tile for the priority item', () => {
     const { s, due } = wallWithSingle(false);
     const now = 100000;

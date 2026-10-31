@@ -13,7 +13,7 @@ import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
 import TvFooter from './TvFooter';
 import { useLivingWall } from './useLivingWall';
-import { useBreakingNews } from './useBreakingNews';
+import { useBreakingDetection, useBreakingNews } from './useBreakingNews';
 import { kevAddedMap } from '../../services/tv/breaking';
 import { SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
@@ -43,7 +43,7 @@ function Empty() {
 }
 
 export default function TvWall({ page }: { page: ActiveNavTab }) {
-  const { articles, feeds, cveIntel, incidents } = useFeeds();
+  const { articles, feeds, cveIntel, incidents, initialSyncDone } = useFeeds();
   const vulns = useVulns();
   const { victims } = useLeakSiteVictims();
   const { settings } = useSettings();
@@ -82,7 +82,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
 
   const news = useBreakingNews();
   const size = tv.size;
-  const { slots, leaving, label, prioritize } = useLivingWall(
+  const { slots, leaving, label, prioritize, acceptsNews } = useLivingWall(
     full => {
       const tiles = build();
       if (full) news.markSeen(tiles);
@@ -104,22 +104,20 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   );
   onScreen.current = slots;
 
-  // Breaking news: on every data change (the wall's own rebuilds stop after its first swap), stories that arrived since
-  // the wall started jump the queue. A page change starts over: its tiles are not news.
-  const detectedPage = useRef(page);
-  useEffect(() => {
-    const tiles = build();
-    if (detectedPage.current !== page) {
-      detectedPage.current = page;
-      news.markSeen(tiles);
-      return;
-    }
-    const found = news.detect(tiles, kevAddedMap(vulns, cveIntel), Date.now());
-    if (!found.length) return;
-    for (const t of found) tilesById.current.set(t.id, t);
-    prioritize(toEngineItems(found));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, articles, vulns, cveIntel, victims, incidents]);
+  // Breaking news: on data changes (the wall's own rebuilds stop after its first swap), stories that arrived since the
+  // wall started jump the queue
+  useBreakingDetection(news, {
+    page,
+    data: [articles, vulns, cveIntel, victims, incidents],
+    synced: initialSyncDone,
+    build,
+    kevAdded: () => kevAddedMap(ref.current.vulns, ref.current.cveIntel),
+    acceptsNews,
+    onBreaking: found => {
+      for (const t of found) tilesById.current.set(t.id, t);
+      prioritize(toEngineItems(found));
+    },
+  });
 
   const now = Date.now();
   const shown = slots.filter(s => tilesById.current.has(s.itemId));

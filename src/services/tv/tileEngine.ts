@@ -283,9 +283,11 @@ function prioritySwap(state: WallState, slot: Slot, arrive: (rect: Rect, i: numb
 
 /**
  * Puts `item` at the front of the unused queue (behind earlier priority items, so they arrive in order) as a priority
- * entry, dropping any older unused copy. Its page is the current one.
+ * entry, dropping any older unused copy. Its page is the current one. An item already on screen is not queued (it would
+ * only hold back later priority items and the refill until its slot comes due); the state is returned unchanged.
  */
 export function prioritize(state: WallState, item: EngineItem): WallState {
+  if (state.slots.some(t => t.itemId === item.id)) return state;
   const queue = state.queue.filter(q => q.used || q.item.id !== item.id).map(q => ({ ...q }));
   let at = firstUnused(queue);
   const page = queue[at]?.page ?? queue[queue.length - 1]?.page ?? 0;
