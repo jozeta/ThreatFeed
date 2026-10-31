@@ -388,3 +388,52 @@ describe('shiftDue', () => {
     expect(t.slots.map(x => x.arrivedAt)).toEqual(s.slots.map(x => x.arrivedAt));
   });
 });
+
+describe('too few items for the chosen size', () => {
+  const nums = (n: number): EngineItem[] => Array.from({ length: n }, (_, i) => ({ id: `n${i}`, weight: 1, shapes: ['1x1'] }));
+  const wide = (n: number): EngineItem[] => Array.from({ length: n }, (_, i) => ({ id: `c${i}`, weight: 1, shapes: ['2x1', '2x2'] }));
+
+  it('steps down to the next roomier size instead of falling back to columns', () => {
+    // The Vulns dashboard without a watchlist: 4 numbers + 7 charts = 11 panels, one short of X-Small's 12
+    const s = initWall([...nums(4), ...wide(7)], 'xsmall', 0, MIN, mulberry32(1));
+    expect(s.fallback).toBe(false);
+    expect(s.size).toBe('small');
+    expect(s.requested).toBe('xsmall');
+    expectCovered(s);
+    expectDistinct(s);
+  });
+
+  it('keeps the requested size when there are enough items', () => {
+    const s = initWall(stories(30), 'xsmall', 0, MIN, mulberry32(2));
+    expect(s.size).toBe('xsmall');
+    expect(s.requested).toBe('xsmall');
+  });
+
+  it('falls back to columns only when even Large cannot be filled', () => {
+    const s = initWall(stories(2), 'xsmall', 0, MIN, mulberry32(3));
+    expect(s.fallback).toBe(true);
+    expectCovered(s);
+  });
+
+  it('steps back up to the requested size once enough items arrive', () => {
+    const r = mulberry32(4);
+    const s = initWall([...nums(4), ...wide(7)], 'xsmall', 0, MIN, r);
+    const more = refill({ ...s, cursor: s.queue.length }, [...nums(4), ...wide(8)], 1000, MIN, r);
+    expect(more.size).toBe('xsmall');
+    expectCovered(more);
+  });
+
+  it('keeps cycling on the stepped-down size', () => {
+    const items = [...nums(4), ...wide(7)];
+    let s = initWall(items, 'xsmall', 0, MIN, mulberry32(5));
+    const r = mulberry32(6);
+    for (let i = 0; i < 300; i++) {
+      if (s.cursor >= s.queue.length) s = refill(s, items, i * 1000, MIN, r);
+      const due = nextDue(s)!;
+      s = applySwap(s, planSwap(s, due.key, due.dueAt, MIN, r));
+      expect(s.size).toBe('small');
+      expectCovered(s);
+      expectDistinct(s);
+    }
+  });
+});

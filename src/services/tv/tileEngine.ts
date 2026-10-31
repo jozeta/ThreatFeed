@@ -22,7 +22,9 @@ export interface Slot {
 /** A queue entry; `used` once it has arrived on screen this cycle; `priority` for a breaking item that takes the next due tile. */
 export interface QueueEntry { item: EngineItem; page: number; used: boolean; priority?: boolean }
 export interface WallState {
-  size: TvTileSize; fallback: boolean;
+  size: TvTileSize; // the grid in use: the requested size, or a roomier one when there are too few items for it
+  requested: TvTileSize;
+  fallback: boolean;
   queue: QueueEntry[]; cursor: number; // first unused queue position
   cycle: number; pageCount: number; seq: number;
   slots: Slot[];
@@ -141,34 +143,56 @@ function columns(n: number, { cols, rows }: GridSpec): Rect[] {
 }
 
 /** A fresh wall; `seq` continues the key sequence of a wall it replaces, so keys never repeat. */
-export function initWall(items: EngineItem[], size: TvTileSize, now: number, intervalMs: number, rng: Rng, cycle = 0, seq = 0): WallState {
+/** Densest first: with too few items for a size, the wall steps to the next roomier one */
+const ROOMIER: TvTileSize[] = ['xsmall', 'small', 'medium', 'large'];
+
+/** A tiling of `size` with every rect given a distinct fitting item, or null */
+function tile(queue: QueueEntry[], size: TvTileSize, rng: Rng): { rects: Rect[]; picks: number[] } | null {
   const g = GRIDS[size];
-  const queue = items.map((item, i) => ({ item, page: Math.floor(i / g.ideal), used: false }));
-  const pageCount = Math.max(1, Math.ceil(items.length / g.ideal));
-  let rects: Rect[] = [];
-  let picks: number[] | null = null;
-  if (items.length >= g.min) {
-    const ranked = tilings(size)
-      .filter(t => t.length >= g.min && t.length <= g.max)
-      .map(t => ({ t, k: Math.abs(t.length - g.ideal), r: rng() }))
-      .sort((a, b) => a.k - b.k || a.r - b.r);
-    for (const { t } of ranked) {
-      picks = assign(queue, 0, t, new Set());
-      if (picks) { rects = t; break; }
-    }
+  if (queue.length < g.min) return null;
+  const ranked = tilings(size)
+    .filter(t => t.length >= g.min && t.length <= g.max)
+    .map(t => ({ t, k: Math.abs(t.length - g.ideal), r: rng() }))
+    .sort((a, b) => a.k - b.k || a.r - b.r);
+  for (const { t } of ranked) {
+    const picks = assign(queue, 0, t, new Set());
+    if (picks) return { rects: t, picks };
   }
-  const fallback = !picks;
-  if (!picks) {
+  return null;
+}
+
+export function initWall(items: EngineItem[], requested: TvTileSize, now: number, intervalMs: number, rng: Rng, cycle = 0, seq = 0): WallState {
+  let size = requested;
+  let found: { rects: Rect[]; picks: number[] } | null = null;
+  let queue: QueueEntry[] = [];
+  for (const s of ROOMIER.slice(ROOMIER.indexOf(requested))) {
+    size = s;
+    queue = items.map((item, i) => ({ item, page: Math.floor(i / GRIDS[s].ideal), used: false }));
+    found = tile(queue, s, rng);
+    if (found) break;
+  }
+  // Nothing tiles even at Large: equal full-height columns on the requested grid
+  const fallback = !found;
+  if (!found) {
+    size = requested;
+    queue = items.map((item, i) => ({ item, page: Math.floor(i / GRIDS[size].ideal), used: false }));
+  }
+  const g = GRIDS[size];
+  const pageCount = Math.max(1, Math.ceil(items.length / g.ideal));
+  let rects: Rect[];
+  let picks: number[];
+  if (found) ({ rects, picks } = found);
+  else {
     rects = columns(Math.min(items.length, g.cols), g);
     picks = rects.map((_, i) => i);
   }
   const order = rects.map((_, i) => i).sort((a, b) => readingOrder(rects[a], rects[b]));
   const slots = order.map((i, n) => {
-    const q = queue[picks![i]];
+    const q = queue[picks[i]];
     q.used = true;
     return makeSlot(rects[i], q.item.id, seq + n, cycle, q.page, pageCount, now, intervalMs, rng, n);
   });
-  return { size, fallback, queue, cursor: firstUnused(queue), cycle, pageCount, seq: seq + slots.length, slots };
+  return { size, requested, fallback, queue, cursor: firstUnused(queue), cycle, pageCount, seq: seq + slots.length, slots };
 }
 
 export function nextDue(state: WallState): Slot | undefined {
@@ -325,9 +349,10 @@ export function applySwap(state: WallState, swap: Swap): WallState {
  */
 export function refill(state: WallState, items: EngineItem[], now: number, intervalMs: number, rng: Rng): WallState {
   const g = GRIDS[state.size];
-  if (state.fallback || items.length < g.min) {
-    const fresh = initWall(items, state.size, now, intervalMs, rng, state.cycle + 1, state.seq);
-    if (!state.fallback || !fresh.fallback || fresh.slots.length !== state.slots.length) return fresh;
+  // Too few items for the grid in use, or a stepped-down/fallback wall that may now fit better: lay out afresh
+  if (state.fallback || items.length < g.min || state.size !== state.requested) {
+    const fresh = initWall(items, state.requested, now, intervalMs, rng, state.cycle + 1, state.seq);
+    if (fresh.size !== state.size || fresh.fallback !== state.fallback || (fresh.fallback && fresh.slots.length !== state.slots.length)) return fresh;
   }
   const queue = items.map((item, i) => ({ item, page: Math.floor(i / g.ideal), used: false }));
   return { ...state, queue, cursor: firstUnused(queue), cycle: state.cycle + 1, pageCount: Math.max(1, Math.ceil(items.length / g.ideal)) };

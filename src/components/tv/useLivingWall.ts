@@ -93,7 +93,7 @@ export function useLivingWall(build: (full: boolean, live: ReadonlySet<string>) 
   const rebuildForData = () => {
     const w = wallRef.current;
     if (settled.current && w.slots.length > 0 && !w.fallback) return;
-    const next = initWall(callBuild(true), w.size, now(), intervalMs, rng, w.cycle + 1, w.seq);
+    const next = initWall(callBuild(true), w.requested, now(), intervalMs, rng, w.cycle + 1, w.seq);
     const ids = new Set(w.slots.map(t => t.itemId));
     if (w.slots.length > 0 && next.slots.length === ids.size && next.slots.every(t => ids.has(t.itemId))) return;
     rebuild(next);
@@ -209,5 +209,5 @@ export function useLivingWall(build: (full: boolean, live: ReadonlySet<string>) 
   /** Whether data changes are news to this wall: once it has settled (a swap landed) and is tiled; before that they are part of the starting build */
   const acceptsNews = useRef(() => settled.current && wallRef.current.slots.length > 0 && !wallRef.current.fallback).current;
 
-  return { slots: wall.slots, leaving, label: pageLabel(wall), fallback: wall.fallback, prioritize, acceptsNews };
+  return { slots: wall.slots, size: wall.size, leaving, label: pageLabel(wall), fallback: wall.fallback, prioritize, acceptsNews };
 }

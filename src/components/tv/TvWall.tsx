@@ -105,7 +105,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
 
   const news = useBreakingNews();
   const size = tv.size;
-  const { slots, leaving, label, prioritize, acceptsNews } = useLivingWall(
+  const { slots, size: gridSize, leaving, label, prioritize, acceptsNews } = useLivingWall(
     (full, live) => {
       const tiles = build();
       if (full) news.markSeen(tiles);
@@ -146,13 +146,13 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const shown = slots.filter(s => tilePins.current.has(s.key) || panelPins.current.has(s.key));
   if (shown.length === 0) return <Empty />;
 
-  const grid = GRIDS[size];
+  const grid = GRIDS[gridSize];
   const transition = wallTransition(reduced, tv.transition);
   return (
     <>
       <div
         className="tv-wall"
-        data-size={size}
+        data-size={gridSize}
         data-transition={transition}
         style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[tv.speed] } as CSSProperties}
       >
@@ -161,7 +161,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
           <div
             key={s.key}
             className="tv-cell tv-slot"
-            data-size={size}
+            data-size={gridSize}
             data-panel={s.itemId}
             data-leaving={leaving.has(s.key) ? '1' : undefined}
             style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
@@ -174,7 +174,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
           <TvTileCard
             key={s.key}
             tile={tilePins.current.get(s.key)!}
-            size={size}
+            size={gridSize}
             area={s.w * s.h}
             leaving={leaving.has(s.key)}
             isNew={news.isNew(s)}
