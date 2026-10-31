@@ -1,4 +1,4 @@
-import type { TvTileSize } from '../../types';
+import type { TvAnimationSpeed, TvTileSize } from '../../types';
 
 /** Selectable time-per-tile values, in seconds: 30 s to 5 min in 30 s steps */
 export const TV_INTERVAL_STEPS: number[] = Array.from({ length: 10 }, (_, i) => (i + 1) * 30);
@@ -20,5 +20,9 @@ export function migrateTvInterval(saved: { tvIntervalSeconds?: unknown; tvInterv
 }
 
 export function parseTvTileSize(v: unknown): TvTileSize {
-  return v === 'large' || v === 'medium' || v === 'small' ? v : 'medium';
+  return v === 'large' || v === 'medium' || v === 'small' || v === 'xsmall' ? v : 'medium';
+}
+
+export function parseTvAnimationSpeed(v: unknown): TvAnimationSpeed {
+  return v === 'slow' || v === 'medium' || v === 'fast' ? v : 'fast';
 }

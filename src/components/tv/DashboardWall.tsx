@@ -4,7 +4,7 @@ import { GRIDS, Shape, Slot } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
 import PageCounter from './PageCounter';
 import { useLivingWall } from './useLivingWall';
-import { CellDelayContext, cellDelayMs, wallOutMs, wallTransition } from './wallMotion';
+import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
 /** One dashboard panel in the wall's pool; `render` mounts it afresh on every arrival (so its data is computed then) */
 export interface PanelDef { id: string; weight: number; shapes: Shape[]; render: () => ReactNode }
@@ -39,7 +39,7 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
     },
     size,
     settings.tvIntervalSeconds * 1000,
-    { signature, outMs: wallOutMs(reduced, settings.tvTransition) }
+    { signature, outMs: wallOutMs(reduced, settings.tvTransition, settings.tvAnimationSpeed) }
   );
   onScreen.current = slots;
 
@@ -60,7 +60,7 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
         className="tv-wall tv-dash-wall"
         data-size={size}
         data-transition={transition}
-        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[settings.tvAnimationSpeed] } as CSSProperties}
       >
         {shown.map(s => (
           <div
@@ -71,7 +71,7 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
             data-leaving={leaving.has(s.key) ? '1' : undefined}
             style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
           >
-            <CellDelayContext.Provider value={cellDelayMs(transition, s.order)}>
+            <CellDelayContext.Provider value={cellDelayMs(transition, s.order, settings.tvAnimationSpeed)}>
               {panelsById.current.get(s.itemId)!.render()}
             </CellDelayContext.Provider>
           </div>

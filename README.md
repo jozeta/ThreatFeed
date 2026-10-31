@@ -171,9 +171,10 @@ Every article is enriched in the browser while its feed is parsed, and the resul
 
   A URL opened directly may not reach true full screen without a click, so for a dedicated display use the browser's kiosk mode or F11.
 - **Settings → TV & dashboard**:
-  - **Tile size**: **Large** (3–5 tiles), **Medium** (5–7, default) or **Small** (6–10). Applies to TV mode and dashboards.
+  - **Tile size**: **Large** (3–5 tiles), **Medium** (5–7, default), **Small** (6–10) or **X-Small** (12–16, a 5 × 4 grid). Applies to TV mode and dashboards.
   - **Interval**: 30 s to 5 min in 30 s steps (default 1 min). Each tile varies by up to ±20 s, less at 30 s so nothing stays under 20 s.
   - **Transition**: **Fade**, **Slide** or **Reveal** (default Reveal, which pops tiles in one by one). Reduce motion gives a quick plain fade.
+  - **Animation speed**: **Slow**, **Medium** or **Fast** (default, the original speed). Slows down tile transitions and the dashboards' count-ups, growing bars, drawn lines and list rows alike (Medium 1.5×, Slow 2.25× as long). The time each tile stays up is still the interval.
 - **Trend history**: dashboard trends are built from `stats.json` (see [Feed Snapshot](#-feed-snapshot--cve-intelligence)), so they fill in over the coming weeks. "vs last week" figures stay hidden until there is history to compare against.
 
 ---

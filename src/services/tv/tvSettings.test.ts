@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TV_INTERVAL_STEPS, migrateTvInterval, parseTvTileSize } from './tvSettings';
+import { TV_INTERVAL_STEPS, migrateTvInterval, parseTvAnimationSpeed, parseTvTileSize } from './tvSettings';
 
 describe('migrateTvInterval', () => {
   it('defaults to 60', () => expect(migrateTvInterval({})).toBe(60));
@@ -27,4 +27,10 @@ describe('TV_INTERVAL_STEPS', () => {
 describe('parseTvTileSize', () => {
   it('accepts valid sizes', () => expect(parseTvTileSize('small')).toBe('small'));
   it('defaults to medium', () => expect(parseTvTileSize('huge')).toBe('medium'));
+  it('accepts xsmall', () => expect(parseTvTileSize('xsmall')).toBe('xsmall'));
+});
+
+describe('parseTvAnimationSpeed', () => {
+  it('accepts valid speeds', () => expect(parseTvAnimationSpeed('slow')).toBe('slow'));
+  it('defaults to fast, the original speed', () => expect(parseTvAnimationSpeed(undefined)).toBe('fast'));
 });

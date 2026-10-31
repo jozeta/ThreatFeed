@@ -18,7 +18,7 @@ function mulberry32(seed: number): Rng {
 
 const ALL: Shape[] = ['1x1', '2x1', '2x2'];
 const stories = (n: number): EngineItem[] => Array.from({ length: n }, (_, i) => ({ id: `s${i}`, weight: (i * 37) % 11, shapes: ALL }));
-const SIZES: TvTileSize[] = ['large', 'medium', 'small'];
+const SIZES: TvTileSize[] = ['large', 'medium', 'small', 'xsmall'];
 const MIN = 60000;
 
 /** Every cell covered exactly once, nothing outside the grid. */
