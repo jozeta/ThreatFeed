@@ -1,4 +1,4 @@
-import { LeakSiteVictim, MsrcData, StatsData, VulnData } from '../../types';
+import { LeakSiteVictim, MsrcData, PublicAttack, StatsData, VulnData } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
 
 /** The figures the TV dashboards show. Live data is unioned with the stats history so counts never drop when live data is shallower. */
@@ -226,6 +226,16 @@ export interface VulnExtras {
   patchBreakdown: { month: string; critical: number; important: number; moderate: number; low: number; exploited: number; disclosed: number } | null;
   cvssSpread: { score: number; count: number }[];
   kevRansomware: { cve: string; title: string; dateAdded: string }[];
+  /** The highest EPSS scores right now; title from KEV/notable when known */
+  epssTop: { cve: string; epss: number; title?: string }[];
+  /** Median whole days from CVE publication to KEV listing, over KEV entries added in the last 90 days */
+  timeToKev: { medianDays: number; count: number } | null;
+  /** Most common weaknesses among notable CVEs of the last 30 days */
+  topCwes: { cwe: string; label: string; count: number }[];
+  /** CISA remediation deadlines from today through the next 6 days, soonest first */
+  kevDue: { cve: string; title: string; dueDate: string }[];
+  /** CVEs published in the last 30 days with a Metasploit module / Nuclei template / GitHub PoC */
+  exploitSources: { msf: number; nuclei: number; poc: number };
 }
 export interface RansomExtras {
   topSectors: [string, number][];
@@ -236,9 +246,51 @@ export interface RansomExtras {
   weekday: { day: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'; count: number }[];
   /** count is null for weeks that end before the first day with any victim data (no bar, rather than a misleading zero) */
   weekly90: { week: string; count: number | null }[];
+  /** Biggest changes in victims, this week vs the week before (groups with < 3 victims in both weeks are left out) */
+  movers: { risers: Mover[]; fallers: Mover[] };
+  sectors30: [string, number][];
+  /** Leak-site posts per UTC hour (index 0–23) over the last 14 days */
+  hours: number[];
+  /** Publicly reported attacks of the last 14 days, newest first */
+  attacks: PublicAttack[];
+  /** Groups whose first victim is within the last 30 days, newest first */
+  newGroups30: { group: string; firstSeen: string; victims: number }[];
 }
+export interface Mover { group: string; week: number; before: number; change: number }
 
 const shortTitle = (r: { id: string; description?: string }) => (r.description ?? r.id).slice(0, 60);
+
+/** Short names for the weaknesses that top the charts (NVD names run to 70 characters; a TV bar label fits about 17) */
+const CWE_SHORT: Record<string, string> = {
+  'CWE-20': 'Input validation', 'CWE-22': 'Path traversal', 'CWE-59': 'Link following', 'CWE-74': 'Injection',
+  'CWE-77': 'Command injection', 'CWE-78': 'OS cmd injection', 'CWE-79': 'XSS', 'CWE-89': 'SQL injection',
+  'CWE-94': 'Code injection', 'CWE-119': 'Memory corruption', 'CWE-120': 'Buffer overflow', 'CWE-121': 'Stack overflow',
+  'CWE-122': 'Heap overflow', 'CWE-125': 'OOB read', 'CWE-190': 'Integer overflow', 'CWE-200': 'Info exposure',
+  'CWE-269': 'Privileges', 'CWE-284': 'Access control', 'CWE-285': 'Authorization', 'CWE-287': 'Improper auth',
+  'CWE-288': 'Auth bypass', 'CWE-306': 'Missing auth', 'CWE-352': 'CSRF', 'CWE-400': 'Resource limits',
+  'CWE-416': 'Use after free', 'CWE-434': 'File upload', 'CWE-476': 'NULL dereference', 'CWE-502': 'Deserialization',
+  'CWE-601': 'Open redirect', 'CWE-611': 'XXE', 'CWE-639': 'IDOR', 'CWE-787': 'OOB write',
+  'CWE-798': 'Hard-coded creds', 'CWE-862': 'Missing authz', 'CWE-863': 'Incorrect authz', 'CWE-918': 'SSRF',
+};
+
+/** A CWE label short enough for a bar: a known short name, else the NVD name without asides, cut at a word; the id when nameless */
+export function shortCwe(cwe: string, name?: string): string {
+  if (CWE_SHORT[cwe]) return CWE_SHORT[cwe];
+  if (!name) return cwe;
+  const alias = /\('([^']+)'\)/.exec(name)?.[1];
+  if (alias) return alias;
+  const plain = name.replace(/\s*\([^)]*\)/g, '').trim() || name;
+  if (plain.length <= 18) return plain;
+  const cut = plain.slice(0, 18);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > 0 ? cut.slice(0, at) : cut).trimEnd()}…`;
+}
+const NO_CWE = new Set(['NVD-CWE-noinfo', 'NVD-CWE-Other']);
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+};
 
 export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywords: string[], watchedCves: string[], now: number): VulnExtras {
   const notable = v?.notable ?? [];
@@ -333,6 +385,49 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
     .slice(0, 8)
     .map(k => ({ cve: k.cve, title: `${k.vendor} ${k.product}`.trim(), dateAdded: k.dateAdded }));
 
+  const epssTopList = [...(v?.epssTop ?? [])]
+    .sort((a, b) => b.epss - a.epss || a.cve.localeCompare(b.cve))
+    .slice(0, 8)
+    .map(e => {
+      const k = kevById.get(e.cve);
+      const n = noteById.get(e.cve);
+      const title = k ? `${k.vendor} ${k.product}`.trim() : n ? shortTitle(n) : undefined;
+      return title ? { cve: e.cve, epss: e.epss, title } : { cve: e.cve, epss: e.epss };
+    });
+
+  // Time to KEV: whole UTC days from publication to listing, never negative (NVD sometimes publishes after CISA lists)
+  const since90 = dayKey(now - 89 * DAY_MS);
+  const lags: number[] = [];
+  for (const k of kev) {
+    const pub = dayOf(k.published);
+    if (!pub || !recent(k.dateAdded, since90)) continue;
+    lags.push(Math.max(0, Math.round((Date.parse(dayOf(k.dateAdded)) - Date.parse(pub)) / DAY_MS)));
+  }
+  const timeToKev = lags.length ? { medianDays: median(lags), count: lags.length } : null;
+
+  const cwes = new Map<string, number>();
+  for (const r of notable) if (r.cwe && !NO_CWE.has(r.cwe) && recent(r.published, since30)) cwes.set(r.cwe, (cwes.get(r.cwe) ?? 0) + 1);
+  const topCwes = top(cwes).map(([cwe, count]) => ({ cwe, label: shortCwe(cwe, v?.cweNames?.[cwe]), count }));
+
+  const dueBy = dayKey(now + 6 * DAY_MS);
+  const kevDue = kev
+    .filter(k => !!k.dueDate && k.dueDate >= today && k.dueDate <= dueBy)
+    .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || a.cve.localeCompare(b.cve))
+    .slice(0, 8)
+    .map(k => ({ cve: k.cve, title: `${k.vendor} ${k.product}`.trim(), dueDate: k.dueDate! }));
+
+  // Exploit sources: every CVE with a known publication date in the last 30 days (notable, watchable, KEV)
+  const published = new Map<string, string>();
+  for (const r of [...notable, ...(v?.watchable ?? [])]) published.set(r.id, r.published);
+  for (const k of kev) if (k.published && !published.has(k.cve)) published.set(k.cve, k.published);
+  const exploitSources = { msf: 0, nuclei: 0, poc: 0 };
+  for (const [id, e] of Object.entries(v?.exploits ?? {})) {
+    if (!recent(published.get(id), since30)) continue;
+    if (e.msf?.length) exploitSources.msf++;
+    if (e.nuclei) exploitSources.nuclei++;
+    if ((e.pocs ?? 0) > 0) exploitSources.poc++;
+  }
+
   return {
     watchlist,
     topVendors: top(vendors),
@@ -340,12 +435,29 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
     patchBreakdown,
     cvssSpread: [...spread].map(([score, count]) => ({ score, count })),
     kevRansomware,
+    epssTop: epssTopList,
+    timeToKev,
+    topCwes,
+    kevDue,
+    exploitSources,
   };
+}
+
+/** Top 3 risers and fallers by absolute change; groups need at least 3 victims in one of the two weeks */
+function movers(week: Map<string, number>, before: Map<string, number>): RansomExtras['movers'] {
+  const all: Mover[] = [];
+  for (const group of new Set([...week.keys(), ...before.keys()])) {
+    const w = week.get(group) ?? 0, b = before.get(group) ?? 0;
+    if (w < 3 && b < 3) continue;
+    all.push({ group, week: w, before: b, change: w - b });
+  }
+  const by = (a: Mover, b: Mover) => Math.abs(b.change) - Math.abs(a.change) || a.group.localeCompare(b.group);
+  return { risers: all.filter(m => m.change > 0).sort(by).slice(0, 3), fallers: all.filter(m => m.change < 0).sort(by).slice(0, 3) };
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
-export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null, now: number): RansomExtras {
+export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null, now: number, attacks: PublicAttack[] = []): RansomExtras {
   const vic = idsByDay(group(victims.map(x => [dayOf(x.discoveredAt), x.id])), stats, 'victims');
   const sum = victimTallies(victims, stats);
 
@@ -368,6 +480,26 @@ export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null,
       }
     : null;
 
+  const hours = new Array<number>(24).fill(0);
+  for (const x of victims) {
+    const t = Date.parse(x.discoveredAt);
+    if (t > now - 14 * DAY_MS && t <= now) hours[new Date(t).getUTCHours()]++;
+  }
+  const since14 = dayKey(now - 13 * DAY_MS);
+
+  // New groups · 30 days: first day with a victim per group, over every day of history; only meaningful when the
+  // history reaches back before the window (otherwise every group would look new)
+  const month = dayRange(now, 29, 0);
+  const firstSeen = new Map<string, string>();
+  for (const d of [...vic.keys()].sort()) for (const g of sum([d], 'groups').keys()) if (!firstSeen.has(g)) firstSeen.set(g, d);
+  const groups30 = sum(month, 'groups');
+  const newGroups30 = start !== '' && start < month[0]
+    ? [...firstSeen]
+        .filter(([, d]) => d >= month[0] && d <= month[29])
+        .map(([group, d]) => ({ group, firstSeen: d, victims: groups30.get(group) ?? 0 }))
+        .sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || b.victims - a.victims || a.group.localeCompare(b.group))
+    : [];
+
   const perWeekday = new Array<number>(7).fill(0);
   for (const d of dayRange(now, 27, 0)) perWeekday[(new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7] += vic.get(d)?.size ?? 0;
 
@@ -381,5 +513,13 @@ export function ransomExtras(victims: LeakSiteVictim[], stats: StatsData | null,
     spotlight,
     weekday: WEEKDAYS.map((day, i) => ({ day, count: perWeekday[i] })),
     weekly90: weekStarts(now, 13).map(days => ({ week: days[0], count: start !== '' && days[6] < start ? null : countIn(vic, days) })),
+    movers: movers(groups7, sum(dayRange(now, 13, 7), 'groups')),
+    sectors30: top(sum(dayRange(now, 29, 0), 'sectors'), 6),
+    hours,
+    attacks: attacks
+      .filter(a => { const d = dayOf(a.added); return d !== '' && d >= since14 && d <= dayKey(now); })
+      .sort((a, b) => b.added.localeCompare(a.added) || a.victim.localeCompare(b.victim))
+      .slice(0, 6),
+    newGroups30,
   };
 }
