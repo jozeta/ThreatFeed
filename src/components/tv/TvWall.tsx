@@ -13,6 +13,9 @@ import TvTileCard from './TvTileCard';
 import PageCounter from './PageCounter';
 import { SWAP_OUT_MS, useLivingWall } from './useLivingWall';
 
+/** Reveal's out fade (index.css `.tv-wall[data-transition='reveal'] .tv-tile[data-leaving]`) */
+const REVEAL_OUT_MS = 250;
+
 const NO_FILTERS = {
   searchQuery: '', selectedCategory: null, selectedSourceId: null, selectedTag: null,
   readStatus: 'all', viewedStatus: 'all', bookmarkedOnly: false, dateRange: 'all', sortBy: 'newest',
@@ -91,7 +94,8 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     settings.tvIntervalSeconds * 1000,
     {
       signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
-      outMs: reduced ? 200 : SWAP_OUT_MS,
+      // The out phase lasts exactly as long as the leaving tile's CSS out animation, so no cell ever stands empty
+      outMs: reduced ? 200 : settings.tvTransition === 'reveal' ? REVEAL_OUT_MS : SWAP_OUT_MS,
     }
   );
   onScreen.current = slots;
