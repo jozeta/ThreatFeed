@@ -37,7 +37,8 @@ import {
   Clock,
   Tv
 } from 'lucide-react';
-import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode, TvTransition } from '../types';
+import { TV_INTERVAL_STEPS } from '../services/tv/tvSettings';
+import { ArticleSpacing, BorderStyle, ContainerWidth, FontFamily, ImageBehavior, LayoutMode, ProxyMode, ThemeMode, TvTileSize, TvTransition } from '../types';
 
 const ACCENT_PRESETS = [
   { name: 'Crimson', color: '#e11d48' },
@@ -48,6 +49,12 @@ const ACCENT_PRESETS = [
   { name: 'Violet', color: '#8b5cf6' },
   { name: 'Rose Gold', color: '#f43f5e' },
 ];
+
+const formatTvInterval = (s: number): string => {
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return [m ? `${m} min` : '', r ? `${r} s` : ''].filter(Boolean).join(' ');
+};
 
 export const SettingsPage: React.FC = () => {
   const { settings, updateSettings, resetSettings } = useSettings();
@@ -543,18 +550,40 @@ export const SettingsPage: React.FC = () => {
             Time per screen
           </label>
           <p className="text-xs font-serif text-theme-text-muted mb-2">
-            How long TV mode keeps one set of stories up before moving to the next.
+            How long a tile stays up before it is swapped (each tile varies by up to 20 s).
           </p>
           <select
             id="tv-interval"
-            value={settings.tvIntervalMinutes}
-            onChange={(e) => updateSettings({ tvIntervalMinutes: Number(e.target.value) })}
+            value={settings.tvIntervalSeconds}
+            onChange={(e) => updateSettings({ tvIntervalSeconds: Number(e.target.value) })}
             className="w-full sm:w-64 bg-theme-card border border-theme-border rounded px-3 py-2 text-xs font-mono text-theme-text focus:outline-none focus:border-theme-accent"
           >
-            {[1, 2, 3, 5, 10, 15, 20, 30].map((m) => (
-              <option key={m} value={m}>{m} {m === 1 ? 'minute' : 'minutes'}</option>
+            {TV_INTERVAL_STEPS.map((s) => (
+              <option key={s} value={s}>{formatTvInterval(s)}</option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <span className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted mb-1">Tile size</span>
+          <p className="text-xs font-serif text-theme-text-muted mb-2">
+            Large: 3–5 tiles · Medium: 5–7 · Small: 6–10. Applies to TV mode and dashboards.
+          </p>
+          <div role="group" aria-label="TV tile size" className="inline-flex border border-theme-border rounded-md p-0.5 bg-theme-card">
+            {(['large', 'medium', 'small'] as TvTileSize[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={settings.tvTileSize === t}
+                onClick={() => updateSettings({ tvTileSize: t })}
+                className={`px-3 py-1.5 rounded text-xs font-mono capitalize transition-colors ${
+                  settings.tvTileSize === t ? 'bg-theme-accent-subtle text-theme-accent font-bold' : 'text-theme-text-muted hover:text-theme-text'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div>

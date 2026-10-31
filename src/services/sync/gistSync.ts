@@ -60,6 +60,7 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
         watchlistKeywords: union(local.settings.watchlistKeywords, remote.settings.watchlistKeywords),
         stackKeywords: union(local.settings.stackKeywords, remote.settings.stackKeywords),
         mutedKeywords: union(local.settings.mutedKeywords, remote.settings.mutedKeywords),
+        disabledCategories: union(local.settings.disabledCategories, remote.settings.disabledCategories),
         savedSearches: union(local.settings.savedSearches, remote.settings.savedSearches),
         bookmarkFolders: union(local.settings.bookmarkFolders, remote.settings.bookmarkFolders),
         alertRules: mergeAlertRules(local.settings.alertRules, remote.settings.alertRules),

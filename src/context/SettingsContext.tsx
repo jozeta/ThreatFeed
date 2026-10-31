@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserSettings, NewspaperSectionConfig } from '../types';
 import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexeddb';
 import { ALERT_GAP_OPTIONS, createBuiltInRules, migrateAlertRules } from '../services/intelligence/alertRules';
+import { migrateTvInterval, parseTvTileSize } from '../services/tv/tvSettings';
 import { DEFAULT_WATCHLIST_KEYWORDS, WATCHLIST_DEFAULTS_VERSION, upgradeWatchlistKeywords } from '../services/intelligence/watchlist';
 
 export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
@@ -82,7 +83,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   maxArticlesPerFeed: 25,
   maxArticleAgeDays: 30,
   autoRefreshFeedCooldownHours: 1,
-  tvIntervalMinutes: 2,
+  tvIntervalSeconds: 60,
+  tvTileSize: 'medium',
+  disabledCategories: [],
   tvTransition: 'reveal',
   watchlistKeywords: DEFAULT_WATCHLIST_KEYWORDS,
   watchlistDefaultsVersion: WATCHLIST_DEFAULTS_VERSION,
@@ -134,8 +137,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           maxArticlesPerFeed: typeof saved.maxArticlesPerFeed === 'number' ? saved.maxArticlesPerFeed : 25,
           maxArticleAgeDays: typeof saved.maxArticleAgeDays === 'number' ? saved.maxArticleAgeDays : 30,
           autoRefreshFeedCooldownHours: typeof saved.autoRefreshFeedCooldownHours === 'number' ? saved.autoRefreshFeedCooldownHours : DEFAULT_SETTINGS.autoRefreshFeedCooldownHours,
-          tvIntervalMinutes: typeof saved.tvIntervalMinutes === 'number' && Number.isFinite(saved.tvIntervalMinutes)
-            ? Math.min(30, Math.max(1, Math.round(saved.tvIntervalMinutes))) : DEFAULT_SETTINGS.tvIntervalMinutes,
+          tvIntervalSeconds: migrateTvInterval(saved),
+          tvTileSize: parseTvTileSize(saved.tvTileSize),
+          disabledCategories: Array.isArray(saved.disabledCategories) ? saved.disabledCategories.filter((v: unknown) => typeof v === 'string') : [],
           tvTransition: saved.tvTransition === 'fade' || saved.tvTransition === 'slide' || saved.tvTransition === 'reveal' ? saved.tvTransition : DEFAULT_SETTINGS.tvTransition,
           watchlistKeywords: Array.isArray(saved.watchlistKeywords)
             ? upgradeWatchlistKeywords(saved.watchlistKeywords, saved.watchlistDefaultsVersion ?? 1)
@@ -150,6 +154,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           alertRules: migrateAlertRules(saved, new Date()),
           alertGapHours: (ALERT_GAP_OPTIONS as readonly number[]).includes(saved.alertGapHours as number) ? saved.alertGapHours : 1,
         };
+        delete (migrated as unknown as Record<string, unknown>).tvIntervalMinutes;
         setSettings(migrated);
         saveSettingsToDB(migrated);
       }

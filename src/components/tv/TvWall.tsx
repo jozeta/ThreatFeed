@@ -69,7 +69,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     return chunkSets(tiles);
   };
 
-  const intervalMs = Math.max(1, settings.tvIntervalMinutes) * 60000;
+  const intervalMs = Math.max(30, settings.tvIntervalSeconds) * 1000;
   const revealMs = (set: TvSet) => OUT_MS + 80 * set.tiles.length;
   const { sets, index, phase, cycle } = useRotation(build, intervalMs, {
     outMs: settings.tvTransition === 'reveal' && !reduced ? revealMs : undefined,

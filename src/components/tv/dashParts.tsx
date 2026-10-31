@@ -9,15 +9,15 @@ import { Figure } from '../../services/tv/dashboard';
 
 export const HISTORY_NOTE = 'History is building — fills in over the coming weeks';
 
-/** A plain interval tick (every tvIntervalMinutes) that makes the figures recompute */
+/** A plain interval tick (every tvIntervalSeconds) that makes the figures recompute */
 export function useDashNow(): number {
   const { settings } = useSettings();
   const [now, setNow] = useState(() => Date.now());
-  const minutes = Math.max(1, settings.tvIntervalMinutes || 2);
+  const seconds = Math.max(30, settings.tvIntervalSeconds || 60);
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), minutes * 60_000);
+    const id = setInterval(() => setNow(Date.now()), seconds * 1000);
     return () => clearInterval(id);
-  }, [minutes]);
+  }, [seconds]);
   return now;
 }
 
