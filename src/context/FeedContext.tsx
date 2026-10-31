@@ -24,6 +24,7 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
+import { feedsInUse, withoutDisabledCategories } from '../services/articles/categories';
 import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
 
@@ -361,6 +362,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setRefreshProgress({ completed: 1, total: 1 });
       } else {
+        // Turned-off categories are not fetched at all
+        feedsToFetch = feedsInUse(feedsToFetch, settings.disabledCategories ?? []);
         let fetchedLive = false;
 
         if (options.useSnapshot && settings.dataSource !== 'live') {
@@ -731,6 +734,12 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const entityMatcher = useMemo(() => buildEntityMatcher(entities), [entities]);
 
   // Memoized so consumers only re-render when data actually changes (actions above are stable)
+  // Consumers see only the categories in use; the raw state stays whole so turning one back on restores it
+  const visibleArticles = useMemo(
+    () => withoutDisabledCategories(articles, feeds, settings.disabledCategories ?? []),
+    [articles, feeds, settings.disabledCategories],
+  );
+
   const value = useMemo<FeedContextType>(() => ({
     feeds,
     cveIntel,
@@ -749,7 +758,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ensureTrends,
     stats,
     ensureStats,
-    articles,
+    articles: visibleArticles,
     feedHealth,
     isRefreshing,
     initialSyncDone,
@@ -774,7 +783,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markAllAsRead,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, articles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, visibleArticles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, addCustomTagToArticle,

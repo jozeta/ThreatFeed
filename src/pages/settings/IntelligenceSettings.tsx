@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useFeeds } from '../../context/FeedContext';
 import { KeywordListEditor } from './KeywordListEditor';
-import { Database, Server, EyeOff } from 'lucide-react';
+import { Database, Server, EyeOff, Layers } from 'lucide-react';
 
 const sectionClass = 'bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6';
 const heading = (icon: React.ReactNode, title: string, text: string) => (
@@ -21,6 +21,13 @@ export const IntelligenceSettings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { feeds, cveIntel } = useFeeds();
   const categories = useMemo(() => Array.from(new Set(feeds.map((f) => f.category))).filter(Boolean).sort(), [feeds]);
+
+  const inUse = categories.filter((c) => !settings.disabledCategories.includes(c));
+
+  const toggleInUse = (category: string) => {
+    const off = settings.disabledCategories;
+    updateSettings({ disabledCategories: off.includes(category) ? off.filter((c) => c !== category) : [...off, category] });
+  };
 
   const toggleCategory = (category: string) => {
     const hidden = settings.frontPageHiddenCategories;
@@ -60,6 +67,21 @@ export const IntelligenceSettings: React.FC = () => {
       </section>
 
       <section className={sectionClass}>
+        {heading(<Layers className="w-5 h-5 text-theme-text-muted" />, 'Categories in use', 'Turned-off categories disappear from the whole app: tabs, search, Briefing, trends, alerts and TV mode. Bookmarks are kept.')}
+        <div className="flex flex-wrap gap-2">
+          {categories.map((category) => {
+            const on = !settings.disabledCategories.includes(category);
+            const last = on && inUse.length <= 1;
+            return (
+              <button key={category} onClick={() => toggleInUse(category)} disabled={last} className={`${toggleClass(on)} disabled:opacity-60 disabled:cursor-not-allowed`} title={last ? 'At least one category stays on' : on ? 'Click to turn off' : 'Click to turn on'}>
+                {category}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className={sectionClass}>
         {heading(<EyeOff className="w-5 h-5 text-theme-text-muted" />, 'Mute Rules', 'Cut the noise: muted terms hide articles everywhere (bookmarks excepted); hidden categories only leave the newspaper front page.')}
         <KeywordListEditor
           label="Muted keywords"
@@ -72,7 +94,7 @@ export const IntelligenceSettings: React.FC = () => {
         <div className="space-y-2">
           <label className="block text-xs font-mono uppercase tracking-wider text-theme-text-muted">Categories on the front page</label>
           <div className="flex flex-wrap gap-2">
-            {categories.map((category) => {
+            {inUse.map((category) => {
               const shown = !settings.frontPageHiddenCategories.includes(category);
               return (
                 <button key={category} onClick={() => toggleCategory(category)} className={toggleClass(shown)} title={shown ? 'Click to hide from the front page' : 'Click to show on the front page'}>
