@@ -5,6 +5,14 @@ const TV_MARK = 'tvEntry';
 
 export type TvKind = 'tv' | 'dash';
 
+/** Set once a TV session has been left; the full-screen change that follows must not leave (go back) a second time */
+let exited = false;
+
+/** Starts a new TV session for exitTv's once-only guard (enterTv and every TvShell mount call it) */
+export function resetTvExit(): void {
+  exited = false;
+}
+
 const AVAILABLE: Partial<Record<ActiveNavTab, TvKind[]>> = {
   newspaper: ['tv'], latest: ['tv'], briefing: ['tv'], ransomware: ['tv', 'dash'], vulnerabilities: ['dash'],
 };
@@ -24,6 +32,7 @@ export function tvFromParams(page: ActiveNavTab, params: URLSearchParams): TvKin
 
 /** Enters a mode with a history entry (Back leaves it), closing any panels, and asks for full screen where allowed */
 export function enterTv(kind: TvKind): void {
+  resetTvExit();
   // The pushed entry is marked, so exitTv can tell it from one reached by a shared link or a reload-less edit
   const push = () => {
     const prev = window.history.state;
@@ -48,8 +57,10 @@ export function enterTv(kind: TvKind): void {
   } catch { /* no fullscreen here (iOS, kiosk) */ }
 }
 
-/** Leaves the mode: back over the entry enterTv pushed (so Back doesn't land on a duplicate), else in place. Also leaves full screen */
+/** Leaves the mode: back over the entry enterTv pushed (so Back doesn't land on a duplicate), else in place. Also leaves full screen. Runs at most once per TV session */
 export function exitTv(): void {
+  if (exited) return;
+  exited = true;
   const state = window.history.state;
   if (state && typeof state === 'object' && (state as Record<string, unknown>)[TV_MARK] === true) window.history.back();
   else setHashParams({ tv: '', dash: '' });

@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { usePanelLayer } from '../Common/panelStack';
-import { exitTv, leaveFullscreen, TvKind } from './tvRoute';
+import { exitTv, leaveFullscreen, resetTvExit, TvKind } from './tvRoute';
+import { useAutoReload } from './useAutoReload';
 import { useTvChrome } from './useTvChrome';
 import TvWall from './TvWall';
 import VulnDashboard from './VulnDashboard';
@@ -14,6 +15,10 @@ const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, g
 export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavTab }) {
   const { idle } = useTvChrome();
   usePanelLayer(true, exitTv, TV_LEVEL);
+  useAutoReload();
+
+  // A new TV session: exitTv may run (once) again, however the mode was entered (a shared link, a reload)
+  useEffect(() => resetTvExit(), []);
 
   // However the mode ends (Back, a hash edit, another page), the browser leaves full screen with it
   useEffect(() => leaveFullscreen, []);

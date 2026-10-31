@@ -3,7 +3,7 @@ import { act, createElement, StrictMode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineItem } from '../../services/tv/tileEngine';
-import { useLivingWall } from './useLivingWall';
+import { TV_QUIET_EVENT, useLivingWall } from './useLivingWall';
 
 vi.mock('../Common/SidePanel', () => ({ useReducedMotion: () => false }));
 
@@ -57,6 +57,21 @@ describe('useLivingWall', () => {
     expect(result.leaving.size).toBe(0);
     const after = result.slots.map(s => s.key);
     leaving.forEach(k => expect(after).not.toContain(k));
+  });
+
+  it('signals a quiet moment only once a swap has landed', () => {
+    const quiet = vi.fn();
+    window.addEventListener(TV_QUIET_EVENT, quiet);
+    try {
+      mount(() => items(30));
+      advance(60000);
+      expect(result.leaving.size).toBeGreaterThan(0);
+      expect(quiet).not.toHaveBeenCalled(); // mid-swap is never quiet
+      advance(450);
+      expect(quiet).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(TV_QUIET_EVENT, quiet);
+    }
   });
 
   it('rebuilds on a signature change before the first swap', () => {

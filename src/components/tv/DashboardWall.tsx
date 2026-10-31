@@ -2,7 +2,7 @@ import { CSSProperties, ReactNode, useRef } from 'react';
 import { useTvSettings } from './useTvSettings';
 import { GRIDS, Shape, Slot } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
-import PageCounter from './PageCounter';
+import TvFooter from './TvFooter';
 import { useLivingWall } from './useLivingWall';
 import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
@@ -77,7 +77,7 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
           </div>
         ))}
       </div>
-      <PageCounter label={label} />
+      <TvFooter label={label} />
     </>
   );
 }

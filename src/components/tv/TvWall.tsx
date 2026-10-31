@@ -11,7 +11,7 @@ import { tilesForBriefing, tilesForFront, tilesForRansomware, toEngineItems, TvT
 import { GRIDS, Slot } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
-import PageCounter from './PageCounter';
+import TvFooter from './TvFooter';
 import { useLivingWall } from './useLivingWall';
 import { SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
@@ -125,7 +125,7 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
           />
         ))}
       </div>
-      <PageCounter label={label} />
+      <TvFooter label={label} />
     </>
   );
 }

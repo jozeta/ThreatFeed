@@ -7,6 +7,8 @@ export const SWAP_OUT_MS = 450;
 export const REDUCED_OUT_MS = 200;
 /** Signature-driven rebuilds of a non-empty wall wait this long for the data to settle. */
 export const DATA_DEBOUNCE_MS = 2500;
+/** Dispatched on window right after a swap lands: a quiet moment (no animation in flight) for an automatic reload */
+export const TV_QUIET_EVENT = 'threatfeed:tv-quiet';
 
 interface Options {
   /** Changes when the data behind `build` changes; rebuilds the wall until the first swap completes (or while it is empty/fallback): at once when empty, otherwise debounced by DATA_DEBOUNCE_MS and skipped when the first screen would hold the same items */
@@ -105,6 +107,7 @@ export function useLivingWall(build: () => EngineItem[], size: TvTileSize, inter
       setWall(next);
       setLeaving(new Set());
       schedule();
+      window.dispatchEvent(new Event(TV_QUIET_EVENT));
     };
     const fire = () => {
       timer = undefined;

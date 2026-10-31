@@ -755,10 +755,13 @@ button.tag-chip {
 }
 
 /* Page x of y: small and dim in the bottom-right corner, under the tiles (TV wall and dashboards) */
-.tv-page-counter {
+/* Bottom-right line of a TV screen: "Updated 14:05" (amber after 1 h, red after 3 h), then the page counter; sits in the walls' bottom padding */
+.tv-footer {
   position: absolute;
   right: 2vmin;
   bottom: 0.6vmin;
+  display: flex;
+  gap: 1.6vw;
   font-size: max(0.7rem, 0.9vw);
   line-height: 1.2;
   color: #5b6573;
@@ -766,6 +769,8 @@ button.tag-chip {
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+.tv-fresh[data-level='amber'] { color: #f59e0b; }
+.tv-fresh[data-level='red'] { color: #ef4444; }
 
 @keyframes tv-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tv-slide-in { from { opacity: 0; transform: translateX(-4vw); } to { opacity: 1; transform: none; } }
