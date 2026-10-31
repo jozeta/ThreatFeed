@@ -95,7 +95,7 @@ export function useLivingWall(build: (full: boolean, live: ReadonlySet<string>) 
     if (settled.current && w.slots.length > 0 && !w.fallback) return;
     const next = initWall(callBuild(true), w.requested, now(), intervalMs, rng, w.cycle + 1, w.seq);
     const ids = new Set(w.slots.map(t => t.itemId));
-    if (w.slots.length > 0 && next.slots.length === ids.size && next.slots.every(t => ids.has(t.itemId))) return;
+    if (w.slots.length > 0 && next.size === w.size && next.slots.length === ids.size && next.slots.every(t => ids.has(t.itemId))) return;
     rebuild(next);
   };
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

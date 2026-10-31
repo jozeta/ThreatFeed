@@ -142,7 +142,6 @@ function columns(n: number, { cols, rows }: GridSpec): Rect[] {
   return out;
 }
 
-/** A fresh wall; `seq` continues the key sequence of a wall it replaces, so keys never repeat. */
 /** Densest first: with too few items for a size, the wall steps to the next roomier one */
 const ROOMIER: TvTileSize[] = ['xsmall', 'small', 'medium', 'large'];
 
@@ -161,6 +160,7 @@ function tile(queue: QueueEntry[], size: TvTileSize, rng: Rng): { rects: Rect[];
   return null;
 }
 
+/** A fresh wall; `seq` continues the key sequence of a wall it replaces, so keys never repeat. */
 export function initWall(items: EngineItem[], requested: TvTileSize, now: number, intervalMs: number, rng: Rng, cycle = 0, seq = 0): WallState {
   let size = requested;
   let found: { rects: Rect[]; picks: number[] } | null = null;
