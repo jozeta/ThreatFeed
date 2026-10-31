@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, useEffect, useRef, useState } from 'react';
 import { ActiveNavTab } from '../../types';
 import { useFeeds } from '../../context/FeedContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -6,10 +6,12 @@ import { useVulns } from '../../hooks/useVulns';
 import { useLeakSiteVictims } from '../../hooks/useLeakSiteVictims';
 import { filterAndSortArticles } from '../../services/articles/filterSort';
 import { buildBriefing } from '../../services/intelligence/briefing';
-import { chunkSets, tilesForBriefing, tilesForFront, tilesForRansomware, TvSet, TvTile } from '../../services/tv/tiles';
+import { tilesForBriefing, tilesForFront, tilesForRansomware, toEngineItems, TvTile } from '../../services/tv/tiles';
+import { GRIDS, Slot } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
-import { OUT_MS, useRotation } from './useRotation';
+import PageCounter from './PageCounter';
+import { SWAP_OUT_MS, useLivingWall } from './useLivingWall';
 
 const NO_FILTERS = {
   searchQuery: '', selectedCategory: null, selectedSourceId: null, selectedTag: null,
@@ -43,52 +45,83 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const { settings } = useSettings();
   const reduced = useReducedMotion();
 
-  // The rotation rebuilds only at mount and at wrap; it reads the latest data through this ref
+  // The wall rebuilds on its own schedule (refills, data signature); it reads the latest data through this ref
   const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings };
   const ref = useRef(latest);
   ref.current = latest;
+  // Tile content by id: every build's tiles, plus whatever is still on screen from earlier builds
+  const tilesById = useRef(new Map<string, TvTile>());
+  const onScreen = useRef<Slot[]>([]);
 
-  const build = (): TvSet[] => {
+  const build = (): TvTile[] => {
     const d = ref.current;
     const now = Date.now();
-    let tiles: TvTile[] = [];
     if (d.page === 'newspaper' || d.page === 'latest') {
       const shown = filterAndSortArticles(d.articles, NO_FILTERS, false, d.feeds, d.settings.watchlistKeywords, {
         mutedKeywords: d.settings.mutedKeywords,
         hiddenCategories: d.page === 'newspaper' ? d.settings.frontPageHiddenCategories : [],
       });
-      tiles = tilesForFront(shown, d.settings.stackKeywords, now);
-    } else if (d.page === 'briefing') {
-      tiles = tilesForBriefing(
+      return tilesForFront(shown, d.settings.stackKeywords, now);
+    }
+    if (d.page === 'briefing') {
+      return tilesForBriefing(
         buildBriefing(d.articles, d.cveIntel, d.settings.watchlistKeywords, d.settings.stackKeywords, 24, now, d.incidents, d.vulns)
       );
-    } else if (d.page === 'ransomware') {
-      const groupNames = Array.from(new Set(d.victims.map(v => v.group))).filter(g => g.length >= 4);
-      tiles = tilesForRansomware(d.articles, d.victims, groupNames, now);
     }
-    return chunkSets(tiles);
+    if (d.page === 'ransomware') {
+      const groupNames = Array.from(new Set(d.victims.map(v => v.group))).filter(g => g.length >= 4);
+      return tilesForRansomware(d.articles, d.victims, groupNames, now);
+    }
+    return [];
   };
 
-  const intervalMs = Math.max(30, settings.tvIntervalSeconds) * 1000;
-  const revealMs = (set: TvSet) => OUT_MS + 80 * set.tiles.length;
-  const { sets, index, phase, cycle } = useRotation(build, intervalMs, {
-    outMs: settings.tvTransition === 'reveal' && !reduced ? revealMs : undefined,
-    signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
-    setKey: s => s.tiles.map(t => t.id).join(','),
-  });
+  const size = settings.tvTileSize;
+  const { slots, leaving, label } = useLivingWall(
+    () => {
+      const tiles = build();
+      const next = new Map(tiles.map(t => [t.id, t]));
+      for (const s of onScreen.current) {
+        const t = tilesById.current.get(s.itemId);
+        if (t && !next.has(t.id)) next.set(t.id, t);
+      }
+      tilesById.current = next;
+      return toEngineItems(tiles);
+    },
+    size,
+    settings.tvIntervalSeconds * 1000,
+    {
+      signature: `${page}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
+      outMs: reduced ? 200 : SWAP_OUT_MS,
+    }
+  );
+  onScreen.current = slots;
 
-  const set = sets[index];
-  const now = useMemo(() => Date.now(), [cycle, index]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!set || set.tiles.length === 0) return <Empty />;
+  const now = Date.now();
+  const shown = slots.filter(s => tilesById.current.has(s.itemId));
+  if (shown.length === 0) return <Empty />;
 
+  const grid = GRIDS[size];
   return (
-    <div
-      key={`${index}|${set.tiles.map(t => t.id).join(',')}`}
-      className="tv-set"
-      data-phase={phase}
-      data-transition={reduced ? 'reduced' : settings.tvTransition}
-    >
-      {set.tiles.map((t, i) => <TvTileCard key={t.id} tile={t} index={i} now={now} />)}
-    </div>
+    <>
+      <div
+        className="tv-wall"
+        data-size={size}
+        data-transition={reduced ? 'reduced' : settings.tvTransition}
+        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}
+      >
+        {shown.map(s => (
+          <TvTileCard
+            key={s.key}
+            tile={tilesById.current.get(s.itemId)!}
+            size={size}
+            area={s.w * s.h}
+            leaving={leaving.has(s.key)}
+            now={now}
+            style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
+          />
+        ))}
+      </div>
+      <PageCounter label={label} />
+    </>
   );
 }

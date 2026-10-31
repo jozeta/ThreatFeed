@@ -690,18 +690,19 @@ button.tag-chip {
   color: #e7ebf0;
 }
 
-/* TV wall: a 3x2 grid of big tiles; sets give way to each other per data-transition */
-.tv-set {
+/* TV wall: a grid of living tiles (3x2, 4x2 or 4x3 by data-size; TvWall sets the tracks); each tile swaps on its own */
+.tv-wall {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  grid-auto-flow: dense;
   gap: 1.2vmin;
   padding: 2vmin;
+  /* room under the tiles for the page counter */
+  padding-bottom: calc(1.2vmin + max(0.7rem, 0.9vw) * 1.25);
 }
 .tv-tile {
+  --s: 1; /* type scale: Small grid 0.8, the 2x2 hero 1.25 */
+  --tv-headline-lines: 4;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -713,9 +714,13 @@ button.tag-chip {
   background: #0f1319;
   border-radius: 1vmin;
 }
+.tv-tile[data-size='small'] { --s: 0.8; padding: 2vmin 2vmin 2vmin 2.6vmin; gap: 1vmin; }
+.tv-tile[data-area='2'] { --tv-headline-lines: 5; }
+.tv-tile[data-area='4'] { --s: 1.25; --tv-headline-lines: 6; }
 .tv-tile-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0.8vmin; }
 .tv-tile-meta {
-  font-size: clamp(0.9rem, 1.3vw, 3.5rem);
+  flex: none;
+  font-size: clamp(calc(0.9rem * var(--s)), calc(1.3vw * var(--s)), calc(3.5rem * var(--s)));
   color: #8b95a3;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -727,20 +732,19 @@ button.tag-chip {
   margin: 0;
   font-weight: 700;
   line-height: 1.15;
-  font-size: clamp(1.2rem, 2.2vw, 6rem);
+  font-size: clamp(calc(1.2rem * var(--s)), calc(2.2vw * var(--s)), calc(6rem * var(--s)));
   color: #f2f5f8;
   overflow-wrap: anywhere;
   flex: none;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 4; /* TvTileCard sets the whole-line count the tile has room for */
   overflow: hidden;
 }
-.tv-tile[data-big='1'] .tv-tile-headline { font-size: clamp(1.5rem, 2.8vw, 7.5rem); -webkit-line-clamp: 5; }
 .tv-tile-summary-box { flex: 1 1 0; min-height: 0; overflow: hidden; }
 .tv-tile-summary {
   margin: 0;
-  font-size: clamp(1rem, 1.5vw, 4rem);
+  font-size: clamp(calc(1rem * var(--s)), calc(1.5vw * var(--s)), calc(4rem * var(--s)));
   line-height: 1.3;
   color: #aab3bf;
   display: -webkit-box;
@@ -748,20 +752,36 @@ button.tag-chip {
   -webkit-line-clamp: 4; /* TvTileCard sets the exact whole-line count from the height left */
   overflow: hidden;
 }
-.tv-tile-meta { flex: none; }
+
+/* Page x of y: small and dim in the bottom-right corner, under the tiles (TV wall and dashboards) */
+.tv-page-counter {
+  position: absolute;
+  right: 2vmin;
+  bottom: 0.6vmin;
+  font-size: max(0.7rem, 0.9vw);
+  line-height: 1.2;
+  color: #5b6573;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
 
 @keyframes tv-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes tv-slide-in { from { opacity: 0; transform: translateX(-6vw); } to { opacity: 1; transform: none; } }
-@keyframes tv-tile-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes tv-slide-in { from { opacity: 0; transform: translateX(-4vw); } to { opacity: 1; transform: none; } }
+@keyframes tv-tile-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes tv-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes tv-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(4vw); } }
 
-.tv-set[data-transition='fade'][data-phase='in'] { animation: tv-fade-in 500ms ease both; }
-.tv-set[data-transition='fade'][data-phase='out'] { opacity: 0; transition: opacity 500ms ease; }
-.tv-set[data-transition='slide'][data-phase='in'] { animation: tv-slide-in 500ms ease both; }
-.tv-set[data-transition='slide'][data-phase='out'] { opacity: 0; transform: translateX(6vw); transition: opacity 500ms ease, transform 500ms ease; }
-.tv-set[data-transition='reveal'][data-phase='in'] .tv-tile { animation: tv-tile-in 500ms ease both; animation-delay: calc(var(--i) * 120ms); }
-.tv-set[data-transition='reveal'][data-phase='out'] .tv-tile { opacity: 0; transition: opacity 500ms ease; }
-.tv-set[data-transition='reduced'][data-phase='in'] { animation: tv-fade-in 200ms linear both; }
-.tv-set[data-transition='reduced'][data-phase='out'] { opacity: 0; transition: opacity 200ms linear; }
+/* Per tile: arriving tiles animate in on mount; leaving tiles keep their cells and animate out (keyframes, so the
+   in-animation's fill never holds them visible) until removed */
+.tv-wall[data-transition='fade'] .tv-tile { animation: tv-fade-in 450ms ease both; }
+.tv-wall[data-transition='fade'] .tv-tile[data-leaving] { animation: tv-fade-out 450ms ease both; }
+.tv-wall[data-transition='slide'] .tv-tile { animation: tv-slide-in 450ms ease both; }
+.tv-wall[data-transition='slide'] .tv-tile[data-leaving] { animation: tv-slide-out 450ms ease both; }
+.tv-wall[data-transition='reveal'] .tv-tile { animation: tv-tile-in 350ms ease-out both; animation-delay: calc(var(--i, 0) * 120ms); }
+.tv-wall[data-transition='reveal'] .tv-tile[data-leaving] { animation: tv-fade-out 250ms ease both; }
+.tv-wall[data-transition='reduced'] .tv-tile { animation: tv-fade-in 200ms linear both; }
+.tv-wall[data-transition='reduced'] .tv-tile[data-leaving] { animation: tv-fade-out 200ms linear both; }
 
 /* Dashboard mode: 4-column grid filling the screen; every size in vw */
 .tv-dash {

@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef } from 'react';
+import { CSSProperties, useLayoutEffect, useRef } from 'react';
+import { TvTileSize } from '../../types';
 import { TvTile, TvTone } from '../../services/tv/tiles';
 
 export const TONE_COLOR: Record<TvTone, string> = {
@@ -19,21 +20,44 @@ export function shortAge(iso: string | undefined, now: number): string {
 }
 
 interface Props {
-  tile: TvTile & { col: 1 | 2 | 3; row: 1 | 2 };
-  index: number;
+  tile: TvTile;
+  size: TvTileSize;
+  /** Cells covered (w × h); sets the type scale: 1 a single cell, 2 a wide or tall tile, 4 the hero */
+  area: number;
+  leaving: boolean;
   now: number;
+  style?: CSSProperties;
 }
 
-export default function TvTileCard({ tile, index, now }: Props) {
-  const big = tile.col * tile.row > 1;
+const areaClass = (area: number) => (area >= 4 ? 4 : area >= 2 ? 2 : 1);
+
+export default function TvTileCard({ tile, size, area, leaving, now, style }: Props) {
+  const tileRef = useRef<HTMLElement>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  // Show only whole lines: as many as the height left allows, or none when fewer than two fit
+  // Show only whole lines: the headline as many as the tile has room for (up to its CSS cap), the summary as many as
+  // the height left allows, or none when fewer than two fit
   useLayoutEffect(() => {
-    const el = summaryRef.current;
-    const box = boxRef.current;
-    if (!el || !box) return;
+    const art = tileRef.current;
+    const h = headlineRef.current;
+    if (!art || !h) return;
     const fit = () => {
+      const hcs = getComputedStyle(h);
+      const hLine = parseFloat(hcs.lineHeight);
+      if (hLine > 0) {
+        const acs = getComputedStyle(art);
+        const meta = art.querySelector<HTMLElement>('.tv-tile-meta');
+        const room = art.clientHeight - parseFloat(acs.paddingTop) - parseFloat(acs.paddingBottom)
+          - (meta ? meta.offsetHeight + parseFloat(acs.rowGap || '0') : 0);
+        const cap = parseInt(hcs.getPropertyValue('--tv-headline-lines'), 10) || 4;
+        const lines = Math.max(1, Math.min(cap, Math.floor((room + 0.5) / hLine)));
+        h.style.webkitLineClamp = String(lines);
+        h.style.maxHeight = `${lines * hLine}px`;
+      }
+      const el = summaryRef.current;
+      const box = boxRef.current;
+      if (!el || !box) return;
       const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
       const lines = lineHeight > 0 ? Math.floor((box.clientHeight + 0.5) / lineHeight) : 0;
       el.style.webkitLineClamp = String(Math.max(lines, 1));
@@ -42,22 +66,26 @@ export default function TvTileCard({ tile, index, now }: Props) {
     };
     fit();
     const ro = new ResizeObserver(fit);
-    ro.observe(box);
+    ro.observe(art);
+    if (boxRef.current) ro.observe(boxRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [size, area]);
   const age = shortAge(tile.time, now);
   return (
     <article
+      ref={tileRef}
       className="tv-tile"
-      data-big={big ? '1' : '0'}
-      style={{ gridColumn: `span ${tile.col}`, gridRow: `span ${tile.row}`, ['--i' as string]: index }}
+      data-size={size}
+      data-area={areaClass(area)}
+      data-leaving={leaving ? '1' : undefined}
+      style={style}
     >
       <span className="tv-tile-bar" style={{ background: TONE_COLOR[tile.tone] }} />
       <div className="tv-tile-meta">
         {tile.source}
         {age && ` · ${age}`}
       </div>
-      <h2 className="tv-tile-headline">{tile.headline}</h2>
+      <h2 ref={headlineRef} className="tv-tile-headline">{tile.headline}</h2>
       {tile.summary && (
         <div ref={boxRef} className="tv-tile-summary-box">
           <p ref={summaryRef} className="tv-tile-summary">{tile.summary}</p>
