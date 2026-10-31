@@ -57,13 +57,16 @@ export function enterTv(kind: TvKind, extra: Record<string, string> = {}): void 
   } catch { /* no fullscreen here (iOS, kiosk) */ }
 }
 
+/** The per-screen link params (see readTvOverrides), cleared when the mode is left in place */
+const TV_LINK_CLEAR = { mix: '', size: '', speed: '', transition: '', interval: '', qr: '' };
+
 /** Leaves the mode: back over the entry enterTv pushed (so Back doesn't land on a duplicate), else in place. Also leaves full screen. Runs at most once per TV session */
 export function exitTv(): void {
   if (exited) return;
   exited = true;
   const state = window.history.state;
   if (state && typeof state === 'object' && (state as Record<string, unknown>)[TV_MARK] === true) window.history.back();
-  else setHashParams({ tv: '', dash: '', mix: '' });
+  else setHashParams({ tv: '', dash: '', ...TV_LINK_CLEAR });
   leaveFullscreen();
 }
 

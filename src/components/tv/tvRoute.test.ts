@@ -90,3 +90,11 @@ describe('enterTv extra params / exitTv mix', () => {
     expect(window.location.hash).toBe('#/latest');
   });
 });
+describe('exitTv clears the per-screen link params', () => {
+  beforeEach(() => resetTvExit());
+  it('exit in place drops size, speed, transition, interval and qr too', () => {
+    window.history.replaceState(null, '', '/#/latest?tv=1&size=small&speed=fast&transition=slide&interval=30&qr=1&mix=1');
+    exitTv();
+    expect(window.location.hash).toBe('#/latest');
+  });
+});

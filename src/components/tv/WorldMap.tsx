@@ -17,10 +17,11 @@ function loadMap(): Promise<MapFile> {
 const EMPTY = '#1c222b';
 const LOW = [0x2a, 0x1f, 0x3d];
 const HIGH = [0xa8, 0x55, 0xf7];
-/** Fill for a country: neutral for none, else a purple from dark (few) to bright (the most hit) */
+/** Fill for a country: neutral for none, else a purple from dark (few) to bright (the most hit). The scale starts a
+ *  quarter of the way up and follows a square root, so a country with one or two victims still reads on the TV */
 export function shade(count: number, max: number): string {
   if (count <= 0 || max <= 0) return EMPTY;
-  const t = Math.min(1, count / max);
+  const t = 0.25 + 0.75 * Math.sqrt(Math.min(1, count / max));
   return '#' + LOW.map((c, i) => Math.round(c + (HIGH[i] - c) * t).toString(16).padStart(2, '0')).join('');
 }
 

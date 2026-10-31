@@ -17,7 +17,7 @@ const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, g
 export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavTab }) {
   const { idle } = useTvChrome();
   usePanelLayer(true, exitTv, TV_LEVEL);
-  const { speed } = useTvSettings();
+  const { speed, mix } = useTvSettings();
   useAutoReload({ settleMs: QUIET_SETTLE_MS * SPEED_FACTOR[speed] });
 
   // A new TV session: exitTv may run (once) again, however the mode was entered (a shared link, a reload). Also reset on
@@ -59,7 +59,8 @@ export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavT
       style={{ cursor: idle ? 'none' : undefined }}
     >
       {kind === 'tv' ? (
-        <TvWall page={page} />
+        // A page or mix change remounts the wall, so no tile of the old page stays on screen
+        <TvWall key={`${page}|${mix}`} page={page} />
       ) : (
         page === 'ransomware' ? <RansomDashboard /> : <VulnDashboard />
       )}

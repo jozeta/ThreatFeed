@@ -44,6 +44,9 @@ const midSwap = () => document.querySelector('.tv-root [data-leaving]') !== null
  * running one, and at 03:00 local it asks for the nightly reload. A reload waits for the next quiet moment (a swap has
  * just landed) or 2 minutes, never cuts a swap, and is guarded in sessionStorage (once per 10 minutes, never twice for
  * the same build). A failed check does nothing; the stale indicator covers that. Hidden tabs reload too (nothing shows).
+ * Known limit: the check fetches index.html with no-store, but the reload itself may be served a stale CDN or browser
+ * copy of the page. The screen then comes back on the old build, and since that build is already in the guard it is not
+ * retried; it stays on the old build until the nightly reload (or the next deploy).
  */
 export function useAutoReload({ reload = () => window.location.reload(), settleMs = QUIET_SETTLE_MS }: { reload?: () => void; settleMs?: number } = {}): void {
   const reloadRef = useRef(reload);
