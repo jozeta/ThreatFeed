@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { LeakSiteVictim, MsrcData, StatsData, VulnData } from '../../types';
+import { LeakSiteVictim, MsrcData, RansomwareIntel, StatsData, VulnData } from '../../types';
 import { ransomDashboard, ransomExtras, vulnDashboard, vulnExtras } from '../../services/tv/dashboard';
 import { chartReady, DailyArea, flagOf, HBarList, ListPanel, StatCard, VBars, WeeklyBarsLine } from './dashParts';
 import { NUMBER_SHAPES, PanelDef, WIDE_SHAPES } from './DashboardWall';
@@ -16,7 +16,11 @@ export interface VulnCtx {
   vulns: VulnData | null; msrc: MsrcData | null; stats: StatsData | null;
   stackKeywords: string[]; watchedCves: string[]; now: number;
 }
-export interface RansomCtx { victims: LeakSiteVictim[]; stats: StatsData | null; now: number }
+export interface RansomCtx {
+  victims: LeakSiteVictim[]; stats: StatsData | null; now: number;
+  /** Public attack reports and group intel (data/ransomware.json); loads after the victims */
+  intel?: RansomwareIntel | null;
+}
 
 /** Remembers the last result while the inputs are the same objects and the clock is within the same 5 s */
 function memoLast<C extends { now: number }, R>(compute: (c: C) => R): (c: C) => R {
@@ -38,7 +42,7 @@ const vulnData = memoLast((c: VulnCtx) => ({
 }));
 const ransomData = memoLast((c: RansomCtx) => ({
   d: ransomDashboard(c.victims, c.stats, c.now),
-  x: ransomExtras(c.victims, c.stats, c.now),
+  x: ransomExtras(c.victims, c.stats, c.now, c.intel?.attacks),
 }));
 
 /** Computes its data once, when it mounts (a panel remounts on every arrival) */
@@ -70,13 +74,16 @@ const Score = ({ score }: { score?: number }) => <span className="tv-score">{sco
 const PILL: Record<string, string> = { KEV: 'tv-kev', PoC: 'tv-poc', Followed: 'tv-followed' };
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** "3 Aug" (UTC) */
-const shortDate = (iso: string) => {
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** "3 Aug", or with the weekday "Mon 3 Aug" (UTC); a YYYY-MM-DD day or a full timestamp */
+const shortDate = (iso: string, weekday = false) => {
   const t = Date.parse(iso.length === 10 ? iso + 'T00:00:00Z' : iso);
   if (isNaN(t)) return '';
   const d = new Date(t);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  return `${weekday ? WEEKDAY[d.getUTCDay()] + ' ' : ''}${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 };
+const EXPLOIT = '#fbbf24';
+const KEV = '#fb923c';
 
 export const WATCHLIST_EMPTY = 'Nothing new for your vendors';
 const SEVERITY_COLOR: Record<string, string> = { Critical: '#ef4444', Important: '#fb923c', Moderate: '#fbbf24', Low: '#64748b' };
@@ -186,10 +193,67 @@ export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): Pane
       )}
     />
   ));
+  add('epssTop', true, x.epssTop.length > 0, ({ x }) => (
+    <ListPanel
+      label="Highest exploitation odds · recent CVEs"
+      items={x.epssTop}
+      row={it => (
+        <>
+          <span className="tv-row-main">{it.cve}{it.title ? ` · ${it.title}` : ''}</span>
+          <b className="tv-row-meta" style={{ color: EXPLOIT }}>{Math.round(it.epss * 100)}%</b>
+        </>
+      )}
+    />
+  ));
+  add('timeToKev', false, !!x.timeToKev, ({ x: { timeToKev: t } }) => (
+    <StatCard
+      label="Disclosure to KEV · median"
+      value={t?.medianDays ?? 0}
+      color={KEV}
+      note={t ? `days · ${plural(t.count, 'CVE')} · last 90 days` : 'No data yet'}
+    />
+  ));
+  add('topCwes', true, x.topCwes.length > 0, ({ x }) => {
+    const label = new Map(x.topCwes.map(c => [c.cwe, c.label]));
+    return (
+      <HBarList
+        label="Top weakness types · critical CVEs · 30 days"
+        data={x.topCwes.map(c => [c.cwe, c.count] as [string, number])}
+        color="#38bdf8"
+        format={cwe => <span title={cwe}>{label.get(cwe) ?? cwe}</span>}
+      />
+    );
+  });
+  add('kevDue', true, x.kevDue.length > 0, ({ x }, now) => (
+    <ListPanel
+      label="CISA deadlines this week"
+      items={x.kevDue}
+      row={it => (
+        <>
+          <span className="tv-row-main">{it.cve} {'·'} {it.title}</span>
+          <span className="tv-row-meta" style={it.dueDate === new Date(now).toISOString().slice(0, 10) ? { color: KEV, fontWeight: 700 } : undefined}>
+            due {shortDate(it.dueDate, true)}
+          </span>
+        </>
+      )}
+    />
+  ));
+  add('exploitSources', true, x.exploitSources.msf + x.exploitSources.nuclei + x.exploitSources.poc > 0, ({ x: { exploitSources: e } }) => (
+    <HBarList
+      label="Exploits by source · CVEs of the last 30 days"
+      data={[['Metasploit', e.msf], ['Nuclei template', e.nuclei], ['GitHub PoC', e.poc]]}
+      color={EXPLOIT}
+    />
+  ));
   return out;
 }
 
 const PURPLE = '#a855f7';
+/** 24 values don't fit above 24 narrow bars: show the peak and every 3rd hour (the labelled ones) */
+const peakOrEvery3 = (hours: number[]) => {
+  const peak = hours.indexOf(Math.max(...hours));
+  return (i: number) => i === peak || i % 3 === 0;
+};
 
 export function ransomPanels(ctx: RansomCtx, fresh: () => RansomCtx = () => ctx): PanelDef[] {
   const { out, add, first: { d, x } } = pool(ctx, fresh, ransomData);
@@ -255,6 +319,56 @@ export function ransomPanels(ctx: RansomCtx, fresh: () => RansomCtx = () => ctx)
   ));
   add('weekly90', true, chartReady(x.weekly90.map(w => [w.count ?? 0])), ({ x }) => (
     <VBars label="Victims · 90 days (weekly)" data={x.weekly90.map(w => ({ label: shortDate(w.week), n: w.count }))} color={PURPLE} />
+  ));
+  add('movers', true, x.movers.risers.length + x.movers.fallers.length > 0, ({ x: { movers: m } }) => (
+    <ListPanel
+      label="Rising & falling groups · this week vs last"
+      items={[...m.risers, ...m.fallers]}
+      row={g => (
+        <>
+          <span className="tv-row-main">{g.group}</span>
+          <span className="tv-row-meta">{g.before} {'→'} {g.week}</span>
+          <b className="tv-row-meta" style={{ color: g.change > 0 ? '#f87171' : '#34d399', minWidth: '3.5vw', textAlign: 'right' }}>
+            {g.change > 0 ? '▲' : '▼'} {Math.abs(g.change)}
+          </b>
+        </>
+      )}
+    />
+  ));
+  add('sectors30', true, x.sectors30.length > 0, ({ x }) => <HBarList label="Sectors · 30 days" data={x.sectors30} color="#818cf8" />);
+  add('hours', true, x.hours.some(n => n > 0), ({ x }) => (
+    <VBars
+      label="Busiest hours · leak-site posts by hour (UTC) · 14 days"
+      data={x.hours.map((n, h) => ({ label: h % 3 === 0 ? String(h).padStart(2, '0') : '\u00a0', n }))}
+      color={PURPLE}
+      showValue={peakOrEvery3(x.hours)}
+    />
+  ));
+  add('attacks', true, x.attacks.length > 0, ({ x }) => (
+    <ListPanel
+      label="Publicly reported attacks · 14 days"
+      items={x.attacks}
+      row={a => (
+        <>
+          <span className="tv-row-main">{a.victim}</span>
+          <span className="tv-row-meta">
+            {a.group ? `${a.group} · ` : ''}{a.country ? `${flagOf(a.country)} · ` : ''}{shortDate(a.added)}
+          </span>
+        </>
+      )}
+    />
+  ));
+  add('newGroups30', true, x.newGroups30.length > 0, ({ x }) => (
+    <ListPanel
+      label="New groups · 30 days"
+      items={x.newGroups30}
+      row={g => (
+        <>
+          <span className="tv-row-main">{g.group}</span>
+          <span className="tv-row-meta">first {shortDate(g.firstSeen)} {'·'} {plural(g.victims, 'victim')}</span>
+        </>
+      )}
+    />
   ));
   return out;
 }
