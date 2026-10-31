@@ -3,7 +3,7 @@ import { act, createElement, StrictMode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineItem } from '../../services/tv/tileEngine';
-import { TV_QUIET_EVENT, useLivingWall } from './useLivingWall';
+import { keepLive, TV_QUIET_EVENT, useLivingWall } from './useLivingWall';
 
 vi.mock('../Common/SidePanel', () => ({ useReducedMotion: () => false }));
 
@@ -17,7 +17,7 @@ const items = (n: number): EngineItem[] =>
   Array.from({ length: n }, (_, i) => ({ id: `s${i}`, weight: 1, shapes: ['1x1', '2x1', '2x2'] }));
 
 let Harness: () => null;
-function mount(build: (full: boolean) => EngineItem[], interval = 60000, signature?: () => number) {
+function mount(build: (full: boolean, live: ReadonlySet<string>) => EngineItem[], interval = 60000, signature?: () => number) {
   Harness = function H() {
     result = useLivingWall(build, 'medium', interval, { signature: signature?.(), outMs: 450, rng: () => 0.5 });
     return null;
@@ -267,6 +267,56 @@ describe('useLivingWall', () => {
     advance(450);
     expect(result.leaving.size).toBe(0);
     cellsOk(result.slots, 4, 2);
+  });
+
+  it('an overdue chain of swaps never leaves a slot without content (build gets the live item ids)', () => {
+    // Like TvWall/DashboardWall: content by id, kept for this build's items and the items the wall still holds
+    let content = new Map<string, true>();
+    let gen = 0;
+    let offset = 0; // added to the fake clock
+    Harness = function H() {
+      result = useLivingWall(
+        (_full, live) => {
+          const fresh = items(6).map(it => ({ ...it, id: `g${gen}-${it.id}` })); // every build: new ids only
+          gen++;
+          content = keepLive(new Map(fresh.map(it => [it.id, true as const])), content, live);
+          return fresh;
+        },
+        'medium', 60000, { outMs: 450, rng: () => 0.5, now: () => Date.now() + offset }
+      );
+      return null;
+    };
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    // The clock keeps jumping (a throttled screen): every slot is overdue, so swaps chain (land → fire at once → refill)
+    // inside one act, with no render in between
+    act(() => {
+      vi.advanceTimersByTime(60000);
+      for (let i = 0; i < 40; i++) {
+        offset += 10 * 60000;
+        vi.advanceTimersByTime(450);
+      }
+    });
+    expect(gen).toBeGreaterThan(2); // refills happened
+    const missing = result.slots.filter(s => !content.has(s.itemId)).map(s => s.itemId);
+    expect(missing).toEqual([]);
+  });
+
+  it('build gets the live wall\'s item ids: its slots and its queue', () => {
+    const lives: ReadonlySet<string>[] = [];
+    mount((_full, live) => { lives.push(live); return items(6); });
+    expect(lives[0].size).toBe(0); // the first build has no wall yet
+    advance(60000);
+    const on = result.slots.map(s => s.itemId);
+    const last = lives[lives.length - 1];
+    expect(lives.length).toBeGreaterThan(1);
+    on.forEach(id => expect(last.has(id)).toBe(true));
+  });
+
+  it('keepLive keeps the old content of live ids only, old copy winning', () => {
+    const kept = new Map([['a', 'old-a'], ['b', 'old-b']]);
+    const out = keepLive(new Map([['a', 'new-a'], ['c', 'new-c']]), kept, new Set(['a', 'z']));
+    expect([...out.entries()]).toEqual([['a', 'old-a'], ['c', 'new-c']]);
   });
 
   it('runs two hours with refills and always one timer', () => {

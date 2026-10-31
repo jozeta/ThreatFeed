@@ -8,12 +8,12 @@ import { useLeakSiteVictims } from '../../hooks/useLeakSiteVictims';
 import { filterAndSortArticles } from '../../services/articles/filterSort';
 import { buildBriefing } from '../../services/intelligence/briefing';
 import { tilesForBriefing, tilesForFront, tilesForRansomware, toEngineItems, TvTile } from '../../services/tv/tiles';
-import { EngineItem, GRIDS, Slot } from '../../services/tv/tileEngine';
+import { EngineItem, GRIDS } from '../../services/tv/tileEngine';
 import { mixItems } from '../../services/tv/mix';
 import { useReducedMotion } from '../Common/SidePanel';
 import TvTileCard from './TvTileCard';
 import TvFooter from './TvFooter';
-import { useLivingWall } from './useLivingWall';
+import { keepLive, useLivingWall } from './useLivingWall';
 import { useBreakingDetection, useBreakingNews } from './useBreakingNews';
 import { kevAddedMap } from '../../services/tv/breaking';
 import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
@@ -68,9 +68,8 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings, mixed, msrc, stats };
   const ref = useRef(latest);
   ref.current = latest;
-  // Tile content by id: every build's tiles, with the on-screen copy winning for tiles still on screen
+  // Tile content by id: every build's tiles, with the kept copy winning for items the live wall still holds
   const tilesById = useRef(new Map<string, TvTile>());
-  const onScreen = useRef<Slot[]>([]);
   // Mixed mode's number panels by item id ('num:…'), kept the same way
   const panelsById = useRef(new Map<string, PanelDef>());
   const vulnCtx = (): VulnCtx => {
@@ -104,23 +103,14 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   const news = useBreakingNews();
   const size = tv.size;
   const { slots, leaving, label, prioritize, acceptsNews } = useLivingWall(
-    full => {
+    (full, live) => {
       const tiles = build();
       if (full) news.markSeen(tiles);
-      const next = new Map(tiles.map(t => [t.id, t]));
-      // Tiles on screen keep their content until they swap out
-      for (const s of onScreen.current) {
-        const t = tilesById.current.get(s.itemId);
-        if (t) next.set(t.id, t);
-      }
-      tilesById.current = next;
       const panels = numbers();
-      const nextPanels = new Map(panels.map(p => [NUM + p.id, p]));
-      for (const s of onScreen.current) {
-        const p = panelsById.current.get(s.itemId);
-        if (p) nextPanels.set(s.itemId, p);
-      }
-      panelsById.current = nextPanels;
+      // Items the live wall still holds (on screen, leaving, queued) keep their content until they leave it; `live` is
+      // the wall's state now, which can be ahead of the last render
+      tilesById.current = keepLive(new Map(tiles.map(t => [t.id, t])), tilesById.current, live);
+      panelsById.current = keepLive(new Map(panels.map(p => [NUM + p.id, p])), panelsById.current, live);
       const numberItems: EngineItem[] = panels.map(p => ({ id: NUM + p.id, weight: p.weight, shapes: p.shapes }));
       return mixItems(toEngineItems(tiles), numberItems);
     },
@@ -131,7 +121,6 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
       outMs: wallOutMs(reduced, tv.transition, tv.speed),
     }
   );
-  onScreen.current = slots;
 
   // Breaking news: on data changes (the wall's own rebuilds stop after its first swap), stories that arrived since the
   // wall started jump the queue

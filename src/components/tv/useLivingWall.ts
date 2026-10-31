@@ -10,6 +10,15 @@ export const DATA_DEBOUNCE_MS = 2500;
 /** Dispatched on window right after a swap lands: a quiet moment (no animation in flight) for an automatic reload */
 export const TV_QUIET_EVENT = 'threatfeed:tv-quiet';
 
+/** `next` plus the kept content of every live item id (the old copy wins, so on-screen content never changes mid-show) */
+export function keepLive<T>(next: Map<string, T>, kept: Map<string, T>, live: ReadonlySet<string>): Map<string, T> {
+  for (const id of live) {
+    const v = kept.get(id);
+    if (v !== undefined) next.set(id, v);
+  }
+  return next;
+}
+
 interface Options {
   /** Changes when the data behind `build` changes; rebuilds the wall until the first swap completes (or while it is empty/fallback): at once when empty, otherwise debounced by DATA_DEBOUNCE_MS and skipped when the first screen would hold the same items */
   signature?: string | number;
@@ -20,9 +29,11 @@ interface Options {
 
 /**
  * A wall of tiles that swap one at a time. One timer is armed at a time, for the next due slot; a swap has an out phase
- * (`leaving`) and then lands. `build(full)` is told whether it starts a wall (initial build, rebuild) or refills one. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
+ * (`leaving`) and then lands. `build(full, live)` is told whether it starts a wall (initial build, rebuild) or refills one,
+ * and the ids of every item the live wall still references (its slots, leaving ones included, and its queue): content for
+ * those must be kept even when the new build drops them, since builds can run before React re-renders. Data that loads asynchronously needs a `signature` (an empty first build otherwise stays empty). The clock stops while the tab is hidden and resumes with every due time pushed back.
  */
-export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTileSize, intervalMs: number, opts: Options = {}) {
+export function useLivingWall(build: (full: boolean, live: ReadonlySet<string>) => EngineItem[], size: TvTileSize, intervalMs: number, opts: Options = {}) {
   const buildRef = useRef(build);
   buildRef.current = build;
   const optsRef = useRef(opts);
@@ -34,8 +45,14 @@ export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTi
   const now = () => (optsRef.current.now ?? Date.now)();
   const rng: Rng = () => (optsRef.current.rng ?? Math.random)();
 
-  const [wall, setWallState] = useState<WallState>(() => initWall(build(true), size, now(), intervalMs, rng));
+  const [wall, setWallState] = useState<WallState>(() => initWall(build(true, new Set()), size, now(), intervalMs, rng));
   const wallRef = useRef(wall);
+  /** Every item id the live wall state references (read at build time, never the last render's) */
+  const liveIds = (): ReadonlySet<string> => {
+    const w = wallRef.current;
+    return new Set([...w.slots.map(t => t.itemId), ...w.queue.map(q => q.item.id)]);
+  };
+  const callBuild = (full: boolean) => buildRef.current(full, liveIds());
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
   const [epoch, setEpoch] = useState(0); // bumped when the wall is replaced, so the timer starts over
   const settled = useRef(false); // true once a swap has completed
@@ -59,7 +76,7 @@ export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTi
   const rebuildForData = () => {
     const w = wallRef.current;
     if (settled.current && w.slots.length > 0 && !w.fallback) return;
-    const next = initWall(buildRef.current(true), w.size, now(), intervalMs, rng, w.cycle + 1, w.seq);
+    const next = initWall(callBuild(true), w.size, now(), intervalMs, rng, w.cycle + 1, w.seq);
     const ids = new Set(w.slots.map(t => t.itemId));
     if (w.slots.length > 0 && next.slots.length === ids.size && next.slots.every(t => ids.has(t.itemId))) return;
     rebuild(next);
@@ -80,7 +97,7 @@ export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTi
     if (changed) {
       clearDebounce();
       settled.current = false;
-      rebuild(initWall(buildRef.current(true), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
+      rebuild(initWall(callBuild(true), size, now(), intervalMs, rng, w.cycle + 1, w.seq));
       return;
     }
     if (!signed) return;
@@ -119,7 +136,7 @@ export function useLivingWall(build: (full: boolean) => EngineItem[], size: TvTi
       const slot = nextDue(w);
       if (!slot) return;
       if (w.cursor >= w.queue.length) {
-        w = refill(w, buildRef.current(false), now(), intervalMs, rng);
+        w = refill(w, callBuild(false), now(), intervalMs, rng);
         setWall(w);
       }
       const swap = planSwap(w, slot.key, now(), intervalMs, rng);

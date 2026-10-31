@@ -1,9 +1,9 @@
 import { CSSProperties, ReactNode, useRef } from 'react';
 import { useTvSettings } from './useTvSettings';
-import { GRIDS, Shape, Slot } from '../../services/tv/tileEngine';
+import { GRIDS, Shape } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
 import TvFooter from './TvFooter';
-import { useLivingWall } from './useLivingWall';
+import { keepLive, useLivingWall } from './useLivingWall';
 import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
 /** One dashboard panel in the wall's pool; `render` mounts it afresh on every arrival (so its data is computed then) */
@@ -20,28 +20,21 @@ export const WIDE_SHAPES: Shape[] = ['2x1', '2x2'];
 export default function DashboardWall({ build, signature }: { build: () => PanelDef[]; signature?: string | number }) {
   const tv = useTvSettings();
   const reduced = useReducedMotion();
-  // Panels by id: every build's panels, with the on-screen copy winning for panels still on screen
+  // Panels by id: every build's panels, with the kept copy winning for panels the live wall still holds
   const panelsById = useRef(new Map<string, PanelDef>());
-  const onScreen = useRef<Slot[]>([]);
 
   const size = tv.size;
   const { slots, leaving, label } = useLivingWall(
-    () => {
+    (_full, live) => {
       const panels = build();
-      const next = new Map(panels.map(p => [p.id, p]));
-      // Panels on screen keep their content until they swap out
-      for (const s of onScreen.current) {
-        const p = panelsById.current.get(s.itemId);
-        if (p) next.set(p.id, p);
-      }
-      panelsById.current = next;
+      // Panels the live wall still holds (on screen, leaving, queued) keep their content; `live` can be ahead of the last render
+      panelsById.current = keepLive(new Map(panels.map(p => [p.id, p])), panelsById.current, live);
       return panels.map(({ id, weight, shapes }) => ({ id, weight, shapes }));
     },
     size,
     tv.intervalSeconds * 1000,
     { signature, outMs: wallOutMs(reduced, tv.transition, tv.speed) }
   );
-  onScreen.current = slots;
 
   const shown = slots.filter(s => panelsById.current.has(s.itemId));
   if (shown.length === 0) {
