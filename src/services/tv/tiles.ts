@@ -18,6 +18,12 @@ export interface TvTile {
   headline: string;
   summary?: string;
   weight: number;
+  /** CVEs the tile is about (breaking news: newly added to KEV) */
+  cves?: string[];
+  /** Critical severity (breaking news) */
+  critical?: boolean;
+  /** Article link */
+  url?: string;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -53,6 +59,9 @@ function storyTile(a: Article, weight: number): TvTile {
     headline: a.title,
     summary: plainText(a.description),
     weight,
+    cves: a.cves,
+    critical: a.severity === 'critical',
+    url: a.url,
   };
 }
 
@@ -87,6 +96,8 @@ export function tilesForBriefing(b: Briefing, max = 30): TvTile[] {
       headline: `${k.cve} added to CISA KEV`,
       summary: k.intel.kevName,
       weight: 9,
+      cves: [k.cve],
+      critical: false,
     });
   }
 

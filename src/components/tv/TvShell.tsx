@@ -2,7 +2,10 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { usePanelLayer } from '../Common/panelStack';
-import { exitTv, leaveFullscreen, TvKind } from './tvRoute';
+import { exitTv, leaveFullscreen, resetTvExit, TvKind } from './tvRoute';
+import { QUIET_SETTLE_MS, useAutoReload } from './useAutoReload';
+import { useTvSettings } from './useTvSettings';
+import { SPEED_FACTOR } from './wallMotion';
 import { useTvChrome } from './useTvChrome';
 import TvWall from './TvWall';
 import VulnDashboard from './VulnDashboard';
@@ -14,6 +17,16 @@ const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, g
 export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavTab }) {
   const { idle } = useTvChrome();
   usePanelLayer(true, exitTv, TV_LEVEL);
+  const { speed, mix } = useTvSettings();
+  useAutoReload({ settleMs: QUIET_SETTLE_MS * SPEED_FACTOR[speed] });
+
+  // A new TV session: exitTv may run (once) again, however the mode was entered (a shared link, a reload). Also reset on
+  // unmount (the shell's own listeners are gone by then), so a shell that fails to render after a re-entry by Forward or a
+  // hash edit can still be left by the error boundary
+  useEffect(() => {
+    resetTvExit();
+    return resetTvExit;
+  }, []);
 
   // However the mode ends (Back, a hash edit, another page), the browser leaves full screen with it
   useEffect(() => leaveFullscreen, []);
@@ -46,7 +59,8 @@ export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavT
       style={{ cursor: idle ? 'none' : undefined }}
     >
       {kind === 'tv' ? (
-        <TvWall page={page} />
+        // A page or mix change remounts the wall, so no tile of the old page stays on screen
+        <TvWall key={`${page}|${mix}`} page={page} />
       ) : (
         page === 'ransomware' ? <RansomDashboard /> : <VulnDashboard />
       )}

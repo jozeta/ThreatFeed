@@ -88,6 +88,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   disabledCategories: [],
   tvTransition: 'reveal',
   tvAnimationSpeed: 'fast',
+  tvQrCodes: false,
   watchlistKeywords: DEFAULT_WATCHLIST_KEYWORDS,
   watchlistDefaultsVersion: WATCHLIST_DEFAULTS_VERSION,
   dataSource: 'snapshot',
@@ -141,6 +142,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           tvIntervalSeconds: migrateTvInterval(saved),
           tvTileSize: parseTvTileSize(saved.tvTileSize),
           tvAnimationSpeed: parseTvAnimationSpeed(saved.tvAnimationSpeed),
+          tvQrCodes: saved.tvQrCodes === true,
           disabledCategories: Array.isArray(saved.disabledCategories) ? saved.disabledCategories.filter((v: unknown) => typeof v === 'string') : [],
           tvTransition: saved.tvTransition === 'fade' || saved.tvTransition === 'slide' || saved.tvTransition === 'reveal' ? saved.tvTransition : DEFAULT_SETTINGS.tvTransition,
           watchlistKeywords: Array.isArray(saved.watchlistKeywords)

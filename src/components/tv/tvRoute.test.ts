@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { enterTv, exitTv, leaveFullscreen, tvAvailable, tvFromParams } from './tvRoute';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { enterTv, exitTv, leaveFullscreen, resetTvExit, tvAvailable, tvFromParams } from './tvRoute';
 
 describe('tvRoute', () => {
   it('lists the modes each page offers', () => {
@@ -37,6 +37,7 @@ describe('leaveFullscreen', () => {
 
 describe('enterTv / exitTv history', () => {
   const settle = () => new Promise(r => setTimeout(r, 30));
+  beforeEach(() => resetTvExit()); // as a fresh TvShell mount does
   it('exit goes back over the pushed entry, leaving no duplicate', async () => {
     window.history.replaceState(null, '', '/#/latest');
     const before = window.history.length;
@@ -55,5 +56,45 @@ describe('enterTv / exitTv history', () => {
     expect(back).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('#/latest');
     back.mockRestore();
+  });
+  it('leaves only once per TV session (the full-screen change can call it a second time)', () => {
+    window.history.replaceState({ tvEntry: true }, '', '/#/latest?tv=1');
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    exitTv();
+    exitTv();
+    expect(back).toHaveBeenCalledTimes(1);
+    back.mockRestore();
+  });
+  it('a new TV session can leave again', () => {
+    window.history.replaceState({ tvEntry: true }, '', '/#/latest?tv=1');
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    exitTv();
+    enterTv('tv');
+    exitTv();
+    expect(back).toHaveBeenCalledTimes(2);
+    back.mockRestore();
+  });
+});
+
+describe('enterTv extra params / exitTv mix', () => {
+  beforeEach(() => resetTvExit());
+  it('adds the extra params to the pushed hash', () => {
+    window.history.replaceState(null, '', '/#/latest');
+    enterTv('tv', { mix: '1' });
+    expect(window.location.hash).toContain('tv=1');
+    expect(window.location.hash).toContain('mix=1');
+  });
+  it('exit in place clears mix too', () => {
+    window.history.replaceState(null, '', '/#/latest?tv=1&mix=1');
+    exitTv();
+    expect(window.location.hash).toBe('#/latest');
+  });
+});
+describe('exitTv clears the per-screen link params', () => {
+  beforeEach(() => resetTvExit());
+  it('exit in place drops size, speed, transition, interval and qr too', () => {
+    window.history.replaceState(null, '', '/#/latest?tv=1&size=small&speed=fast&transition=slide&interval=30&qr=1&mix=1');
+    exitTv();
+    expect(window.location.hash).toBe('#/latest');
   });
 });

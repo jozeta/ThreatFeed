@@ -439,6 +439,7 @@ export interface UserSettings {
   tvTileSize: TvTileSize; // TV mode and dashboards: how many tiles fit on screen
   disabledCategories: string[]; // news categories hidden app-wide
   tvTransition: TvTransition; // TV mode: how a set gives way to the next
+  tvQrCodes: boolean; // TV mode: QR code on wide and big news tiles
   tvAnimationSpeed: TvAnimationSpeed; // TV mode and dashboards: how fast transitions and chart animations play (fast = the original speed)
   autoRefreshFeedCooldownHours: number; // default: 4 (hours: 0, 2, 4, 6, 12, 24)
   watchlistKeywords: string[];

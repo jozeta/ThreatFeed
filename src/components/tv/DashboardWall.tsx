@@ -1,9 +1,9 @@
 import { CSSProperties, ReactNode, useRef } from 'react';
-import { useSettings } from '../../context/SettingsContext';
-import { GRIDS, Shape, Slot } from '../../services/tv/tileEngine';
+import { useTvSettings } from './useTvSettings';
+import { GRIDS, Shape } from '../../services/tv/tileEngine';
 import { useReducedMotion } from '../Common/SidePanel';
-import PageCounter from './PageCounter';
-import { useLivingWall } from './useLivingWall';
+import TvFooter from './TvFooter';
+import { keepLive, pinSlots, useLivingWall } from './useLivingWall';
 import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 
 /** One dashboard panel in the wall's pool; `render` mounts it afresh on every arrival (so its data is computed then) */
@@ -18,32 +18,28 @@ export const WIDE_SHAPES: Shape[] = ['2x1', '2x2'];
  * returns the panels that have data (asked again at every cycle); `signature` changes when data arrives late.
  */
 export default function DashboardWall({ build, signature }: { build: () => PanelDef[]; signature?: string | number }) {
-  const { settings } = useSettings();
+  const tv = useTvSettings();
   const reduced = useReducedMotion();
-  // Panels by id: every build's panels, with the on-screen copy winning for panels still on screen
+  // Panels by id: the latest build's panels, plus kept ones the live wall still references that it lacks
   const panelsById = useRef(new Map<string, PanelDef>());
-  const onScreen = useRef<Slot[]>([]);
+  // What each slot on screen shows, by slot key: fixed when it first renders, so a refill never changes a panel mid-show
+  const pins = useRef(new Map<string, PanelDef>());
 
-  const size = settings.tvTileSize;
+  const size = tv.size;
   const { slots, leaving, label } = useLivingWall(
-    () => {
+    (_full, live) => {
       const panels = build();
-      const next = new Map(panels.map(p => [p.id, p]));
-      // Panels on screen keep their content until they swap out
-      for (const s of onScreen.current) {
-        const p = panelsById.current.get(s.itemId);
-        if (p) next.set(p.id, p);
-      }
-      panelsById.current = next;
+      // `live` is the wall's state now, which can be ahead of the last render
+      panelsById.current = keepLive(new Map(panels.map(p => [p.id, p])), panelsById.current, live);
       return panels.map(({ id, weight, shapes }) => ({ id, weight, shapes }));
     },
     size,
-    settings.tvIntervalSeconds * 1000,
-    { signature, outMs: wallOutMs(reduced, settings.tvTransition, settings.tvAnimationSpeed) }
+    tv.intervalSeconds * 1000,
+    { signature, outMs: wallOutMs(reduced, tv.transition, tv.speed) }
   );
-  onScreen.current = slots;
 
-  const shown = slots.filter(s => panelsById.current.has(s.itemId));
+  pins.current = pinSlots(pins.current, slots, panelsById.current);
+  const shown = slots.filter(s => pins.current.has(s.key));
   if (shown.length === 0) {
     return (
       <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: 'clamp(1.5rem, 3vw, 4rem)', color: '#7d8a9a' }}>
@@ -53,14 +49,14 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
   }
 
   const grid = GRIDS[size];
-  const transition = wallTransition(reduced, settings.tvTransition);
+  const transition = wallTransition(reduced, tv.transition);
   return (
     <>
       <div
         className="tv-wall tv-dash-wall"
         data-size={size}
         data-transition={transition}
-        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[settings.tvAnimationSpeed] } as CSSProperties}
+        style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, ['--k' as string]: SPEED_FACTOR[tv.speed] } as CSSProperties}
       >
         {shown.map(s => (
           <div
@@ -71,13 +67,13 @@ export default function DashboardWall({ build, signature }: { build: () => Panel
             data-leaving={leaving.has(s.key) ? '1' : undefined}
             style={{ gridColumn: `${s.col + 1} / span ${s.w}`, gridRow: `${s.row + 1} / span ${s.h}`, ['--i' as string]: s.order } as CSSProperties}
           >
-            <CellDelayContext.Provider value={cellDelayMs(transition, s.order, settings.tvAnimationSpeed)}>
-              {panelsById.current.get(s.itemId)!.render()}
+            <CellDelayContext.Provider value={cellDelayMs(transition, s.order, tv.speed)}>
+              {pins.current.get(s.key)!.render()}
             </CellDelayContext.Provider>
           </div>
         ))}
       </div>
-      <PageCounter label={label} />
+      <TvFooter label={label} />
     </>
   );
 }

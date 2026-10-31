@@ -3,7 +3,8 @@ import { act, createElement, StrictMode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineItem } from '../../services/tv/tileEngine';
-import { useLivingWall } from './useLivingWall';
+import { keepLive, pinSlots, TV_QUIET_EVENT, useLivingWall } from './useLivingWall';
+import { Slot } from '../../services/tv/tileEngine';
 
 vi.mock('../Common/SidePanel', () => ({ useReducedMotion: () => false }));
 
@@ -17,7 +18,7 @@ const items = (n: number): EngineItem[] =>
   Array.from({ length: n }, (_, i) => ({ id: `s${i}`, weight: 1, shapes: ['1x1', '2x1', '2x2'] }));
 
 let Harness: () => null;
-function mount(build: () => EngineItem[], interval = 60000, signature?: () => number) {
+function mount(build: (full: boolean, live: ReadonlySet<string>) => EngineItem[], interval = 60000, signature?: () => number) {
   Harness = function H() {
     result = useLivingWall(build, 'medium', interval, { signature: signature?.(), outMs: 450, rng: () => 0.5 });
     return null;
@@ -57,6 +58,66 @@ describe('useLivingWall', () => {
     expect(result.leaving.size).toBe(0);
     const after = result.slots.map(s => s.key);
     leaving.forEach(k => expect(after).not.toContain(k));
+  });
+
+  it('signals a quiet moment only once a swap has landed', () => {
+    const quiet = vi.fn();
+    window.addEventListener(TV_QUIET_EVENT, quiet);
+    try {
+      mount(() => items(30));
+      advance(60000);
+      expect(result.leaving.size).toBeGreaterThan(0);
+      expect(quiet).not.toHaveBeenCalled(); // mid-swap is never quiet
+      advance(450);
+      expect(quiet).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(TV_QUIET_EVENT, quiet);
+    }
+  });
+
+  it('prioritize puts the item on screen at the next due swap, without a re-render of its own', () => {
+    mount(() => items(30));
+    const before = result;
+    result.prioritize([{ id: 'hot', weight: 1, shapes: ['1x1', '2x1', '2x2'] }]);
+    expect(result).toBe(before); // no re-render
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(false);
+    advance(60000);
+    advance(450);
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(true);
+  });
+
+  it('a rebuild (size change) keeps a waiting priority item at the front', () => {
+    let size: 'medium' | 'small' = 'medium';
+    Harness = function H() {
+      result = useLivingWall(() => items(30), size, 60000, { outMs: 450, rng: () => 0.5 });
+      return null;
+    };
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    result.prioritize([{ id: 'hot', weight: 1, shapes: ['1x1', '2x1', '2x2'] }]);
+    size = 'small';
+    act(() => root.render(createElement(Harness)));
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(false);
+    advance(60000);
+    advance(450);
+    expect(result.slots.some(s => s.itemId === 'hot')).toBe(true);
+  });
+
+  it('accepts news only once the wall has settled', () => {
+    mount(() => items(30));
+    expect(result.acceptsNews()).toBe(false);
+    advance(60000);
+    advance(450);
+    expect(result.acceptsNews()).toBe(true);
+  });
+
+  it('tells build whether it starts a wall (true) or refills one (false)', () => {
+    const calls: boolean[] = [];
+    mount(full => { calls.push(full); return items(6); });
+    expect(calls[0]).toBe(true);
+    for (let i = 0; i < 20; i++) advance(60000);
+    expect(calls.slice(1)).toContain(false);
+    expect(calls.slice(1).every(c => c === false)).toBe(true);
   });
 
   it('rebuilds on a signature change before the first swap', () => {
@@ -207,6 +268,102 @@ describe('useLivingWall', () => {
     advance(450);
     expect(result.leaving.size).toBe(0);
     cellsOk(result.slots, 4, 2);
+  });
+
+  it('an overdue chain of swaps never leaves a slot without content (build gets the live item ids)', () => {
+    // Like TvWall/DashboardWall: content by id, kept for this build's items and the items the wall still holds
+    let content = new Map<string, true>();
+    let gen = 0;
+    let offset = 0; // added to the fake clock
+    Harness = function H() {
+      result = useLivingWall(
+        (_full, live) => {
+          const fresh = items(6).map(it => ({ ...it, id: `g${gen}-${it.id}` })); // every build: new ids only
+          gen++;
+          content = keepLive(new Map(fresh.map(it => [it.id, true as const])), content, live);
+          return fresh;
+        },
+        'medium', 60000, { outMs: 450, rng: () => 0.5, now: () => Date.now() + offset }
+      );
+      return null;
+    };
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    // The clock keeps jumping (a throttled screen): every slot is overdue, so swaps chain (land → fire at once → refill)
+    // inside one act, with no render in between
+    act(() => {
+      vi.advanceTimersByTime(60000);
+      for (let i = 0; i < 40; i++) {
+        offset += 10 * 60000;
+        vi.advanceTimersByTime(450);
+      }
+    });
+    expect(gen).toBeGreaterThan(2); // refills happened
+    const missing = result.slots.filter(s => !content.has(s.itemId)).map(s => s.itemId);
+    expect(missing).toEqual([]);
+  });
+
+  it('build gets the live wall\'s item ids: its slots and its queue', () => {
+    const lives: ReadonlySet<string>[] = [];
+    mount((_full, live) => { lives.push(live); return items(6); });
+    expect(lives[0].size).toBe(0); // the first build has no wall yet
+    advance(60000);
+    const on = result.slots.map(s => s.itemId);
+    const last = lives[lives.length - 1];
+    expect(lives.length).toBeGreaterThan(1);
+    on.forEach(id => expect(last.has(id)).toBe(true));
+  });
+
+  it('a stable id gets the new build\'s content after a refill once it is off screen', () => {
+    let content = new Map<string, number>(); // id → the build that made its content
+    let gen = 0;
+    mount((_full, live) => {
+      const fresh = items(12);
+      content = keepLive(new Map(fresh.map(it => [it.id, gen] as [string, number])), content, live);
+      gen++;
+      return fresh;
+    });
+    for (let i = 0; i < 30; i++) advance(60000);
+    advance(450);
+    expect(gen).toBeGreaterThan(3);
+    const on = new Set(result.slots.map(s => s.itemId));
+    const off = [...content.entries()].filter(([id]) => !on.has(id));
+    expect(off.length).toBeGreaterThan(0);
+    off.forEach(([, made]) => expect(made).toBe(gen - 1));
+  });
+
+  it('a full rebuild (size change) gives every item the new build\'s content', () => {
+    let content = new Map<string, number>();
+    let gen = 0;
+    let size: 'medium' | 'small' = 'medium';
+    Harness = function H() {
+      result = useLivingWall((_full, live) => {
+        const fresh = items(12);
+        content = keepLive(new Map(fresh.map(it => [it.id, gen] as [string, number])), content, live);
+        gen++;
+        return fresh;
+      }, size, 60000, { outMs: 450, rng: () => 0.5 });
+      return null;
+    };
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness)));
+    size = 'small';
+    act(() => root.render(createElement(Harness)));
+    result.slots.forEach(s => expect(content.get(s.itemId)).toBe(gen - 1));
+  });
+
+  it('keepLive: the new build wins; live ids it lacks keep their old content; others are dropped', () => {
+    const kept = new Map([['a', 'old-a'], ['b', 'old-b'], ['r', 'old-r']]);
+    const out = keepLive(new Map([['a', 'new-a'], ['c', 'new-c']]), kept, new Set(['a', 'r', 'z']));
+    expect(Object.fromEntries(out)).toEqual({ a: 'new-a', c: 'new-c', r: 'old-r' });
+  });
+
+  it('pinSlots: a slot keeps what it first showed; a new slot takes its item\'s current content', () => {
+    const slot = (key: string, itemId: string) => ({ key, itemId } as Slot);
+    const pins = new Map([['k1', 'old-a'], ['gone', 'old-x']]);
+    const content = new Map([['a', 'new-a'], ['b', 'new-b']]);
+    const out = pinSlots(pins, [slot('k1', 'a'), slot('k2', 'a'), slot('k3', 'b'), slot('k4', 'missing')], content);
+    expect(Object.fromEntries(out)).toEqual({ k1: 'old-a', k2: 'new-a', k3: 'new-b' });
   });
 
   it('runs two hours with refills and always one timer', () => {

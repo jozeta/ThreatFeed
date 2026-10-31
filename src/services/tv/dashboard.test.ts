@@ -193,8 +193,13 @@ describe('ransomExtras', () => {
     expect(withStats[4]).toEqual({ week: '2026-08-31', count: 1 });
     expect(withStats[5]).toEqual({ week: '2026-09-07', count: 0 });
   });
+  it('countries7d sums by country over 7 days and excludes older victims', () => {
+    const v = [vic('1', H, { country: 'US' }), vic('2', 2 * H, { country: 'US' }), vic('3', 3 * D, { country: 'DE' }), vic('4', 10 * D, { country: 'DE' }), vic('5', H)];
+    expect(ransomExtras(v, null, now).countries7d).toEqual({ US: 2, DE: 1 });
+  });
   it('accepts empty', () => {
     const r = ransomExtras([], null, now);
+    expect(r.countries7d).toEqual({});
     expect(r.weekly90.every(w => w.count === 0)).toBe(true);
     expect(r.spotlight).toBeNull();
     expect(r.newGroups).toEqual([]);

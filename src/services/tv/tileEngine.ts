@@ -19,8 +19,8 @@ export interface Slot {
   arrivedAt: number; dueAt: number;
   order: number; // position within the arrival batch, for staggered reveal
 }
-/** A queue entry; `used` once it has arrived on screen this cycle. */
-export interface QueueEntry { item: EngineItem; page: number; used: boolean }
+/** A queue entry; `used` once it has arrived on screen this cycle; `priority` for a breaking item that takes the next due tile. */
+export interface QueueEntry { item: EngineItem; page: number; used: boolean; priority?: boolean }
 export interface WallState {
   size: TvTileSize; fallback: boolean;
   queue: QueueEntry[]; cursor: number; // first unused queue position
@@ -192,6 +192,12 @@ function joined(a: Rect, b: Rect): Rect | null {
 
 interface Move { weight: number; leaving: Slot[]; rects: Rect[]; picks: number[] }
 
+/** Unused priority entries behind the first one: they wait for later swaps, so at most one arrives per swap. */
+function held(queue: QueueEntry[]): Set<string> {
+  const ids = queue.filter(q => !q.used && q.priority).map(q => q.item.id);
+  return new Set(ids.slice(1));
+}
+
 /**
  * Moves for `slot` that bring in queue items: replace, split (a filler may complete it), merge. With `now` null, merges
  * ignore the neighbour's age (used to tell a stuck wall from one that is only waiting).
@@ -199,9 +205,10 @@ interface Move { weight: number; leaving: Slot[]; rects: Rect[]; picks: number[]
 function moves(state: WallState, slot: Slot, now: number | null): Move[] {
   const g = GRIDS[state.size];
   const out: Move[] = [];
+  const waiting = held(state.queue);
   const consider = (weight: number, leaving: Slot[], rects: Rect[]) => {
     if (rects.some(r => !g.shapes.includes(shapeOf(r)))) return;
-    const onScreen = new Set(state.slots.filter(t => !leaving.includes(t)).map(t => t.itemId));
+    const onScreen = new Set([...waiting, ...state.slots.filter(t => !leaving.includes(t)).map(t => t.itemId)]);
     const picks = assign(state.queue, state.cursor, rects, onScreen) ?? (rects.length > 1 ? assign(state.queue, state.cursor, rects, onScreen, true) : null);
     if (picks) out.push({ weight, leaving, rects, picks });
   };
@@ -238,12 +245,55 @@ export function planSwap(state: WallState, slotKey: string, now: number, interva
     const i = state.queue.findIndex((q, i) => i >= state.cursor && !q.used && !onScreen.has(q.item.id));
     return i < 0 ? again() : { leaving: [slot.key], arriving: [arrive(rectOf(slot), i, 0)] };
   }
+  const urgent = prioritySwap(state, slot, arrive, rng);
+  if (urgent) return urgent;
   const options = moves(state, slot, now);
   if (!options.length) return again();
   let r = rng() * options.reduce((s, o) => s + o.weight, 0);
   const op = options.find(o => (r -= o.weight) < 0) ?? options[options.length - 1];
   const order = op.rects.map((_, i) => i).sort((a, b) => readingOrder(op.rects[a], op.rects[b]));
   return { leaving: op.leaving.map(t => t.key), arriving: order.map((i, n) => arrive(op.rects[i], op.picks[i], n)) };
+}
+
+/**
+ * The swap for the first priority entry at `slot`, or null when there is none or it cannot go there: a due single merges
+ * with one single neighbour into a wide tile (whatever that neighbour's age) while the count may drop, otherwise the
+ * item takes the due tile's own shape.
+ */
+function prioritySwap(state: WallState, slot: Slot, arrive: (rect: Rect, i: number, n: number) => Slot, rng: Rng): Swap | null {
+  const i = state.queue.findIndex(q => !q.used && q.priority);
+  if (i < 0) return null;
+  const { item } = state.queue[i];
+  const others = state.slots.filter(t => t.key !== slot.key);
+  if (others.some(t => t.itemId === item.id)) return null;
+  const g = GRIDS[state.size];
+  const fits = (r: Rect) => g.shapes.includes(shapeOf(r)) && item.shapes.includes(shapeOf(r));
+  if (slot.w === 1 && slot.h === 1 && state.slots.length - 1 >= g.min) {
+    const merges = others.flatMap(mate => {
+      const rect = joined(slot, mate);
+      return rect && fits(rect) ? [{ mate, rect }] : [];
+    });
+    if (merges.length) {
+      const { mate, rect } = merges[Math.min(merges.length - 1, Math.floor(rng() * merges.length))];
+      return { leaving: [slot.key, mate.key], arriving: [arrive(rect, i, 0)] };
+    }
+  }
+  return fits(rectOf(slot)) ? { leaving: [slot.key], arriving: [arrive(rectOf(slot), i, 0)] } : null;
+}
+
+/**
+ * Puts `item` at the front of the unused queue (behind earlier priority items, so they arrive in order) as a priority
+ * entry, dropping any older unused copy. Its page is the current one. An item already on screen is not queued (it would
+ * only hold back later priority items and the refill until its slot comes due); the state is returned unchanged.
+ */
+export function prioritize(state: WallState, item: EngineItem): WallState {
+  if (state.slots.some(t => t.itemId === item.id)) return state;
+  const queue = state.queue.filter(q => q.used || q.item.id !== item.id).map(q => ({ ...q }));
+  let at = firstUnused(queue);
+  const page = queue[at]?.page ?? queue[queue.length - 1]?.page ?? 0;
+  for (let j = at; j < queue.length; j++) if (!queue[j].used && queue[j].priority) at = j + 1;
+  queue.splice(at, 0, { item, page, used: false, priority: true });
+  return { ...state, queue, cursor: firstUnused(queue) };
 }
 
 export function applySwap(state: WallState, swap: Swap): WallState {

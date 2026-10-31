@@ -1,5 +1,5 @@
 // ThreatFeed Service Worker for Offline First / Caching
-const CACHE_NAME = 'threatfeed-v4';
+const CACHE_NAME = 'threatfeed-v5'; // v5: drops the TV version-check copies v4 kept (index.html?v=…)
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -90,6 +90,10 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
+
+  // Asked for fresh on purpose (the TV screens' version check, index.html?v=<time>): the network only, and never
+  // cached, so each check doesn't leave another copy in Cache Storage
+  if (event.request.cache === 'no-store' || (url.search && url.pathname.endsWith('/index.html'))) return;
 
   // Vite's build output has a content hash in every file name, so a cached copy is always correct
   if (url.pathname.includes('/assets/')) {

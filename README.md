@@ -164,7 +164,11 @@ Every article is enriched in the browser while its feed is parsed, and the resul
   - The **Page x of y** counter at the bottom right counts pages of stories. After the last page it starts over with fresh news.
 - **Dashboard mode**: a figures-first view for screens, opened with the **Dashboard** button on those pages. Its panels swap the same way as the TV wall, with their own page counter. Numbers count up, bars grow and chart lines draw in. Panels without data are skipped, and history charts fill in over time.
   - **Vulns**: Critical CVEs 7 d, Added to KEV 7 d, Public exploits 7 d, Patch Tuesday, Exploited right now, 90-day trend, Watchlist (your "My stack" vendors from the last 30 days plus your followed CVEs), Top vendors 7 d, Latest critical CVEs, Patch Tuesday breakdown, CVSS spread, KEV used by ransomware.
-  - **Ransomware**: Victims 24 h, Victims 7 d, Active groups, Most hit sector, Top groups, Victims per day 30 d, Top countries, Latest victims, Top sectors, New groups this week, Group spotlight, Victims by weekday, Victims 90 days (weekly).
+  - **Ransomware**: Victims 24 h, Victims 7 d, Active groups, Most hit sector, Top groups, Victims per day 30 d, Top countries, Latest victims, Top sectors, New groups this week, Group spotlight, Victims by weekday, Victims 90 days (weekly). **Victims by country · 7 days** is a world map (map data from Natural Earth, public domain).
+- **Updated indicator**: the page counter on every TV and dashboard screen shows when the data was last refreshed, e.g. **Updated 14:05**. It turns amber after 1 hour without fresh data, and red ("Data may be out of date") after 3 hours.
+- **Automatic reload**: a TV or dashboard screen checks every 30 minutes for a new version of the site and reloads at a quiet moment, right after a tile swap. It also reloads once a night at 03:00. It never reloads more than once per 10 minutes, and an offline screen does not reload. The link and its settings are kept across reloads. If a cache (a CDN or the browser) still serves the old page right after a deploy, the reload can land on the old version; the screen then stays on it until the nightly reload.
+- **Breaking news**: a story that arrives while the screen is running, is less than an hour old, and is critical or mentions a CVE added to CISA KEV in the last 24 hours takes the next tile that changes, as a big tile with a red **NEW** badge for one round. Ransomware victims are never breaking. Nothing counts as breaking until the screen's own startup load has finished.
+- **Mixed mode**: the Latest news wall with the Vulns numbers (Critical CVEs 7 d, Added to KEV 7 d, Public exploits 7 d, Patch Tuesday) mixed in, about one tile in four. Start it with the **TV+** button on Latest, or open `#/latest?tv=1&mix=1`.
 - **Kiosk URLs** (prefix with `https://jozeta.github.io/ThreatFeed/`):
   - `#/latest?tv=1`, `#/briefing?tv=1`, `#/ransomware?tv=1`: TV mode
   - `#/vulns?dash=1`, `#/ransomware?dash=1`: dashboard mode
@@ -175,6 +179,8 @@ Every article is enriched in the browser while its feed is parsed, and the resul
   - **Interval**: 30 s to 5 min in 30 s steps (default 1 min). Each tile varies by up to ±20 s, less at 30 s so nothing stays under 20 s.
   - **Transition**: **Fade**, **Slide** or **Reveal** (default Reveal, which pops tiles in one by one). Reduce motion gives a quick plain fade.
   - **Animation speed**: **Slow**, **Medium** or **Fast** (default, the original speed). Slows down tile transitions and the dashboards' count-ups, growing bars, drawn lines and list rows alike (Medium 1.5×, Slow 2.25× as long). The time each tile stays up is still the interval, and Reduce motion overrides the speed.
+  - **QR codes on tiles** (off by default): a QR code in the corner of wide and big news tiles that opens the story.
+- **Per-screen link settings**: a TV or dashboard link can set `size=large|medium|small|xsmall`, `speed=slow|medium|fast`, `transition=fade|slide|reveal`, `interval=<seconds>` (snapped to 30 s steps), `qr=1|0`, and `mix=1` (Latest only). They apply to that screen only and never change saved settings. Example kiosk link: `https://jozeta.github.io/ThreatFeed/#/latest?tv=1&mix=1&size=small&speed=slow&qr=1`
 - **Trend history**: dashboard trends are built from `stats.json` (see [Feed Snapshot](#-feed-snapshot--cve-intelligence)), so they fill in over the coming weeks. "vs last week" figures stay hidden until there is history to compare against.
 
 ---
@@ -213,6 +219,9 @@ npm test
 
 # Build public/data/snapshot.json locally (all default feeds + KEV/EPSS data)
 npm run snapshot
+
+# Regenerate public/data/world-map.json (country outlines for the ransomware world-map panel)
+npm run world-map
 ```
 
 Without a local snapshot, the dev server falls back to fetching feeds live through the configured CORS gateway.
