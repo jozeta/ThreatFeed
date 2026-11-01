@@ -37,3 +37,15 @@ public/data/entities.json
 
 # Brainstorming companion mockups
 .superpowers/
+
+# --- Baseline: macOS, Claude Code and secrets ---
+._*
+.claude/settings.local.json
+.remember/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
