@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, StrictMode } from 'react';
 import { createRoot, Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { CHECK_EVERY_MS, QUIET_WAIT_MS, RELOAD_KEY, useAutoReload } from './useAutoReload';
 
 const SETTLE = 1500; // the arriving tiles' in-animation, passed by the shell
@@ -11,7 +11,7 @@ import { TV_QUIET_EVENT } from './useLivingWall';
 
 const MIN = 60_000;
 let root: Root;
-let reload: ReturnType<typeof vi.fn>;
+let reload: Mock<() => void>;
 let fetchMock: ReturnType<typeof vi.fn>;
 let script: HTMLScriptElement | null = null;
 
@@ -37,7 +37,7 @@ const quietSettled = async () => { quiet(); await advance(SETTLE); };
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 9, 31, 12, 0));
-  reload = vi.fn();
+  reload = vi.fn<() => void>();
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   sessionStorage.clear();
