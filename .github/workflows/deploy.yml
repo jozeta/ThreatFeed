@@ -30,12 +30,12 @@ jobs:
       - run: npm ci
       - run: npm test
       # A second copy of the trends history (the published trends.json is the first), for runs that can't read it
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         with:
           path: .cache/trends.json
           key: trends-${{ github.run_id }}
           restore-keys: trends-
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         with:
           path: .cache/stats.json
           key: stats-${{ github.run_id }}
@@ -126,7 +126,7 @@ jobs:
         run: mkdir -p .cache && cp public/data/trends.json .cache/trends.json
       # One cache entry per run is expected: restore picks the newest (trends- prefix) and GitHub evicts
       # entries not used for 7 days, so they don't pile up
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: hashFiles('public/data/trends.json') != ''
         with:
           path: .cache/trends.json
@@ -134,7 +134,7 @@ jobs:
       - name: Copy the stats history for the cache
         if: hashFiles('public/data/stats.json') != ''
         run: mkdir -p .cache && cp public/data/stats.json .cache/stats.json
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: hashFiles('public/data/stats.json') != ''
         with:
           path: .cache/stats.json
