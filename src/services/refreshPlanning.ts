@@ -16,6 +16,20 @@ export function isRefreshDue(lastRefreshStartedAt: number, now: number, interval
 }
 
 /**
+ * True when a hidden tab should skip the auto-refresh. A tab that can send desktop notifications keeps
+ * refreshing: alert checks run on that tab's in-memory data, so pausing it would silence them.
+ */
+export function shouldPauseWhenHidden(
+  hidden: boolean,
+  notificationPermission: NotificationPermission | undefined,
+  rules: ReadonlyArray<{ enabled: boolean; notify: boolean }>
+): boolean {
+  if (!hidden) return false;
+  const canNotify = notificationPermission === 'granted' && rules.some(r => r.enabled && r.notify);
+  return !canNotify;
+}
+
+/**
  * Feed ids requested while a refresh was running. They are fetched in one follow-up refresh
  * once the running one ends.
  */

@@ -24,7 +24,8 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
-import { isRefreshDue, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
+import { bookmarkedFirst } from '../services/articles/merge';
+import { isRefreshDue, shouldPauseWhenHidden, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
 import { feedsInUse, inUse, withoutDisabledCategories } from '../services/articles/categories';
 import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
@@ -242,7 +243,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isFirstRun = cachedArticles.length === 0;
       const newSeeds = seeds.filter(s => !keptIds.has(s.id) && (isFirstRun || isKept(s)));
       if (newSeeds.length > 0) {
-        storedArticles = deduplicateArticles([...storedArticles, ...newSeeds]);
+        storedArticles = deduplicateArticles(bookmarkedFirst([...storedArticles, ...newSeeds]));
         const addedIds = new Set(storedArticles.map(a => a.id));
         await saveArticlesToDB(newSeeds.filter(s => addedIds.has(s.id)));
       }
@@ -503,8 +504,10 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (settings.autoRefreshMinutes <= 0) return;
 
     const tick = () => {
-      // Background tabs don't refresh; the visibilitychange handler catches up when the tab returns
-      if (!navigator.onLine || document.hidden) return;
+      // Background tabs don't refresh (unless they can send alert notifications); the visibilitychange
+      // handler catches up when the tab returns
+      const notificationPermission = 'Notification' in window ? Notification.permission : undefined;
+      if (!navigator.onLine || shouldPauseWhenHidden(document.hidden, notificationPermission, settingsRef.current.alertRules ?? [])) return;
       // Snapshot mode: reload the (regularly rebuilt) snapshot; only feeds it lacks are fetched live
       if (settingsRef.current.dataSource !== 'live') {
         refreshFeedsInternal(feedsRef.current, undefined, { useSnapshot: true, skipBackedOff: true });
@@ -609,7 +612,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const defaultFeeds: Feed[] = data.feeds || [];
         setFeeds(defaultFeeds);
         await saveFeedsToDB(defaultFeeds);
-        refreshFeedsInternal(defaultFeeds);
+        refreshFeedsInternal(defaultFeeds, undefined, { queueIfBusy: true });
       }
     } catch (err) {
       console.error('Failed to reset feeds:', err);

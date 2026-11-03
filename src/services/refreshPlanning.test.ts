@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRefreshDue, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from './refreshPlanning';
+import { isRefreshDue, shouldPauseWhenHidden, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from './refreshPlanning';
 
 describe('snapshotApplyKey / shouldApplySnapshot', () => {
   it('is independent of feed order and duplicates', () => {
@@ -60,5 +60,22 @@ describe('PendingFeedQueue follow-up flow', () => {
     // Requests arriving after the drain belong to the next follow-up
     q.add(['custom-4']);
     expect(q.drain()).toEqual(['custom-4']);
+  });
+});
+
+describe('shouldPauseWhenHidden', () => {
+  const notifying = [{ enabled: true, notify: true }];
+  it('never pauses a visible tab', () => {
+    expect(shouldPauseWhenHidden(false, 'default', [])).toBe(false);
+  });
+  it('pauses a hidden tab that cannot notify', () => {
+    expect(shouldPauseWhenHidden(true, undefined, notifying)).toBe(true);
+    expect(shouldPauseWhenHidden(true, 'default', notifying)).toBe(true);
+    expect(shouldPauseWhenHidden(true, 'denied', notifying)).toBe(true);
+    expect(shouldPauseWhenHidden(true, 'granted', [])).toBe(true);
+    expect(shouldPauseWhenHidden(true, 'granted', [{ enabled: true, notify: false }, { enabled: false, notify: true }])).toBe(true);
+  });
+  it('keeps a hidden tab refreshing when permission is granted and an enabled rule notifies', () => {
+    expect(shouldPauseWhenHidden(true, 'granted', [{ enabled: false, notify: false }, ...notifying])).toBe(false);
   });
 });
