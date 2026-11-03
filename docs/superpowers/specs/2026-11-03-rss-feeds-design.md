@@ -147,7 +147,7 @@ keeps a **published-items ledger**, `data/feeds/seen.json`, separate from the fe
 
 - It maps every guid ever published (and every baseline exploit, see below) to its first-seen time,
   plus, for news, the member article ids and normalized URLs of the story's cluster. Entries are
-  kept **90 days** after first seen, then pruned. That is far beyond any source's look-back, so an
+  kept until **90 days** after they were last seen in the data, then pruned. That is far beyond any source's look-back, so an
   aged-out item can't return.
 - Each run reads the published `seen.json` (like the other `PREVIOUS_*` files) and writes the
   updated one. The feeds themselves are rebuilt from the ledger plus this run's data.
