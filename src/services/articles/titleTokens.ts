@@ -1,17 +1,20 @@
 // Letters and digits in any script (the `u` flag matters: plain \w is ASCII-only).
-const CJK = '\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}';
+// Script_Extensions (scx) so the prolonged sound mark ー and the iteration mark 々 stay inside their run.
+const CJK = '\\p{scx=Han}\\p{scx=Hiragana}\\p{scx=Katakana}\\p{scx=Hangul}';
 const CJK_RUN = new RegExp(`[${CJK}]+|[^${CJK}]+`, 'gu');
 const HAS_CJK = new RegExp(`[${CJK}]`, 'u');
+
+export const hasCjk = (token: string): boolean => HAS_CJK.test(token);
 
 /**
  * Splits one whitespace-free word into comparison tokens. Scripts written without spaces
  * (Chinese, Japanese, Korean) become character bigrams of each run; everything else stays one word.
  */
 export function wordTokens(word: string): string[] {
-  if (!HAS_CJK.test(word)) return [word];
+  if (!hasCjk(word)) return [word];
   const out: string[] = [];
   for (const run of word.match(CJK_RUN) ?? []) {
-    if (!HAS_CJK.test(run)) {
+    if (!hasCjk(run)) {
       out.push(run);
       continue;
     }

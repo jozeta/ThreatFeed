@@ -8,7 +8,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function cleanTitleForComparison(title: string): string {
   return title
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

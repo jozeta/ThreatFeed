@@ -1,5 +1,5 @@
 import { Article, StoryCluster } from '../../types';
-import { MIN_COMPARABLE_TOKENS, wordTokens } from './titleTokens';
+import { MIN_COMPARABLE_TOKENS, hasCjk, wordTokens } from './titleTokens';
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from',
@@ -10,10 +10,11 @@ const STOP_WORDS = new Set([
 function extractSignificantTokens(text: string): Set<string> {
   const words = text
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
-    .filter(w => w.length > 2 && !STOP_WORDS.has(w))
-    .flatMap(wordTokens);
+    .flatMap(wordTokens)
+    // Two-character CJK bigrams are real tokens; only Latin-style words need the length floor
+    .filter(w => (w.length > 2 || hasCjk(w)) && !STOP_WORDS.has(w));
   return new Set(words);
 }
 

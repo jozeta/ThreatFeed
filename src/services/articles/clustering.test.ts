@@ -51,4 +51,12 @@ describe('clusterArticles with non-Latin titles', () => {
   it('keeps accented Swedish words whole', () => {
     expect(sizes(['Sårbarhet utnyttjas aktivt', 'Sårbarhet utnyttjas aktivt idag'])).toEqual([2]);
   });
+
+  it('does not merge katakana stories that share only ー', () => {
+    expect(sizes(['サーバー攻撃の急増', 'ユーザー情報の流出'])).toEqual([1, 1]);
+  });
+
+  it('counts two-character CJK words as tokens', () => {
+    expect(sizes(['Ivanti 悪用 確認', 'Citrix 悪用 確認'])).toEqual([2]);
+  });
 });

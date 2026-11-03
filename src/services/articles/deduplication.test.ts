@@ -62,3 +62,18 @@ describe('deduplicateArticles', () => {
     expect(ids(out)).toEqual(['1']);
   });
 });
+
+describe('deduplicateArticles with long-vowel marks and combining marks', () => {
+  it('keeps different katakana stories that share only ー', () => {
+    const out = deduplicateArticles([a('1', 'サーバー攻撃の急増'), a('2', 'ユーザー情報の流出')]);
+    expect(ids(out)).toEqual(['1', '2']);
+  });
+
+  it('keeps combining marks, so a decomposed accent is not silently dropped', () => {
+    const out = deduplicateArticles([
+      a('1', 'Sa\u030Arbarhet i Ivanti utnyttjas aktivt'),
+      a('2', 'Sarbarhet i Ivanti utnyttjas aktivt'),
+    ]);
+    expect(ids(out)).toEqual(['1', '2']);
+  });
+});
