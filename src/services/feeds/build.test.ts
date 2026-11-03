@@ -59,12 +59,14 @@ describe('buildFeeds', () => {
   });
 
   it("keeps a news story's guid when its lead article changes", () => {
-    // A is old enough that its pubDate is its first-seen time; C arrives after run 1
-    const a = article('A', { severity: 'critical', severityScore: 80, publishedAt: iso(now - 2 * day) });
+    // A's source time is 2 h before first seen, so it is the pubDate; C's later time must not move it
+    const a = article('A', { severity: 'critical', severityScore: 80, publishedAt: iso(now - 2 * hour) });
     const b = article('B', { title: 'Hackers exploit Fortinet firewall zero-day flaw attacks', severity: 'high', severityScore: 60 });
     const run1 = buildFeeds(input({ articles: [a, b] }), null, now, site);
     const first = items(run1.files.news);
     expect(first.map((i) => i.guid)).toEqual(['news:A']);
+    expect(first[0].pubDate).toBe(new Date(now - 2 * hour).toUTCString());
+    expect(run1.ledger.feeds.news['news:A'].pubDate).toBe(iso(now - 2 * hour));
 
     const c = article('C', {
       title: 'Hackers exploit Fortinet firewall zero-day flaw warns', severity: 'critical', severityScore: 95,
@@ -75,8 +77,20 @@ describe('buildFeeds', () => {
     expect(second).toHaveLength(1);
     expect(second[0].guid).toBe('news:A');
     expect(second[0].pubDate).toBe(first[0].pubDate);
+    expect(run2.ledger.feeds.news['news:A'].pubDate).toBe(iso(now - 2 * hour));
     expect(second[0].description).toContain('2 other outlets');
     expect(second[0].description).toContain('https://example.com/C');
+  });
+
+  it('falls back to pickPubDate for entries without a stored pubDate, then stores it', () => {
+    const v = victim('W', now - 2 * hour);
+    const previous: FeedLedger = {
+      version: 1,
+      feeds: { news: {}, vulns: {}, ransomware: { 'victim:W': { firstSeen: iso(now - hour), lastSeen: iso(now - hour), published: true, keys: [] } } },
+    };
+    const run = buildFeeds(input({ victims: [v] }), previous, now, site);
+    expect(items(run.files.ransomware)[0].pubDate).toBe(new Date(now - 2 * hour).toUTCString());
+    expect(run.ledger.feeds.ransomware['victim:W'].pubDate).toBe(iso(now - 2 * hour));
   });
 
   it('one item per CVE across kev and critical-cve', () => {

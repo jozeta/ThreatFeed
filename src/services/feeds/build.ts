@@ -60,9 +60,12 @@ function assemble(
   const items: RssItem[] = [];
   const render = (c: FeedCandidate, guid: string, entry: LedgerEntry) => {
     rendered.add(guid);
+    // Fixed on first render, so a later lead article with another source time can't move it.
+    // Entries from before pubDate was stored get it here.
+    entry.pubDate ??= pickPubDate(c.sourceTime, entry.firstSeen);
     items.push({
       guid, title: c.title, description: c.description, link: c.link, categories: c.categories,
-      pubDate: pickPubDate(c.sourceTime, entry.firstSeen),
+      pubDate: entry.pubDate,
     });
   };
 

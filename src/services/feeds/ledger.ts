@@ -6,6 +6,7 @@ export interface LedgerEntry {
   lastSeen: string; // ISO 8601
   published: boolean; // false for a first-run baseline exploit
   keys: string[];
+  pubDate?: string; // ISO 8601, fixed when the item is first published
 }
 
 /** The published-items ledger (`data/feeds/seen.json`), keyed by feed and then guid. */
@@ -28,10 +29,13 @@ export function emptyLedger(): FeedLedger {
 
 function decodeEntry(raw: unknown): LedgerEntry | null {
   if (!isObject(raw)) return null;
-  const { firstSeen, lastSeen, published, keys } = raw;
+  const { firstSeen, lastSeen, published, keys, pubDate } = raw;
   if (!isTime(firstSeen) || !isTime(lastSeen) || typeof published !== 'boolean') return null;
   if (!Array.isArray(keys) || !keys.every((k) => typeof k === 'string')) return null;
-  return { firstSeen, lastSeen, published, keys: [...keys] };
+  const entry: LedgerEntry = { firstSeen, lastSeen, published, keys: [...keys] };
+  // A malformed pubDate is dropped; the entry falls back to pickPubDate
+  if (isTime(pubDate)) entry.pubDate = pubDate;
+  return entry;
 }
 
 /** Validates a ledger read from JSON. Null when it is malformed; malformed entries are dropped. */

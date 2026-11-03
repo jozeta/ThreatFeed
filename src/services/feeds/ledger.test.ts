@@ -21,6 +21,17 @@ describe('feed ledger', () => {
     expect(decoded!.feeds.news).toEqual({});
   });
 
+  it('decodeLedger keeps pubDate when valid and drops it when malformed', () => {
+    const base = { firstSeen: iso(now), lastSeen: iso(now), published: true, keys: [] };
+    const decoded = decodeLedger({
+      version: 1,
+      feeds: { news: { 'news:a': { ...base, pubDate: iso(now - hour) }, 'news:b': { ...base, pubDate: 42 }, 'news:c': base } },
+    });
+    expect(decoded!.feeds.news['news:a'].pubDate).toBe(iso(now - hour));
+    expect(decoded!.feeds.news['news:b']).toEqual(base);
+    expect(decoded!.feeds.news['news:c']).toEqual(base);
+  });
+
   it('pruneLedger drops entries unseen for 90 days', () => {
     const ledger = emptyLedger();
     const entry = (d: number) => ({ firstSeen: iso(now - 100 * day), lastSeen: iso(now - d * day), published: true, keys: [] });
