@@ -390,14 +390,15 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const covered = new Set(feedsToFetch.filter(f => f.enabled && snapshot.feedHealth[f.id]?.status === 'healthy').map(f => f.id));
             // An unchanged snapshot for the same feeds would only rewrite what is already stored
             const applyKey = snapshotApplyKey(snapshot.generatedAt, covered);
+            // Cheap in-memory state, set even when the snapshot is not re-applied (lastUpdated is not restored on load)
+            setLastUpdated(new Date(snapshot.generatedAt));
+            setSnapshotGeneratedAt(snapshot.generatedAt);
             if (shouldApplySnapshot(applyKey, appliedSnapshotKeyRef.current)) {
               await applyCveIntel(snapshot.cveIntel);
               const healths = [...covered].map(id => snapshot.feedHealth[id]);
               setFeedHealth(prev => ({ ...prev, ...Object.fromEntries(healths.map(h => [h.feedId, h])) }));
               for (const h of healths) await saveFeedHealthToDB(h);
               await applyFetched(snapshot.articles.filter(a => covered.has(a.sourceId)));
-              setLastUpdated(new Date(snapshot.generatedAt));
-              setSnapshotGeneratedAt(snapshot.generatedAt);
               await saveStoredValue('snapshotGeneratedAt', snapshot.generatedAt);
               if (snapshot.incidents) {
                 setIncidents(snapshot.incidents);
