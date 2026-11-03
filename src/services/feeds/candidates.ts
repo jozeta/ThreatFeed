@@ -22,7 +22,7 @@ export interface FeedCandidate {
 
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_DESCRIPTION = 400;
-const KEV_SOURCE = 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog';
+const KEV_SOURCE = 'CISA KEV https://www.cisa.gov/known-exploited-vulnerabilities-catalog';
 
 const inWindow = (iso: string | undefined, now: number): boolean => {
   const t = iso ? Date.parse(iso) : NaN;
@@ -43,15 +43,21 @@ export function normalizeUrl(url: string): string {
   }
 }
 
+const clip = (text: string, max: number): string =>
+  text.length <= max ? text : max <= 0 ? '' : `${text.slice(0, max - 1).trimEnd()}…`;
+
 /**
- * Joins a summary, an optional middle part and the Source line. When the result is over 400
- * characters the summary is trimmed; the Source line always stays whole.
+ * Joins a summary, an optional middle part and the Source line, at most 400 characters in all.
+ * Too long: the summary shrinks first, then the middle part, and only as a last resort the source.
  */
 function describe(summary: string | undefined, rawMax: number, extra: string, source: string): string {
-  const tail = `${extra}${source ? ` Source: ${source}` : ''}`;
-  const max = Math.min(rawMax, Math.max(0, MAX_DESCRIPTION - tail.length - 1));
-  const head = max > 0 ? plainText(summary, max) : '';
-  return head ? `${head}${tail}` : tail.trim();
+  const prefix = ' Source: ';
+  let src = source ? `${prefix}${source}` : '';
+  if (src.length > MAX_DESCRIPTION) src = `${prefix}${clip(source, MAX_DESCRIPTION - prefix.length)}`;
+  const mid = clip(extra, MAX_DESCRIPTION - src.length);
+  const room = Math.min(rawMax, MAX_DESCRIPTION - src.length - mid.length - 1);
+  const head = room > 0 ? plainText(summary, room) : '';
+  return `${head}${mid}${src}`.trim();
 }
 
 function newsFrom(articles: Article[], feed: FeedName, requireSevere: boolean, now: number, site: string): FeedCandidate[] {

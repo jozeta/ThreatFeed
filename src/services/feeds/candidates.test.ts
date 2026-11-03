@@ -120,6 +120,18 @@ describe('feed candidates', () => {
     }
   });
 
+  it('keeps descriptions within 400 characters with very long urls and names', () => {
+    const url = `https://example.com/p?${'utm_x=1&'.repeat(70)}`;
+    const news = newsCandidates([article('u', { url, severity: 'high', severityScore: 80, description: 'Some summary' })], now, site);
+    const longKev = vulnCandidates({ ...vulns, kev: [{ ...kev, name: 'Very long name '.repeat(60) }] }, null, now, site)
+      .find((c) => c.kind === 'kev')!;
+    for (const c of [...news, longKev]) {
+      expect(c.description.length).toBeLessThanOrEqual(400);
+      expect(c.description).toContain('Source: ');
+    }
+    expect(longKev.description).toContain('Source: CISA KEV https://www.cisa.gov');
+  });
+
   it('normalizes urls', () => {
     expect(normalizeUrl('https://Example.COM/a/?utm_source=x&id=1#top')).toBe('https://example.com/a/?id=1');
     expect(normalizeUrl('https://example.com/a/')).toBe('https://example.com/a');
