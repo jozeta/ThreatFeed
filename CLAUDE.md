@@ -29,7 +29,8 @@ minutes** and on push to `main`: test → snapshot → build → deploy to Pages
 
 - **No backend.** The only server-side work is the scheduled GitHub Action that builds static data
   files (`snapshot.json`, `vulns.json`, `ransomware.json`, `nvd-cache.json`, `msrc.json`,
-  `actors.json`, `entities.json`). Several read their previous published copy so NVD/MSRC are
+  `actors.json`, `entities.json`, the RSS feeds `data/feeds/*.xml` and `data/feeds/seen.json`, the
+  published-items ledger). Several read their previous published copy so NVD/MSRC are
   fetched incrementally.
 - In the browser, feeds not covered by the snapshot are fetched by 6 workers through a fetch-mode
   chain (CORSFix → direct → RSS2JSON by default; custom proxy with `%s`). Shared per-proxy pacing:

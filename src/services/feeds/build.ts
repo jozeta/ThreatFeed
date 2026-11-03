@@ -23,7 +23,7 @@ const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** A rendered item plus its candidate's rank, which breaks pubDate ties in the final order. */
 type RankedItem = RssItem & { rank: number };
 
-const CHANNELS: Record<FeedName, { title: string; description: string }> = {
+export const CHANNELS: Record<FeedName, { title: string; description: string }> = {
   news: {
     title: 'ThreatFeed — News',
     description: 'Important security stories from ThreatFeed, one per story.',

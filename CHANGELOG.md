@@ -4,6 +4,10 @@ All notable changes to ThreatFeed are listed here, newest first.
 
 The project has no tagged releases yet, so changes are grouped by date. Entries before November 2026 were reconstructed from the commit history.
 
+## Unreleased
+
+- Publish RSS feeds for news, vulnerabilities and ransomware (data/feeds/*.xml), with story and victim deep links
+
 ## 2026-11-02
 
 - Upgrade dev tooling to fix 17 Dependabot alerts (3 critical): Vite 8, @vitejs/plugin-react 6, Vitest 4.1.12, tsx 4.23; `npm audit` now reports 0 vulnerabilities
