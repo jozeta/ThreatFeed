@@ -17,6 +17,8 @@ import { ActiveNavTab, Article } from './types';
 import { AlertMonitor } from './components/AlertMonitor';
 import { CveWatchMonitor } from './components/CveWatchMonitor';
 import { closeAllPanels, closePanel, PANEL_PARAMS, panelParam, redirectRemovedPage, useHashRoute } from './hooks/useHashRoute';
+import { useFeedDeepLinks } from './hooks/useFeedDeepLinks';
+import { DeepLinkNotice } from './components/Common/DeepLinkNotice';
 import { usePanelLevels } from './hooks/usePanelLevels';
 import { PanelLevel } from './components/Common/SidePanel';
 import { exitTv, tvFromParams } from './components/tv/tvRoute';
@@ -66,6 +68,8 @@ export const App: React.FC = () => {
   // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…, ?tag=…) open over any page;
   // a blank, overlong or (for ?cve=) malformed value opens none
   const { actor, malware, group, vendor, cve, tag } = Object.fromEntries(PANEL_PARAMS.map((key) => [key, panelParam(key, route.params.get(key))]));
+  // Links from the RSS feeds: ?article= opens the reader, ?victim= is highlighted by the victims table
+  const deepLink = useFeedDeepLinks();
   const levels = usePanelLevels(route.params, Boolean(activeArticle));
   // ?tv=1 / ?dash=1: a full-screen mode over the app, which goes inert underneath
   const tvKind = tvFromParams(activeTab, route.params);
@@ -279,6 +283,8 @@ export const App: React.FC = () => {
           hasPrev={activeArticleIndex > 0}
         />
       )}
+
+      {deepLink.notice && <DeepLinkNotice notice={deepLink.notice} onDismiss={deepLink.dismiss} />}
 
       {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal
