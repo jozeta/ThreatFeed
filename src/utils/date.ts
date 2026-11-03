@@ -60,3 +60,13 @@ export function formatFullDateTime(dateString: string): string {
     return dateString;
   }
 }
+
+/**
+ * Local calendar day as YYYY-MM-DD. Use it to compare "today" with calendar dates such as
+ * CISA due dates; toISOString() gives the UTC day, which is off by one for hours every day.
+ */
+export function localDayKey(date: Date | number): string {
+  const d = typeof date === 'number' ? new Date(date) : date;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}

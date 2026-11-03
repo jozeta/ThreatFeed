@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { LeakSiteVictim, MsrcData, RansomwareIntel, StatsData, VulnData } from '../../types';
+import { localDayKey } from '../../utils/date';
 import { ransomDashboard, ransomExtras, vulnDashboard, vulnExtras } from '../../services/tv/dashboard';
 import { chartReady, DailyArea, flagOf, HBarList, ListPanel, StatCard, VBars, WeeklyBarsLine } from './dashParts';
 import { NUMBER_SHAPES, PanelDef, WIDE_SHAPES } from './DashboardWall';
@@ -231,7 +232,7 @@ export function vulnPanels(ctx: VulnCtx, fresh: () => VulnCtx = () => ctx): Pane
       row={it => (
         <>
           <span className="tv-row-main">{it.cve} {'·'} {it.title}</span>
-          <span className="tv-row-meta" style={it.dueDate === new Date(now).toISOString().slice(0, 10) ? { color: KEV, fontWeight: 700 } : undefined}>
+          <span className="tv-row-meta" style={it.dueDate === localDayKey(now) ? { color: KEV, fontWeight: 700 } : undefined}>
             due {shortDate(it.dueDate, true)}
           </span>
         </>

@@ -7,6 +7,7 @@ import {
 } from '../../services/intelligence/vulns';
 import { hasPublicExploit } from '../../services/intelligence/enrichment';
 import { containsTerm } from '../../utils/textMatch';
+import { localDayKey } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
@@ -90,14 +91,14 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
     );
   }, [kev, vendor, product, cwe, band, minCvss, ransomwareOnly, query, av, flagsParam, exploits, stackKeywords]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const today = new Date().toISOString().slice(0, 10);
-  const since = days ? new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10) : '';
-  const before = days ? new Date(Date.now() - 2 * days * DAY_MS).toISOString().slice(0, 10) : '';
+  const today = localDayKey(new Date());
+  const since = days ? localDayKey(Date.now() - days * DAY_MS) : '';
+  const before = days ? localDayKey(Date.now() - 2 * days * DAY_MS) : '';
   const inRange = useMemo(() => filtered.filter((k) => k.dateAdded >= since), [filtered, since]);
   const previous = days ? filtered.filter((k) => k.dateAdded >= before && k.dateAdded < since).length : 0;
   const change = days && previous > 0 ? Math.round(((inRange.length - previous) / previous) * 100) : null;
   const ransomwareCount = inRange.filter((k) => k.ransomware).length;
-  const in14Days = new Date(Date.now() + 14 * DAY_MS).toISOString().slice(0, 10);
+  const in14Days = localDayKey(Date.now() + 14 * DAY_MS);
   const dueSoon = inRange.filter((k) => k.dueDate && k.dueDate >= today && k.dueDate <= in14Days).length;
 
   const months = useMemo(() => kevPerMonth(filtered, 24), [filtered]);
