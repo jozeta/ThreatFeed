@@ -40,6 +40,12 @@ jobs:
           path: .cache/stats.json
           key: stats-${{ github.run_id }}
           restore-keys: stats-
+      # A second copy of the published RSS feeds and their ledger, for runs that can't read the published ones
+      - uses: actions/cache/restore@v6
+        with:
+          path: .cache/feeds/
+          key: feeds-${{ github.run_id }}
+          restore-keys: feeds-
       # Fetch every default feed server-side plus CISA KEV / EPSS data into public/data/snapshot.json.
       # A failed snapshot shouldn't block a deploy: the app falls back to live fetching without it.
       - run: npm run snapshot
@@ -53,6 +59,10 @@ jobs:
           PREVIOUS_MSRC_URL: https://jozeta.github.io/ThreatFeed/data/msrc.json
           # Carries actor and malware profiles over between the daily ATT&CK and Malpedia refreshes
           PREVIOUS_ACTORS_URL: https://jozeta.github.io/ThreatFeed/data/actors.json
+          # The RSS feeds link to the site and read their published-items ledger (feeds/seen.json) back
+          FEED_SITE_URL: https://jozeta.github.io/ThreatFeed/
+          # The cached copy of the ledger: used when the published one can't be read, or is older
+          PREVIOUS_FEEDS_LEDGER_FILE: .cache/feeds/seen.json
           # The trends history accumulates here: each run recounts the last three days and keeps two years.
           # The script builds on the newer of the two copies and writes nothing if it can read neither
           PREVIOUS_TRENDS_URL: https://jozeta.github.io/ThreatFeed/data/trends.json
@@ -121,6 +131,38 @@ jobs:
               rm -f "$f.tmp"; echo "::warning::$name.json is missing and the published copy couldn't be fetched"
             fi
           done || true
+      # The ledger (feeds/seen.json) exists only in the published site and the cache, and a deploy replaces the
+      # whole site; without it the next run would start over and re-date every item. If the snapshot wrote no
+      # feeds, put the published (or cached) set of four back, all or none. If neither is there and the site
+      # isn't simply without feeds yet (404), stop before deploying so the old site keeps serving.
+      - name: Keep the published RSS feeds
+        run: |
+          dir=public/data/feeds
+          names="seen.json news.xml vulns.xml ransomware.xml"
+          valid() { [ -s "$1" ] && node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(!d||d.version!==1||typeof d.feeds!=='object')process.exit(1)" "$1" 2>/dev/null; }
+          complete() { for n in $names; do [ -s "$1/$n" ] || return 1; done; valid "$1/seen.json"; }
+          complete "$dir" && exit 0
+          mkdir -p "$dir"
+          tmp=$(mktemp -d)
+          code=000
+          for i in 1 2 3; do
+            rm -f "$tmp"/*
+            fetched=1
+            for n in $names; do
+              c=$(curl -sS -L -o "$tmp/$n" -w '%{http_code}' --max-time 120 "https://jozeta.github.io/ThreatFeed/data/feeds/$n?t=$(date +%s)") || c=000
+              [ "$n" = seen.json ] && code=$c
+              if [ "$c" != 200 ]; then fetched=0; break; fi
+            done
+            if [ "$fetched" = 1 ] && complete "$tmp"; then for n in $names; do mv "$tmp/$n" "$dir/$n"; done; echo "Restored the published feeds"; exit 0; fi
+            [ "$code" = 404 ] && break
+            sleep 15
+          done
+          if complete .cache/feeds; then for n in $names; do cp ".cache/feeds/$n" "$dir/$n"; done; echo "Restored the feeds from the Action cache"; exit 0; fi
+          # Never deploy part of a set: feeds without their ledger would be re-dated by the next run
+          for n in $names; do rm -f "$dir/$n"; done
+          if [ "$code" = 404 ]; then echo "No feeds published yet"; exit 0; fi
+          echo "::error::feeds/seen.json is missing and the published feeds couldn't be fetched (seen.json: HTTP $code) or restored from the cache; not deploying, so the ledger isn't lost"
+          exit 1
       - name: Copy the trends history for the cache
         if: hashFiles('public/data/trends.json') != ''
         run: mkdir -p .cache && cp public/data/trends.json .cache/trends.json
@@ -139,6 +181,14 @@ jobs:
         with:
           path: .cache/stats.json
           key: stats-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Copy the RSS feeds for the cache
+        if: hashFiles('public/data/feeds/seen.json') != ''
+        run: mkdir -p .cache/feeds && cp public/data/feeds/seen.json public/data/feeds/*.xml .cache/feeds/
+      - uses: actions/cache/save@v6
+        if: hashFiles('public/data/feeds/seen.json') != ''
+        with:
+          path: .cache/feeds/
+          key: feeds-${{ github.run_id }}-${{ github.run_attempt }}
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'

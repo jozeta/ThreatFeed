@@ -183,6 +183,21 @@ Every article is enriched in the browser while its feed is parsed, and the resul
 - **Per-screen link settings**: a TV or dashboard link can set `size=large|medium|small|xsmall`, `speed=slow|medium|fast`, `transition=fade|slide|reveal`, `interval=<seconds>` (snapped to 30 s steps), `qr=1|0`, and `mix=1` (Latest only). They apply to that screen only and never change saved settings. Example kiosk link: `https://jozeta.github.io/ThreatFeed/#/latest?tv=1&mix=1&size=small&speed=slow&qr=1`
 - **Trend history**: dashboard trends are built from `stats.json` (see [Feed Snapshot](#-feed-snapshot--cve-intelligence)), so they fill in over the coming weeks. "vs last week" figures stay hidden until there is history to compare against.
 
+### 15. RSS Feeds
+Three RSS 2.0 feeds are published by the scheduled snapshot job, so you can follow ThreatFeed from any reader. The same URLs, with copy buttons, are in the **Subscribe** section of the Sources page.
+
+| Feed | URL | Contents | Max items |
+| --- | --- | --- | --- |
+| News | <https://jozeta.github.io/ThreatFeed/data/feeds/news.xml> | Important security stories, one per story | 100 |
+| Vulnerabilities | <https://jozeta.github.io/ThreatFeed/data/feeds/vulns.xml> | New CISA KEV entries, critical CVEs, public exploits and Patch Tuesday | 300 |
+| Ransomware | <https://jozeta.github.io/ThreatFeed/data/feeds/ransomware.xml> | Every leak-site victim (about 35 a day) and every ransomware story | 400 |
+
+- **Window**: the last 7 days, newest first, capped as above.
+- **Links open in ThreatFeed**: stories open in the reader (`#/latest?article=`), CVEs open the CVE panel, Patch Tuesday opens that month, and victims open the Ransomware page with the victim highlighted and its group panel. Every item's description ends with `Source: <name> <url>` pointing at the original.
+- **Categories**: each item carries `<category>` values for its kind (`news`, `kev`, `critical-cve`, `exploit`, `patch-tuesday`, `victim`), CVE ids, severity, and group / country / sector.
+- **Never re-announced**: a published-items ledger (`data/feeds/seen.json`, kept 90 days after an item was last seen) stops an item from reappearing as new. On the very first run, existing exploits are recorded without being posted.
+- Browsers and readers can auto-discover the feeds through `<link rel="alternate">` tags on the page.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -239,6 +254,7 @@ Without a local snapshot, the dev server falls back to fetching feeds live throu
 - `data/msrc.json`, `data/actors.json`: Patch Tuesday releases and actor/malware profiles (used by the actor and malware panels). Each run reads its previous copy (`PREVIOUS_MSRC_URL`, `PREVIOUS_ACTORS_URL`) and carries over what it can't refetch.
 - `data/entities.json`: the names (vendors, ransomware groups, actors, malware, aliases) the app turns into entity links.
 - `data/trends.json`: daily counts kept for 730 days; the mentions-over-time charts in the panels read it. The run recounts the last three days on top of the previous copy (`PREVIOUS_TRENDS_URL`, or `PREVIOUS_TRENDS_FILE` from an `actions/cache` copy). A deploy replaces the whole site, so a "Keep the trends history" step restores the published or cached copy if the snapshot didn't write one; the history is never lost.
+- `data/feeds/news.xml`, `vulns.xml`, `ransomware.xml`: the RSS feeds described under RSS Feeds, rebuilt every run from the same data, plus `seen.json`, the published-items ledger (read back from the previous deploy, or `PREVIOUS_FEEDS_LEDGER_FILE` from an `actions/cache` copy, so items are never re-announced). A "Keep the published RSS feeds" step restores all four files from the site or the cache if the snapshot didn't write them, and stops the deploy rather than publish a site without the ledger.
 - `data/stats.json`: daily counts for the last 400 days (critical and high CVEs, KEV additions, public exploits, leak-site victims, and per group, country and sector), de-duplicated by CVE and victim ID. Like `trends.json`, it is read back on the next run and kept across deploys, and it feeds the TV and dashboard modes.
 
 **Optional NVD API key**: NVD allows 5 requests per 30 seconds without a key and 50 with one. Request a free key at <https://nvd.nist.gov/developers/request-an-api-key>, then add it as a repository secret named `NVD_API_KEY` (Settings → Secrets and variables → Actions). The workflow passes it to the script; without it everything still works, just slower on full downloads.

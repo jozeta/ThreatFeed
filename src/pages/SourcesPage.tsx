@@ -5,6 +5,7 @@ import { useFilter } from '../context/FilterContext';
 import { exportFeedsToOPML, parseOPML } from '../services/rss/opml';
 import { isValidFeedUrl } from '../services/rss/sanitizer';
 import { googleNewsFeedUrl, isKeywordMonitor } from '../services/rss/keywordMonitor';
+import { FeedSubscribe } from '../components/FeedSubscribe';
 import {
   Radio,
   Plus,
@@ -277,6 +278,8 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
           </button>
         </div>
       </div>
+
+      <FeedSubscribe />
 
       {/* Categories Grouping */}
       <div className="space-y-10 mt-8">

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { openPanel } from '../../hooks/useHashRoute';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { openPanel, useHashParam } from '../../hooks/useHashRoute';
 import { isPubliclyReported, publicReportIndex } from '../../services/intelligence/enrichment';
 import { LeakSiteVictim, RansomwareIntel } from '../../types';
 import { countryFlag, countryName, groupDisplayName, localCountry, NORDIC_COUNTRIES } from '../../utils/countries';
@@ -34,6 +34,9 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, int
   const [reportedOnly, setReportedOnly] = useState(false);
   // Opening a group sets ?group= in the URL; the app shows its panel over any page
   const setOpenGroup = (g: string) => openPanel('group', g.toLowerCase());
+
+  // ?victim=<id> (a link from the RSS feed) highlights that row
+  const [targetId] = useHashParam('victim');
 
   // Victims that also show up in press reports or official breach notices (Ransomware.live)
   const reports = useMemo(() => publicReportIndex(intel?.attacks ?? []), [intel]);
@@ -81,6 +84,28 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, int
   const allGroups = useMemo(() => countBy(victims, (v) => v.group), [victims]);
   const allCountries = useMemo(() => countBy(victims, (v) => v.country), [victims]);
   const allSectors = useMemo(() => countBy(victims, (v) => v.sector), [victims]);
+  // A linked victim: lift the filters that would hide it, widen the range to its age, then page to it and scroll
+  const targetRow = useRef<HTMLTableRowElement>(null);
+  const prepared = useRef('');
+  const target = useMemo(() => victims.find((v) => v.id === targetId), [victims, targetId]);
+  useEffect(() => {
+    if (!target || prepared.current === target.id) return;
+    prepared.current = target.id;
+    setRegion('all'); setGroup(''); setCountry(''); setSector(''); setQuery(''); setReportedOnly(false);
+    const age = Date.now() - new Date(target.discoveredAt).getTime();
+    setDays((RANGES.find((r) => age < r.days * DAY_MS) ?? RANGES[RANGES.length - 1]).days);
+  }, [target]);
+  const targetIndex = target ? inRange.findIndex((v) => v.id === target.id) : -1;
+  useEffect(() => {
+    if (targetIndex >= visibleCount && hasMore) showMore();
+  }, [targetIndex, visibleCount, hasMore, showMore]);
+  const scrolled = useRef('');
+  useEffect(() => {
+    if (!target || targetIndex < 0 || targetIndex >= visibleCount || prepared.current !== target.id || scrolled.current === target.id) return;
+    scrolled.current = target.id;
+    targetRow.current?.scrollIntoView({ block: 'center' });
+  }, [target, targetIndex, visibleCount]);
+
   const change = previous > 0 ? Math.round(((inRange.length - previous) / previous) * 100) : null;
 
   return (
@@ -190,7 +215,8 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, int
             </thead>
             <tbody className="divide-y divide-theme-border/60">
               {inRange.slice(0, visibleCount).map((v) => (
-                <tr key={v.id} className="align-top">
+                <tr key={v.id} ref={v.id === targetId ? targetRow : undefined} aria-current={v.id === targetId ? 'true' : undefined}
+                  className={v.id === targetId ? 'align-top ring-2 ring-inset ring-theme-accent bg-theme-accent/10' : 'align-top'}>
                   <td className="py-2 pr-3 whitespace-nowrap text-theme-text-muted" title={v.attackedAt ? `Attack date: ${v.attackedAt.slice(0, 10)}` : undefined}>{formatRelativeTime(v.discoveredAt)}</td>
                   <td className="py-2 pr-3 whitespace-nowrap">
                     <button onClick={() => setOpenGroup(v.group)} className="text-rose-500 font-bold hover:underline">{groupDisplayName(v.group)}</button>
