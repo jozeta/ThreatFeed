@@ -11,6 +11,8 @@ export const SYNCED_LISTS = ['watchlistKeywords', 'stackKeywords', 'mutedKeyword
 export type SyncedList = (typeof SYNCED_LISTS)[number];
 const COLLECTIONS: readonly SyncCollection[] = [...SYNCED_LISTS, 'alertRules'];
 const PURGE_REMOVED_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
+// An event further in the future than this is garbled or from a badly skewed clock: it would win every merge and never be purged
+const MAX_FUTURE_MS = 24 * 60 * 60 * 1000;
 
 type Events = Record<string, SyncEvent>;
 
@@ -86,15 +88,31 @@ export function mergeSyncLogs(a: SyncLog | undefined, b: SyncLog | undefined, no
   return out;
 }
 
-/** Validates an untrusted (synced or imported) log: unknown collections and malformed entries are dropped */
-export function cleanSyncLog(raw: unknown): SyncLog | undefined {
+/**
+ * The log to store when a backup is restored: the current and imported logs merged, plus an add event now for every
+ * list term and alert rule in the backup, so restored items stick instead of being deleted again by an older tombstone.
+ */
+export function syncLogForImport(current: unknown, imported: Partial<UserSettings>, now: Date): SyncLog {
+  const log = mergeSyncLogs(cleanSyncLog(current, now), cleanSyncLog(imported.syncLog, now), now);
+  const at = now.toISOString();
+  const added = (collection: SyncCollection, keys: string[]) => {
+    if (keys.length) log[collection] = { ...log[collection], ...Object.fromEntries(keys.map(k => [k, { removed: false, at }])) };
+  };
+  for (const list of SYNCED_LISTS) added(list, strings(imported[list]).map(termKey));
+  added('alertRules', ruleIds(imported.alertRules));
+  return log;
+}
+
+/** Validates an untrusted (synced or imported) log: unknown collections, malformed entries and events dated more than a day ahead are dropped */
+export function cleanSyncLog(raw: unknown, now: Date = new Date()): SyncLog | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const latest = now.getTime() + MAX_FUTURE_MS;
   const out: SyncLog = {};
   for (const collection of COLLECTIONS) {
     const events = (raw as Record<string, unknown>)[collection];
     if (!events || typeof events !== 'object' || Array.isArray(events)) continue;
     const kept = Object.entries(events).filter(([, e]) =>
-      e && typeof e === 'object' && typeof e.removed === 'boolean' && typeof e.at === 'string' && !Number.isNaN(Date.parse(e.at)),
+      e && typeof e === 'object' && typeof e.removed === 'boolean' && typeof e.at === 'string' && Date.parse(e.at) <= latest,
     ) as [string, SyncEvent][];
     // fromEntries defines own properties, so a "__proto__" key stays an ordinary entry
     if (kept.length) out[collection] = Object.fromEntries(kept.map(([k, e]) => [k, { removed: e.removed, at: e.at }]));

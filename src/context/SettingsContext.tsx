@@ -187,8 +187,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const resetSettings = () => {
     setSettings((prev) => {
-      // Keep the sync log (plus what the reset removed), so a sync doesn't bring back what was deleted before
-      const next = { ...DEFAULT_SETTINGS, syncLog: recordListChanges(prev, { ...DEFAULT_SETTINGS, syncLog: prev.syncLog }, new Date()) };
+      // Keep the sync log but record nothing: a reset is not a deletion to push to other devices (a later sync restores the lists)
+      const next = { ...DEFAULT_SETTINGS, syncLog: prev.syncLog };
       saveSettingsToDB(next);
       return next;
     });

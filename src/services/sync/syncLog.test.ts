@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanSyncLog, mergeSyncLogs, mergeSyncedList, recordListChanges, withoutDeletedRules } from './syncLog';
+import { cleanSyncLog, mergeSyncLogs, mergeSyncedList, recordListChanges, syncLogForImport, withoutDeletedRules } from './syncLog';
 import type { AlertRule, SyncLog } from '../../types';
 
 const NOW = new Date('2026-11-03T12:00:00Z');
@@ -91,9 +91,39 @@ describe('cleanSyncLog', () => {
     expect(cleanSyncLog([1])).toBeUndefined();
   });
 
+  it('drops events dated more than a day in the future', () => {
+    const raw = { mutedKeywords: { soon: { removed: true, at: '2026-11-04T06:00:00Z' }, far: { removed: true, at: '2026-11-05T00:00:00Z' } } };
+    expect(cleanSyncLog(raw, NOW)).toEqual({ mutedKeywords: { soon: { removed: true, at: '2026-11-04T06:00:00Z' } } });
+  });
+
   it('does not let a __proto__ key touch the prototype', () => {
     const log = cleanSyncLog(JSON.parse(`{"mutedKeywords":{"__proto__":{"removed":true,"at":"${T1}"}}}`))!;
     expect(Object.getPrototypeOf(log.mutedKeywords)).toBe(Object.prototype);
     expect(mergeSyncedList(['__proto__', 'x'], [], log.mutedKeywords!)).toEqual(['x']);
+  });
+});
+
+describe('syncLogForImport', () => {
+  it('merges the current and backup logs and marks every restored item as added now', () => {
+    const current: SyncLog = { mutedKeywords: { deal: { removed: true, at: T2 } }, alertRules: { r1: { removed: true, at: T2 } } };
+    const imported = {
+      mutedKeywords: ['Deal'], watchlistKeywords: ['Akira'],
+      alertRules: [{ id: 'r1' } as AlertRule],
+      syncLog: { stackKeywords: { okta: { removed: true, at: T1 } }, savedSearches: { bad: { removed: 'x', at: T1 } } },
+    };
+    const log = syncLogForImport(current, imported as any, NOW);
+    const now = { removed: false, at: NOW.toISOString() };
+    expect(log).toEqual({
+      mutedKeywords: { deal: now },
+      watchlistKeywords: { akira: now },
+      stackKeywords: { okta: { removed: true, at: T1 } },
+      alertRules: { r1: now },
+    });
+    // a restored rule then survives the merge against the older tombstone
+    expect(withoutDeletedRules([{ id: 'r1', updatedAt: T1 } as AlertRule], log)).toHaveLength(1);
+  });
+
+  it('works for a backup without a log and with no current log', () => {
+    expect(syncLogForImport(undefined, { bookmarkFolders: ['General'] }, NOW)).toEqual({ bookmarkFolders: { general: { removed: false, at: NOW.toISOString() } } });
   });
 });

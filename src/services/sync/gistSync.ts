@@ -56,7 +56,8 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
 
   let settings = local.settings || remote.settings || null;
   if (local.settings && remote.settings) {
-    const syncLog = mergeSyncLogs(cleanSyncLog(local.settings.syncLog), cleanSyncLog(remote.settings.syncLog), new Date());
+    const now = new Date();
+    const syncLog = mergeSyncLogs(cleanSyncLog(local.settings.syncLog, now), cleanSyncLog(remote.settings.syncLog, now), now);
     const list = (key: SyncedList) =>
       mergeSyncedList(local.settings![key], remote.settings![key], syncLog[key] || {});
     settings = {
@@ -111,7 +112,7 @@ export async function syncNow(config: GistSyncConfig): Promise<GistSyncConfig> {
     if (content) merged = mergeSyncData(local, JSON.parse(content));
   }
 
-  await importThreatFeedData(merged);
+  await importThreatFeedData(merged, { fromSync: true });
 
   const body = JSON.stringify({ description: 'ThreatFeed sync data', files: { [FILE_NAME]: { content: JSON.stringify(merged) } } });
   if (gistId) {
