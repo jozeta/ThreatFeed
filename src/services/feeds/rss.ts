@@ -32,6 +32,19 @@ export function escapeXml(text: string): string {
 }
 
 /**
+ * Escapes plain text as HTML. RSS readers render <description> as HTML, and plainText has already decoded
+ * entities, so a source's "&lt;script&gt;" would otherwise reach them as a live tag.
+ */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Converts feed HTML to a single line of plain text. Longer than `max` characters, it is cut
  * at the last space that fits and gets an ellipsis.
  */
@@ -44,14 +57,18 @@ export function plainText(text: string | undefined, max: number): string {
 
 const rfc822 = (iso: string): string => new Date(iso).toUTCString();
 
-/** Renders an RSS 2.0 document. Every text value goes through escapeXml. */
+/**
+ * Renders an RSS 2.0 document. Every text value goes through escapeXml. Item descriptions are HTML in
+ * RSS, so their plain text is HTML-escaped first; titles are plain text by convention and readers show
+ * them as such, so escaping them twice would show "&lt;" literally.
+ */
 export function renderRss(channel: RssChannel, items: RssItem[]): string {
   const itemXml = items.map((item) => `    <item>
       <title>${escapeXml(item.title)}</title>
       <link>${escapeXml(item.link)}</link>
       <guid isPermaLink="false">${escapeXml(item.guid)}</guid>
       <pubDate>${rfc822(item.pubDate)}</pubDate>
-      <description>${escapeXml(item.description)}</description>
+      <description>${escapeXml(escapeHtml(item.description))}</description>
 ${item.categories.map((c) => `      <category>${escapeXml(c)}</category>`).join('\n')}
     </item>`);
 

@@ -69,4 +69,22 @@ describe('renderRss', () => {
     const selfLink = Array.from(doc.getElementsByTagNameNS(ATOM, 'link')).find((l) => l.getAttribute('rel') === 'self');
     expect(selfLink?.getAttribute('href')).toBe(channel.selfUrl);
   });
+
+  it('keeps decoded markup in a description as text for readers that render it as HTML', () => {
+    const description = plainText('XSS via &lt;script&gt;alert(1)&lt;/script&gt; in DJ-Classifieds &lt; 3.11.3 &amp; &lt;img src=x onerror=alert(2)&gt;', 400);
+    expect(description).toContain('<script>');
+    const xml = renderRss(channel, [{ ...items[0], description }]);
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    expect(doc.getElementsByTagName('parsererror').length).toBe(0);
+
+    // What a reader gets after XML parsing, which it then renders as HTML
+    const html = doc.querySelector('item > description')?.textContent ?? '';
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script');
+
+    const body = new DOMParser().parseFromString(html, 'text/html').body;
+    expect(body.querySelector('*')).toBeNull();
+    expect(body.textContent).toBe(description);
+    expect(body.textContent).toContain('< 3.11.3');
+  });
 });
