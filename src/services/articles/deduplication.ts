@@ -1,4 +1,5 @@
 import { Article } from '../../types';
+import { MIN_COMPARABLE_TOKENS, wordTokens } from './titleTokens';
 
 const TITLE_SIMILARITY_THRESHOLD = 0.82;
 const DUPLICATE_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -7,14 +8,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function cleanTitleForComparison(title: string): string {
   return title
     .toLowerCase()
-    .replace(/[^\w\s]/gi, '')
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 function titleWordSet(title: string): Set<string> {
   const cleaned = cleanTitleForComparison(title);
-  return new Set(cleaned ? cleaned.split(' ') : []);
+  return new Set(cleaned ? cleaned.split(' ').flatMap(wordTokens) : []);
 }
 
 /**
@@ -62,7 +63,8 @@ export function deduplicateArticles(articles: Article[]): Article[] {
     const pubTime = new Date(article.publishedAt).getTime();
     const hasDate = !isNaN(pubTime);
 
-    if (hasDate && words.size > 0) {
+    // Titles with fewer than 2 tokens are not comparable, so they are only deduped by id/url.
+    if (hasDate && words.size >= MIN_COMPARABLE_TOKENS) {
       const day = Math.floor(pubTime / DAY_MS);
       let isDuplicateTitle = false;
 

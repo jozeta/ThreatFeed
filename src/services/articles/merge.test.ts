@@ -72,3 +72,15 @@ describe('findDemoBookmarks', () => {
     expect(findDemoBookmarks(articles, seedIds, stateIds).map(a => a.id)).toEqual(['seed-demo']);
   });
 });
+
+describe('mergeFetchedArticles bookmark priority', () => {
+  it('keeps a bookmarked later copy of a near-identical non-Latin title', () => {
+    const title = 'Критическая уязвимость в Fortinet позволяет удалённо выполнить код';
+    const now = Date.now();
+    const first = article('first', { title, publishedAt: new Date(now - 3600_000).toISOString() });
+    const later = article('later', { title, bookmarked: true, publishedAt: new Date(now - 1800_000).toISOString() });
+    const merged = mergeFetchedArticles([first, later], [], 30);
+    expect(merged.map(x => x.id)).toContain('later');
+    expect(merged.map(x => x.id)).not.toContain('first');
+  });
+});

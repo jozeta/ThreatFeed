@@ -1,5 +1,6 @@
 import { cleanRuleList } from '../intelligence/alertRules';
-import type { AlertRule } from '../../types';
+import type { AlertRule, SyncLog } from '../../types';
+import { cleanSyncLog, mergeSyncedList, mergeSyncLogs, withoutDeletedRules, type SyncedList } from './syncLog';
 import { exportAllThreatFeedData, getStoredValue, importThreatFeedData, saveStoredValue } from '../storage/indexeddb';
 
 /**
@@ -25,21 +26,20 @@ export const saveSyncConfig = (config: GistSyncConfig | null) => saveStoredValue
 const stateTime = (s: ArticleState) =>
   Math.max(...[s.updatedAt, s.readAt, s.viewedAt, s.bookmarkedAt].map(t => (t ? new Date(t).getTime() : 0)));
 
-const union = (a: unknown, b: unknown) =>
-  Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
-
 /**
  * Merges alert rules by id, newer updatedAt wins. Remote data is untrusted, so every rule is validated;
- * malformed ones are dropped. Deletes don't propagate: a rule removed on one device returns from the other.
+ * malformed ones are dropped. A rule deleted on either device (tombstone in the merged sync log) stays
+ * deleted unless it was edited after the deletion.
  */
-export function mergeAlertRules(local: AlertRule[], remote: AlertRule[]): AlertRule[] {
-  return cleanRuleList([...(Array.isArray(local) ? local : []), ...(Array.isArray(remote) ? remote : [])]);
+export function mergeAlertRules(local: AlertRule[], remote: AlertRule[], syncLog: SyncLog = {}): AlertRule[] {
+  return withoutDeletedRules(cleanRuleList([...(Array.isArray(local) ? local : []), ...(Array.isArray(remote) ? remote : [])]), syncLog);
 }
 
 /**
  * Merges two devices' data: per-article state takes whichever side changed it last; feeds and
  * bookmarked articles are unioned (local wins on conflicts); settings stay local (disabled categories too) except keyword
- * lists, which are unioned so a term added on either device survives.
+ * lists, saved searches, folders and alert rules, which are unioned minus what the merged sync log says was deleted
+ * (the latest add/remove across both devices wins; data from before the log existed merges as a plain union).
  */
 export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncData {
   const states = new Map<string, ArticleState>(local.articleStates.map(s => [s.id, s]));
@@ -54,18 +54,24 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
   const articles = new Map(local.bookmarkedArticles.map(a => [a.id, a]));
   for (const a of remote.bookmarkedArticles || []) if (!articles.has(a.id)) articles.set(a.id, a);
 
-  const settings = local.settings && remote.settings
-    ? {
-        ...local.settings,
-        watchlistKeywords: union(local.settings.watchlistKeywords, remote.settings.watchlistKeywords),
-        stackKeywords: union(local.settings.stackKeywords, remote.settings.stackKeywords),
-        mutedKeywords: union(local.settings.mutedKeywords, remote.settings.mutedKeywords),
-        savedSearches: union(local.settings.savedSearches, remote.settings.savedSearches),
-        bookmarkFolders: union(local.settings.bookmarkFolders, remote.settings.bookmarkFolders),
-        alertRules: mergeAlertRules(local.settings.alertRules, remote.settings.alertRules),
-        alertGapHours: local.settings.alertGapHours,
-      }
-    : local.settings || remote.settings || null;
+  let settings = local.settings || remote.settings || null;
+  if (local.settings && remote.settings) {
+    const now = new Date();
+    const syncLog = mergeSyncLogs(cleanSyncLog(local.settings.syncLog, now), cleanSyncLog(remote.settings.syncLog, now), now);
+    const list = (key: SyncedList) =>
+      mergeSyncedList(local.settings![key], remote.settings![key], syncLog[key] || {});
+    settings = {
+      ...local.settings,
+      watchlistKeywords: list('watchlistKeywords'),
+      stackKeywords: list('stackKeywords'),
+      mutedKeywords: list('mutedKeywords'),
+      savedSearches: list('savedSearches'),
+      bookmarkFolders: list('bookmarkFolders'),
+      alertRules: mergeAlertRules(local.settings.alertRules, remote.settings.alertRules, syncLog),
+      alertGapHours: local.settings.alertGapHours,
+      syncLog,
+    };
+  }
 
   return {
     ...local,
@@ -106,7 +112,7 @@ export async function syncNow(config: GistSyncConfig): Promise<GistSyncConfig> {
     if (content) merged = mergeSyncData(local, JSON.parse(content));
   }
 
-  await importThreatFeedData(merged);
+  await importThreatFeedData(merged, { fromSync: true });
 
   const body = JSON.stringify({ description: 'ThreatFeed sync data', files: { [FILE_NAME]: { content: JSON.stringify(merged) } } });
   if (gistId) {

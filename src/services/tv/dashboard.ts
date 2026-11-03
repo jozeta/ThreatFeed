@@ -1,5 +1,6 @@
 import { LeakSiteVictim, MsrcData, PublicAttack, StatsData, VulnData } from '../../types';
 import { containsTerm } from '../../utils/textMatch';
+import { localDayKey } from '../../utils/date';
 
 /** The figures the TV dashboards show. Live data is unioned with the stats history so counts never drop when live data is shallower. */
 
@@ -419,9 +420,11 @@ export function vulnExtras(v: VulnData | null, msrc: MsrcData | null, stackKeywo
   for (const r of notable) if (r.cwe && !NO_CWE.has(r.cwe) && (r.score ?? 0) >= 9 && recent(r.published, since30)) cwes.set(r.cwe, (cwes.get(r.cwe) ?? 0) + 1);
   const topCwes = top(cwes).map(([cwe, count]) => ({ cwe, label: shortCwe(cwe, v?.cweNames?.[cwe]), count }));
 
-  const dueBy = dayKey(now + 6 * DAY_MS);
+  // CISA due dates are calendar dates, so the window is in the viewer's local days (not the UTC day buckets)
+  const dueFrom = localDayKey(now);
+  const dueBy = localDayKey(now + 6 * DAY_MS);
   const kevDue = kev
-    .filter(k => !!k.dueDate && k.dueDate >= today && k.dueDate <= dueBy)
+    .filter(k => !!k.dueDate && k.dueDate >= dueFrom && k.dueDate <= dueBy)
     .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || a.cve.localeCompare(b.cve))
     .slice(0, 8)
     .map(k => ({ cve: k.cve, title: `${k.vendor} ${k.product}`.trim(), dueDate: k.dueDate! }));

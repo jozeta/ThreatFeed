@@ -1,4 +1,5 @@
 import { Article, StoryCluster } from '../../types';
+import { MIN_COMPARABLE_TOKENS, hasCjk, wordTokens } from './titleTokens';
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from',
@@ -9,14 +10,16 @@ const STOP_WORDS = new Set([
 function extractSignificantTokens(text: string): Set<string> {
   const words = text
     .toLowerCase()
-    .replace(/[^\w\s-]/g, ' ')
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
-    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+    .flatMap(wordTokens)
+    // Two-character CJK bigrams are real tokens; only Latin-style words need the length floor
+    .filter(w => (w.length > 2 || hasCjk(w)) && !STOP_WORDS.has(w));
   return new Set(words);
 }
 
 function calculateJaccardSimilarity(setA: Set<string>, setB: Set<string>): number {
-  if (setA.size === 0 || setB.size === 0) return 0;
+  if (setA.size < MIN_COMPARABLE_TOKENS || setB.size < MIN_COMPARABLE_TOKENS) return 0;
   let intersectionCount = 0;
   setA.forEach(item => {
     if (setB.has(item)) intersectionCount++;

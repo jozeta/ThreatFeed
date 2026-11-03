@@ -36,11 +36,17 @@ export function isExpired(article: Article, maxAgeDays: number): boolean {
   return !isNaN(t) && t < Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
 }
 
+/** Stable reorder with bookmarked articles first, so deduplication never drops a bookmarked copy. */
+export function bookmarkedFirst(articles: Article[]): Article[] {
+  return [...articles.filter(a => a.bookmarked), ...articles.filter(a => !a.bookmarked)];
+}
+
 /**
  * Merges freshly fetched articles into the current list.
  * - Articles already present take the fresh feed content but keep their user state.
  * - Existing articles come first, so when a new item is a near-duplicate of one the user
  *   already has (possibly read or bookmarked), the existing one is kept.
+ * - Bookmarked articles are always ahead of the rest in that check, so a bookmarked copy is never the one removed.
  * - Articles older than maxAgeDays are dropped unless bookmarked.
  * - With `shown`, articles that are shown win near-duplicate checks over hidden ones (disabled categories), so a
  *   story isn't hidden because a copy from a turned-off category came first.
@@ -62,7 +68,7 @@ export function mergeFetchedArticles(
   merged.push(...fetchedById.values());
 
   const kept = shown
-    ? new Set(deduplicateArticles([...merged.filter(shown), ...merged.filter(a => !shown(a))]))
-    : new Set(deduplicateArticles(merged));
+    ? new Set(deduplicateArticles(bookmarkedFirst([...merged.filter(shown), ...merged.filter(a => !shown(a))])))
+    : new Set(deduplicateArticles(bookmarkedFirst(merged)));
   return merged.filter(a => kept.has(a) && (a.bookmarked || !isExpired(a, maxAgeDays)));
 }

@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
 import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
+import { cleanSyncLog, syncLogForImport } from '../sync/syncLog';
 
 interface ThreatFeedDB extends DBSchema {
   articles: {
@@ -335,7 +336,11 @@ export async function exportAllThreatFeedData() {
   };
 }
 
-export async function importThreatFeedData(data: any): Promise<boolean> {
+/**
+ * Restores a backup (default) or writes Gist-merged data (`fromSync`). Only a backup restore records add events for the
+ * restored items: doing that on every sync would date every present item "now" and beat newer deletions on other devices.
+ */
+export async function importThreatFeedData(data: any, { fromSync = false }: { fromSync?: boolean } = {}): Promise<boolean> {
   if (!data || !data.feeds || !Array.isArray(data.feeds)) {
     throw new Error('Invalid ThreatFeed backup format: missing feeds list.');
   }
@@ -386,10 +391,14 @@ export async function importThreatFeedData(data: any): Promise<boolean> {
     }
   }
 
-  // Import settings
-  if (data.settings) {
+  // Import settings. A restore merges the current sync log with the backup's (validated) and adds events for everything
+  // restored, so a later Gist sync doesn't delete restored items again; synced data already carries the merged log
+  if (data.settings && typeof data.settings === 'object') {
     const settingsStore = tx.objectStore('settings');
-    await settingsStore.put({ key: SETTINGS_KEY, value: data.settings });
+    const now = new Date();
+    const current = fromSync ? undefined : await settingsStore.get(SETTINGS_KEY);
+    const syncLog = fromSync ? cleanSyncLog(data.settings.syncLog, now) : syncLogForImport(current?.value?.syncLog, data.settings, now);
+    await settingsStore.put({ key: SETTINGS_KEY, value: { ...data.settings, syncLog } });
   }
 
   await tx.done;

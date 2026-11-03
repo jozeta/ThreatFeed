@@ -4,6 +4,7 @@ import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexed
 import { ALERT_GAP_OPTIONS, createBuiltInRules, migrateAlertRules } from '../services/intelligence/alertRules';
 import { migrateTvInterval, parseTvAnimationSpeed, parseTvTileSize } from '../services/tv/tvSettings';
 import { DEFAULT_WATCHLIST_KEYWORDS, WATCHLIST_DEFAULTS_VERSION, upgradeWatchlistKeywords } from '../services/intelligence/watchlist';
+import { cleanSyncLog, recordListChanges } from '../services/sync/syncLog';
 
 export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
   'General',
@@ -157,6 +158,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           watchedCves: Array.isArray(saved.watchedCves) ? saved.watchedCves.filter((v: unknown) => typeof v === 'string') : [],
           alertRules: migrateAlertRules(saved, new Date()),
           alertGapHours: (ALERT_GAP_OPTIONS as readonly number[]).includes(saved.alertGapHours as number) ? saved.alertGapHours : 1,
+          syncLog: cleanSyncLog(saved.syncLog),
         };
         delete (migrated as unknown as Record<string, unknown>).tvIntervalMinutes;
         setSettings(migrated);
@@ -169,10 +171,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   }, []);
 
-  // Save to IndexedDB whenever settings change
+  // Save to IndexedDB whenever settings change; list adds/removals go into the sync log so Gist sync can propagate deletions
   const updateSettings = (updates: Partial<UserSettings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...updates };
+      next.syncLog = recordListChanges(prev, next, new Date());
       saveSettingsToDB(next);
       return next;
     });
@@ -183,8 +186,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const resetSettings = () => {
-    setSettings(DEFAULT_SETTINGS);
-    saveSettingsToDB(DEFAULT_SETTINGS);
+    setSettings((prev) => {
+      // Keep the sync log but record nothing: a reset is not a deletion to push to other devices (a later sync restores the lists)
+      const next = { ...DEFAULT_SETTINGS, syncLog: prev.syncLog };
+      saveSettingsToDB(next);
+      return next;
+    });
   };
 
   // Apply Theme & CSS Variables & Classes

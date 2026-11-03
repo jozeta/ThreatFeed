@@ -459,7 +459,13 @@ export interface UserSettings {
   sectionsEnabled: boolean;
   alertRules: AlertRule[];
   alertGapHours: number; // minimum hours between desktop notifications
+  syncLog?: SyncLog; // when list items were last added/removed, so Gist sync can propagate deletions
 }
+
+export type SyncCollection = 'watchlistKeywords' | 'stackKeywords' | 'mutedKeywords' | 'savedSearches' | 'bookmarkFolders' | 'alertRules';
+export interface SyncEvent { removed: boolean; at: string } // at: ISO time
+/** Latest add/remove event per item: list items keyed by lowercased term, alert rules by id (removals only) */
+export type SyncLog = Partial<Record<SyncCollection, Record<string, SyncEvent>>>;
 
 export interface FilterState {
   searchQuery: string;
