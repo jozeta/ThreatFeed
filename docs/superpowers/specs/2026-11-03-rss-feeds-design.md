@@ -151,10 +151,13 @@ keeps a **published-items ledger**, `data/feeds/seen.json`, separate from the fe
   aged-out item can't return.
 - Each run reads the published `seen.json` (like the other `PREVIOUS_*` files) and writes the
   updated one. The feeds themselves are rebuilt from the ledger plus this run's data.
-- **Failures:** if `seen.json` can't be read (anything but a 404), feed generation is skipped for
-  that run: the three feeds and the ledger are not written, and the workflow's existing "keep the
-  published copy" step restores all four files. **The rest of the snapshot still deploys.** A 404
-  means the very first run, which starts fresh. Any error inside feed generation is caught and
+- **Failures:** the workflow also keeps the four files in an `actions/cache` copy
+  (`PREVIOUS_FEEDS_LEDGER_FILE`), like the trends history. With both copies readable, the one seen
+  most recently wins; with one, that one. If neither can be read, feed generation is skipped for
+  that run: the three feeds and the ledger are not written, and the "Keep the published RSS feeds"
+  step restores all four files from the site or the cache (all or none). If it can restore neither
+  and the site's `seen.json` isn't a 404, the step fails and the deploy stops, so the old site keeps
+  serving its feeds. Only a 404 with no cached copy means the very first run, which starts fresh. Any error inside feed generation is caught and
   handled the same way (log, skip, keep the published copies).
 - **pubDate:** the item's first-seen time. When the source has a real timestamp (article
   `publishedAt`, victim `discoveredAt`, CVE `published`) that is earlier than first-seen by less

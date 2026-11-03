@@ -493,6 +493,18 @@ async function loadPreviousTrends(): Promise<{ data: TrendsData | null; error?: 
   return { data: null, error };
 }
 
+/** The workflow's cached copy of the last published feeds/seen.json: its text, or null when there is none */
+function readCachedLedger(): string | null {
+  const file = process.env.PREVIOUS_FEEDS_LEDGER_FILE;
+  if (!file) return null;
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (err) {
+    if ((err as { code?: string }).code === 'ENOENT') return null;
+    throw err; // exists but unreadable: not a first run
+  }
+}
+
 /** The workflow's cached copy of the last run's trends.json (PREVIOUS_TRENDS_FILE), a second copy of the history */
 function loadCachedTrends(): TrendsData | null {
   if (!process.env.PREVIOUS_TRENDS_FILE) return null;
@@ -563,7 +575,13 @@ const exploitsPromise = loadExploitSources();
 const msrcPromise = loadMsrc();
 const previousActorsPromise = loadPreviousActors();
 const previousTrendsPromise = loadPreviousTrends();
-const previousLedgerPromise = readPreviousLedger(getJson, PREVIOUS_BASE && `${PREVIOUS_BASE}feeds/seen.json`);
+// The published ledger, cache-busted (Pages serves it with a 10-minute max-age), plus the workflow's
+// Action-cache copy (PREVIOUS_FEEDS_LEDGER_FILE) for when the site can't be read or deployed without it
+const previousLedgerPromise = readPreviousLedger(
+  getJson,
+  PREVIOUS_BASE && `${PREVIOUS_BASE}feeds/seen.json?t=${Date.now()}`,
+  readCachedLedger,
+);
 const previousStatsPromise = loadPreviousStats();
 const dailyPromise = Promise.all([rlPromise, previousActorsPromise])
   .then(([rl, previousActors]) => loadDailySources(previousIntel, rl.updates, !previousActors?.actors.length));
@@ -828,7 +846,9 @@ report({
   label: 'Published RSS feeds',
   status: feedsError ? 'failed' : 'ok',
   count: feedsError ? 0 : (feedCounts.news ?? 0) + (feedCounts.vulns ?? 0) + (feedCounts.ransomware ?? 0),
-  detail: feedsError ? `${feedsError}, not written` : previousLedger.ok && !previousLedger.ledger ? 'no previous ledger, started' : undefined,
+  detail: feedsError ? `${feedsError}, not written`
+    : previousLedger.ok && !previousLedger.ledger ? 'no previous ledger, started'
+    : previousLedger.ok && previousLedger.source === 'cache' ? 'previous ledger from the Action cache' : undefined,
 });
 const trendsJson = trendsBase.write ? JSON.stringify({ version: 1, generatedAt, ...trends }) : '';
 if (trendsBase.write) writeFileSync(TRENDS_OUT, trendsJson);
