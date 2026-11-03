@@ -6,6 +6,7 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Auto-refresh no longer re-applies an unchanged snapshot and pauses in background tabs (catches up when the tab becomes visible)
 - Publish RSS feeds for news, vulnerabilities and ransomware (data/feeds/*.xml), with story and victim deep links
 
 ## 2026-11-02

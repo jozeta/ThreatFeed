@@ -24,6 +24,7 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
+import { isRefreshDue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
 import { feedsInUse, inUse, withoutDisabledCategories } from '../services/articles/categories';
 import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
@@ -247,6 +248,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cveIntelRef.current = storedIntel;
       setCveIntel(storedIntel);
       setSnapshotGeneratedAt(await getStoredValue<string>('snapshotGeneratedAt'));
+      appliedSnapshotKeyRef.current = (await getStoredValue<string>('snapshotApplyKey')) ?? null;
       setIncidents(await getStoredValue<IncidentData>('incidents'));
       // ensureVulns may already have fetched a fresher copy while the stored data was loading
       const storedVulns = await getStoredValue<VulnData>('vulns');
@@ -292,12 +294,16 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Synchronous in-flight guard: the isRefreshing state is captured per render, so callers
   // holding an older closure (init timer, auto-refresh interval) would otherwise see stale `false`.
   const refreshInFlightRef = useRef(false);
+  // Key of the snapshot last applied (see snapshotApplyKey); an unchanged snapshot is not re-applied
+  const appliedSnapshotKeyRef = useRef<string | null>(null);
+  const lastRefreshStartedRef = useRef(Date.now());
 
   // Core refresh logic. Reads settings/articles through refs, so it is safe to call from any closure.
   const refreshFeedsInternal = useCallback(async (feedsToFetch: Feed[], singleFeedId?: string, options: RefreshOptions = {}) => {
     if (refreshInFlightRef.current || !navigator.onLine) return;
 
     refreshInFlightRef.current = true;
+    lastRefreshStartedRef.current = Date.now();
     setIsRefreshing(true);
 
     const settings = settingsRef.current;
@@ -371,23 +377,30 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (options.useSnapshot && settings.dataSource !== 'live') {
           const snapshot = await loadSnapshot();
           if (snapshot) {
-            await applyCveIntel(snapshot.cveIntel);
             // Only feeds the snapshot fetched successfully count as covered; ones that failed on GitHub's
             // servers (some sites block data-centre IPs) are tried live through the gateway below
             const covered = new Set(feedsToFetch.filter(f => f.enabled && snapshot.feedHealth[f.id]?.status === 'healthy').map(f => f.id));
-            const healths = [...covered].map(id => snapshot.feedHealth[id]);
-            setFeedHealth(prev => ({ ...prev, ...Object.fromEntries(healths.map(h => [h.feedId, h])) }));
-            for (const h of healths) await saveFeedHealthToDB(h);
-            await applyFetched(snapshot.articles.filter(a => covered.has(a.sourceId)));
-            setLastUpdated(new Date(snapshot.generatedAt));
-            setSnapshotGeneratedAt(snapshot.generatedAt);
-            await saveStoredValue('snapshotGeneratedAt', snapshot.generatedAt);
-            if (snapshot.incidents) {
-              setIncidents(snapshot.incidents);
-              await saveStoredValue('incidents', snapshot.incidents);
+            // An unchanged snapshot for the same feeds would only rewrite what is already stored
+            const applyKey = snapshotApplyKey(snapshot.generatedAt, covered);
+            if (shouldApplySnapshot(applyKey, appliedSnapshotKeyRef.current)) {
+              await applyCveIntel(snapshot.cveIntel);
+              const healths = [...covered].map(id => snapshot.feedHealth[id]);
+              setFeedHealth(prev => ({ ...prev, ...Object.fromEntries(healths.map(h => [h.feedId, h])) }));
+              for (const h of healths) await saveFeedHealthToDB(h);
+              await applyFetched(snapshot.articles.filter(a => covered.has(a.sourceId)));
+              setLastUpdated(new Date(snapshot.generatedAt));
+              setSnapshotGeneratedAt(snapshot.generatedAt);
+              await saveStoredValue('snapshotGeneratedAt', snapshot.generatedAt);
+              if (snapshot.incidents) {
+                setIncidents(snapshot.incidents);
+                await saveStoredValue('incidents', snapshot.incidents);
+              }
+              setDataSources(snapshot.sources);
+              await saveStoredValue('dataSources', snapshot.sources);
+              // Saved last, so an interrupted apply is retried on the next refresh
+              appliedSnapshotKeyRef.current = applyKey;
+              await saveStoredValue('snapshotApplyKey', applyKey);
             }
-            setDataSources(snapshot.sources);
-            await saveStoredValue('dataSources', snapshot.sources);
             feedsToFetch = feedsToFetch.filter(f => !covered.has(f.id));
           }
         }
@@ -477,8 +490,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (settings.autoRefreshMinutes <= 0) return;
 
-    const timer = setInterval(() => {
-      if (!navigator.onLine) return;
+    const tick = () => {
+      // Background tabs don't refresh; the visibilitychange handler catches up when the tab returns
+      if (!navigator.onLine || document.hidden) return;
       // Snapshot mode: reload the (regularly rebuilt) snapshot; only feeds it lacks are fetched live
       if (settingsRef.current.dataSource !== 'live') {
         refreshFeedsInternal(feedsRef.current, undefined, { useSnapshot: true, skipBackedOff: true });
@@ -499,9 +513,18 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       refreshFeedsInternal(feedsToFetch, undefined, { skipBackedOff: true });
-    }, settings.autoRefreshMinutes * 60 * 1000);
+    };
 
-    return () => clearInterval(timer);
+    const timer = setInterval(tick, settings.autoRefreshMinutes * 60 * 1000);
+    const onVisible = () => {
+      if (!document.hidden && isRefreshDue(lastRefreshStartedRef.current, Date.now(), settingsRef.current.autoRefreshMinutes)) tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [settings.autoRefreshMinutes, refreshFeedsInternal]);
 
   // Feed management operations
