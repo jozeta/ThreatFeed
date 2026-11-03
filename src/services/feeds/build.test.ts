@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Article, KevEntry, LeakSiteVictim, VulnData } from '../../types';
-import { buildFeeds, type FeedInput } from './build';
+import { buildFeeds, FEED_CAPS, type FeedInput } from './build';
 import type { FeedLedger } from './ledger';
 
 const now = Date.parse('2026-11-03T12:00:00Z');
@@ -171,6 +171,25 @@ describe('buildFeeds', () => {
     expect(out[1]).toBe('victim:v1');
     expect(out).not.toContain('victim:late');
     expect(run.ledger.feeds.ransomware['victim:late'].lastSeen).toBe(iso(now));
+  });
+
+  it('lists KEV before critical CVEs with the same pubDate, within the cap', () => {
+    // pubDate falls back to firstSeen (now) for all of them: the sources are over 24 h old
+    const notable = Array.from({ length: 150 }, (_, i) => ({ id: `CVE-2026-${1000 + i}`, published: iso(now - 2 * day), score: 9.8 }));
+    const kevs = ['CVE-2026-1', 'CVE-2026-2', 'CVE-2026-3'].map((cve) => ({ ...kev(cve), dateAdded: iso(now - 2 * day).slice(0, 10) }));
+    const run = buildFeeds(input({ vulns: vulnData({ kev: kevs, notable }) }), null, now, site);
+    const out = guids(run.files.vulns);
+    expect(out).toHaveLength(153);
+    expect(out.slice(0, 3)).toEqual(['kev:CVE-2026-1', 'kev:CVE-2026-2', 'kev:CVE-2026-3']);
+    expect(out.slice(3).every((g) => g.startsWith('cve:'))).toBe(true);
+  });
+
+  it('caps the vulns feed at 300', () => {
+    const notable = Array.from({ length: 320 }, (_, i) => ({ id: `CVE-2026-${1000 + i}`, published: iso(now - 2 * day), score: 9.8 }));
+    const run = buildFeeds(input({ vulns: vulnData({ notable }) }), null, now, site);
+    expect(FEED_CAPS.vulns).toBe(300);
+    expect(guids(run.files.vulns)).toHaveLength(300);
+    expect(run.counts.vulns).toBe(300);
   });
 
   it('files are valid XML', () => {

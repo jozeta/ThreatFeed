@@ -16,9 +16,12 @@ export interface FeedBuild {
   counts: Record<FeedName, number>; // items per feed
 }
 
-export const FEED_CAPS: Record<FeedName, number> = { news: 100, vulns: 100, ransomware: 400 };
+export const FEED_CAPS: Record<FeedName, number> = { news: 100, vulns: 300, ransomware: 400 };
 
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** A rendered item plus its candidate's rank, which breaks pubDate ties in the final order. */
+type RankedItem = RssItem & { rank: number };
 
 const CHANNELS: Record<FeedName, { title: string; description: string }> = {
   news: {
@@ -65,7 +68,7 @@ function assemble(
   entries: Map<string, LedgerEntry>,
   recordBaseline: boolean,
   now: number,
-): RssItem[] {
+): RankedItem[] {
   const nowIso = new Date(now).toISOString();
   const keyIndex = new Map<string, string>();
   for (const [guid, entry] of entries) {
@@ -75,14 +78,14 @@ function assemble(
   const sorted = [...candidates].sort((a, b) =>
     a.rank - b.rank || compareTime(sourceMs(a), sourceMs(b)) || compare(a.guid, b.guid));
   const rendered = new Set<string>();
-  const items: RssItem[] = [];
+  const items: RankedItem[] = [];
   const render = (c: FeedCandidate, guid: string, entry: LedgerEntry) => {
     rendered.add(guid);
     // Fixed on first render, so a later lead article with another source time can't move it.
     // Entries from before pubDate was stored get it here.
     entry.pubDate ??= pickPubDate(c.sourceTime, entry.firstSeen);
     items.push({
-      guid, title: c.title, description: c.description, link: c.link, categories: c.categories,
+      guid, rank: c.rank, title: c.title, description: c.description, link: c.link, categories: c.categories,
       pubDate: entry.pubDate,
     });
   };
@@ -130,7 +133,8 @@ export function buildFeeds(input: FeedInput, previous: FeedLedger | null, now: n
     const entries = new Map(Object.entries(base.feeds[feed]).map(([guid, e]) => [guid, { ...e, keys: [...e.keys] }]));
     const items = assemble(candidates[feed], entries, baselineOpen(entries), now)
       .filter((item) => Date.parse(item.pubDate) >= cutoff)
-      .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate) || compare(a.guid, b.guid))
+      // Newest first; on a first run every pubDate is equal, so rank keeps KEV ahead of the many critical CVEs
+      .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate) || a.rank - b.rank || compare(a.guid, b.guid))
       // Items beyond the cap on their first render are still recorded as published, by design:
       // they are never announced later as new.
       .slice(0, FEED_CAPS[feed]);
