@@ -58,6 +58,39 @@ describe('buildFeeds', () => {
     expect(exploits).toEqual([`exploit:${cve}:metasploit`]);
   });
 
+  it('baselines exploits on the first run that has exploit data', () => {
+    const cve = 'CVE-2026-1';
+    const other = { victims: [victim('o', now - hour)] };
+    const run1 = buildFeeds(input({ ...other, vulns: null }), null, now, site);
+    expect(Object.keys(run1.ledger.feeds.vulns)).toEqual([]);
+
+    const data = vulnData({ kev: [kev(cve)], exploits: { [cve]: { pocs: 2 } } });
+    const run2 = buildFeeds(input({ ...other, vulns: data }), run1.ledger, now + hour, site);
+    expect(guids(run2.files.vulns).filter((g) => g.startsWith('exploit:'))).toEqual([]);
+    expect(run2.ledger.feeds.vulns[`exploit:${cve}:poc`].published).toBe(false);
+
+    const withMsf = vulnData({ kev: [kev(cve)], exploits: { [cve]: { pocs: 2, msf: ['exploit/x'] } } });
+    const run3 = buildFeeds(input({ ...other, vulns: withMsf }), run2.ledger, now + 2 * hour, site);
+    expect(guids(run3.files.vulns).filter((g) => g.startsWith('exploit:'))).toEqual([`exploit:${cve}:metasploit`]);
+    expect(run3.ledger.feeds.vulns[`exploit:${cve}:metasploit`].published).toBe(true);
+  });
+
+  it('baselines exploits when the previous ledger has vulns entries but no exploits', () => {
+    const cve = 'CVE-2026-1';
+    const previous: FeedLedger = {
+      version: 1,
+      feeds: {
+        news: {}, ransomware: {},
+        vulns: { [`kev:${cve}`]: { firstSeen: iso(now - day), lastSeen: iso(now - day), published: true, keys: [`c:${cve}`] } },
+      },
+    };
+    const data = vulnData({ kev: [kev(cve)], exploits: { [cve]: { pocs: 2, msf: ['exploit/x'] } } });
+    const run = buildFeeds(input({ vulns: data }), previous, now, site);
+    expect(guids(run.files.vulns)).toEqual([`kev:${cve}`]);
+    expect(run.ledger.feeds.vulns[`exploit:${cve}:poc`].published).toBe(false);
+    expect(run.ledger.feeds.vulns[`exploit:${cve}:metasploit`].published).toBe(false);
+  });
+
   it("keeps a news story's guid when its lead article changes", () => {
     // A's source time is 2 h before first seen, so it is the pubDate; C's later time must not move it
     const a = article('A', { severity: 'critical', severityScore: 80, publishedAt: iso(now - 2 * hour) });

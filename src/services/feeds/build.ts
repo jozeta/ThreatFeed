@@ -37,6 +37,24 @@ const CHANNELS: Record<FeedName, { title: string; description: string }> = {
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+// Chronological; a missing or unparseable time sorts first
+const sourceMs = (c: FeedCandidate): number => {
+  const t = c.sourceTime ? Date.parse(c.sourceTime) : NaN;
+  return isNaN(t) ? -Infinity : t;
+};
+const compareTime = (a: number, b: number): number => (a === b ? 0 : a < b ? -1 : 1);
+
+// Guid prefix of the only kind that has baseline candidates (exploits)
+const BASELINE_PREFIX = 'exploit:';
+
+/**
+ * True while no baseline-kind entry has ever been recorded for this feed. That holds on the
+ * first run, and also later if no run so far had exploit data (or all exploit entries were
+ * pruned), so a backlog of old exploits is never announced as new.
+ */
+const baselineOpen = (entries: Map<string, LedgerEntry>): boolean =>
+  ![...entries.keys()].some((guid) => guid.startsWith(BASELINE_PREFIX));
+
 /**
  * Matches one feed's candidates against its ledger entries, updating `entries` in place, and
  * returns the items to render. An item is announced once under one guid: a match keeps the
@@ -45,7 +63,7 @@ const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 function assemble(
   candidates: FeedCandidate[],
   entries: Map<string, LedgerEntry>,
-  firstRun: boolean,
+  recordBaseline: boolean,
   now: number,
 ): RssItem[] {
   const nowIso = new Date(now).toISOString();
@@ -55,7 +73,7 @@ function assemble(
   }
 
   const sorted = [...candidates].sort((a, b) =>
-    a.rank - b.rank || compare(a.sourceTime ?? '', b.sourceTime ?? '') || compare(a.guid, b.guid));
+    a.rank - b.rank || compareTime(sourceMs(a), sourceMs(b)) || compare(a.guid, b.guid));
   const rendered = new Set<string>();
   const items: RssItem[] = [];
   const render = (c: FeedCandidate, guid: string, entry: LedgerEntry) => {
@@ -81,7 +99,7 @@ function assemble(
       }
       continue;
     }
-    const published = !(firstRun && c.baseline);
+    const published = !(recordBaseline && c.baseline);
     const entry: LedgerEntry = { firstSeen: nowIso, lastSeen: nowIso, published, keys: [...new Set(c.keys)] };
     entries.set(c.guid, entry);
     for (const key of c.keys) if (!keyIndex.has(key)) keyIndex.set(key, c.guid);
@@ -90,7 +108,10 @@ function assemble(
   return items;
 }
 
-/** Builds the three RSS feeds and the updated ledger. `previous === null` means the first run. */
+/**
+ * Builds the three RSS feeds and the updated ledger. `previous === null` means the first run.
+ * Baseline candidates are recorded unpublished until the feed has its first baseline-kind entry.
+ */
 export function buildFeeds(input: FeedInput, previous: FeedLedger | null, now: number, site: string): FeedBuild {
   const candidates: Record<FeedName, FeedCandidate[]> = {
     news: newsCandidates(input.articles, now, site),
@@ -107,9 +128,11 @@ export function buildFeeds(input: FeedInput, previous: FeedLedger | null, now: n
   for (const feed of FEED_NAMES) {
     // Copies, so the previous ledger is never mutated
     const entries = new Map(Object.entries(base.feeds[feed]).map(([guid, e]) => [guid, { ...e, keys: [...e.keys] }]));
-    const items = assemble(candidates[feed], entries, previous === null, now)
+    const items = assemble(candidates[feed], entries, baselineOpen(entries), now)
       .filter((item) => Date.parse(item.pubDate) >= cutoff)
       .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate) || compare(a.guid, b.guid))
+      // Items beyond the cap on their first render are still recorded as published, by design:
+      // they are never announced later as new.
       .slice(0, FEED_CAPS[feed]);
     ledger.feeds[feed] = Object.fromEntries(entries);
     counts[feed] = items.length;
