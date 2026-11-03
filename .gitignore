@@ -49,3 +49,6 @@ public/data/entities.json
 *.key
 *.p12
 *.pfx
+
+# Generated RSS feeds and ledger (built by npm run snapshot)
+public/data/feeds/

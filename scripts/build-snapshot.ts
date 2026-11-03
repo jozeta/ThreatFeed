@@ -27,6 +27,8 @@ const {
   cvesFromArticles, attackProfiles, aggregatePayments, paymentFamilyFor, malpediaProfiles, stopRansomwareAdvisories,
 } = await import('../src/services/intelligence/enrichment');
 const { refreshPatchMonths, decodeMsrc } = await import('../src/services/intelligence/patchTuesday');
+const { buildFeeds } = await import('../src/services/feeds/build');
+const { readPreviousLedger } = await import('../src/services/feeds/previous');
 const { refreshActors, decodeActors, encodeActors } = await import('../src/services/intelligence/actors');
 const { buildEntities } = await import('../src/services/intelligence/entities');
 const { countStatsByDay, mergeStats, decodeStats } = await import('../src/services/intelligence/stats');
@@ -62,6 +64,8 @@ const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and
 const ENTITIES_OUT = resolve(root, 'public/data/entities.json'); // the names text links to their panels, loaded after first paint
 const STATS_OUT = resolve(root, 'public/data/stats.json'); // daily counts of CVEs, KEV additions, exploits and victims, 400 days: the dashboards
 const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // mention counts per entity (daily, then weekly), two years: the detail panels' mention history
+const FEEDS_DIR = resolve(root, 'public/data/feeds'); // the RSS feeds and their published-items ledger (seen.json), read by feed readers and the next run
+const FEED_SITE_URL = (process.env.FEED_SITE_URL || 'https://jozeta.github.io/ThreatFeed/').replace(/\/?$/, '/');
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
 // The published site's copies of this run's outputs, read back to carry history over (set in the workflow)
 const PREVIOUS_BASE = process.env.PREVIOUS_SNAPSHOT_URL?.replace(/snapshot\.json$/, '');
@@ -559,6 +563,7 @@ const exploitsPromise = loadExploitSources();
 const msrcPromise = loadMsrc();
 const previousActorsPromise = loadPreviousActors();
 const previousTrendsPromise = loadPreviousTrends();
+const previousLedgerPromise = readPreviousLedger(getJson, PREVIOUS_BASE && `${PREVIOUS_BASE}feeds/seen.json`);
 const previousStatsPromise = loadPreviousStats();
 const dailyPromise = Promise.all([rlPromise, previousActorsPromise])
   .then(([rl, previousActors]) => loadDailySources(previousIntel, rl.updates, !previousActors?.actors.length));
@@ -793,6 +798,38 @@ const entities = buildEntities({
 });
 const entitiesJson = JSON.stringify({ version: 1, generatedAt, ...entities });
 writeFileSync(ENTITIES_OUT, entitiesJson);
+
+// RSS feeds: everything is built in memory first and written only if all of it succeeded, so a failure
+// never leaves a partial set. If the previous ledger couldn't be read, nothing is written: a first run
+// would re-date every item
+const previousLedger = await previousLedgerPromise;
+let feedFiles: { name: string; text: string; budget: number }[] = [];
+let feedCounts: Record<string, number> = {};
+let feedsError = previousLedger.ok ? '' : `previous ledger unreadable (${previousLedger.error})`;
+if (previousLedger.ok) {
+  try {
+    const built = buildFeeds({ articles, victims, vulns, msrc }, previousLedger.ledger, Date.now(), FEED_SITE_URL);
+    feedFiles = [
+      { name: 'news.xml', text: built.files.news, budget: 300 * 1024 },
+      { name: 'vulns.xml', text: built.files.vulns, budget: 300 * 1024 },
+      { name: 'ransomware.xml', text: built.files.ransomware, budget: 500 * 1024 },
+      { name: 'seen.json', text: JSON.stringify(built.ledger), budget: 2 * 1024 * 1024 },
+    ];
+    feedCounts = built.counts;
+    mkdirSync(FEEDS_DIR, { recursive: true });
+    for (const f of feedFiles) writeFileSync(resolve(FEEDS_DIR, f.name), f.text);
+  } catch (err) {
+    feedsError = errorText(err);
+    feedFiles = [];
+  }
+}
+report({
+  id: 'feeds',
+  label: 'Published RSS feeds',
+  status: feedsError ? 'failed' : 'ok',
+  count: feedsError ? 0 : (feedCounts.news ?? 0) + (feedCounts.vulns ?? 0) + (feedCounts.ransomware ?? 0),
+  detail: feedsError ? `${feedsError}, not written` : previousLedger.ok && !previousLedger.ledger ? 'no previous ledger, started' : undefined,
+});
 const trendsJson = trendsBase.write ? JSON.stringify({ version: 1, generatedAt, ...trends }) : '';
 if (trendsBase.write) writeFileSync(TRENDS_OUT, trendsJson);
 const statsJson = statsBase.write ? JSON.stringify({ version: 1, generatedAt, days: statsDays }) : '';
@@ -807,6 +844,9 @@ console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), 
 console.log(`Patch Tuesday: ${msrc.months.map(m => `${m.id} ${m.cves.length} CVEs (${m.cves.filter(c => c.exploited).length} exploited)`).join(', ') || 'no data'}, ${mb(msrcJson)}`);
 console.log(`Actors: ${actors.actors.length} threat actors (${actors.actors.filter(a => a.country).length} with a country), ${actors.malware.length} malware and tools (${actors.malware.filter(m => m.malpediaUrl).length} in Malpedia, ${actors.malware.filter(m => !m.attackId).length} Malpedia-only from the news), ${(actorsJson.length / 1024).toFixed(0)} KB${actorsJson.length > 400 * 1024 ? ' (over the 400 KB budget)' : ''}`);
 console.log(`Entities: ${entities.vendors.length} vendors, ${entities.groups.length} groups, ${entities.actors.length} actors, ${entities.malware.length} malware and tools, ${(entitiesJson.length / 1024).toFixed(0)} KB${entitiesJson.length > 80 * 1024 ? ' (over the 80 KB budget)' : ''}`);
+console.log(feedsError
+  ? `RSS feeds: not written, ${feedsError}`
+  : `RSS feeds: ${feedCounts.news} news, ${feedCounts.vulns} vulnerability, ${feedCounts.ransomware} ransomware items, ${feedFiles.map(f => `${f.name} ${(f.text.length / 1024).toFixed(0)} KB${f.text.length > f.budget ? ` (over the ${(f.budget / 1024).toFixed(0)} KB budget)` : ''}`).join(', ')}`);
 console.log(trendsBase.write
   ? `Trends: ${trendDayKeys.length} days and ${Object.keys(trends.weeks).length} weeks since ${trendsSince}, ${(trendsJson.length / 1024).toFixed(0)} KB${trendsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
   : `Trends: not written, the previous history couldn't be read (${publishedTrends.error})`);
