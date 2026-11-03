@@ -6,6 +6,7 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Titles in Japanese, Chinese, Russian, Greek, Arabic and accented Swedish are no longer treated as duplicates or merged into one story just because they share a Latin word
 - Auto-refresh no longer re-applies an unchanged snapshot and pauses in background tabs (catches up when the tab becomes visible)
 - Feeds added, imported or refreshed one by one while a refresh is running are now fetched right after it instead of being skipped
 - Publish RSS feeds for news, vulnerabilities and ransomware (data/feeds/*.xml), with story and victim deep links
