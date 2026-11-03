@@ -42,6 +42,37 @@ describe('mergeSyncData', () => {
   });
 });
 
+describe('mergeSyncData deletions (TEST-008)', () => {
+  const recent = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const lists = { watchlistKeywords: [], stackKeywords: [], savedSearches: [], bookmarkFolders: [] };
+  // Device A deleted "deal" a day ago; device B still has it and never touched it
+  const a = data({ settings: { ...lists, mutedKeywords: ['webinar'], syncLog: { mutedKeywords: { deal: { removed: true, at: recent(1) } } } } });
+  const b = data({ settings: { ...lists, mutedKeywords: ['Deal', 'webinar'] } });
+
+  it('removes a term deleted on one device from both, whichever side merges', () => {
+    expect((mergeSyncData(a as any, b) as any).settings.mutedKeywords).toEqual(['webinar']);
+    const onB = mergeSyncData(b as any, a) as any;
+    expect(onB.settings.mutedKeywords).toEqual(['webinar']);
+    expect(onB.settings.syncLog.mutedKeywords.deal.removed).toBe(true); // B carries the tombstone onward
+  });
+
+  it('keeps a term re-added on the other device after the deletion', () => {
+    const readded = data({ settings: { ...lists, mutedKeywords: ['webinar', 'deal'], syncLog: { mutedKeywords: { deal: { removed: false, at: recent(0) } } } } });
+    expect((mergeSyncData(a as any, readded) as any).settings.mutedKeywords).toEqual(['webinar', 'deal']);
+    expect((mergeSyncData(readded as any, a) as any).settings.mutedKeywords).toEqual(['webinar', 'deal']);
+  });
+
+  it('unions as before when neither side has a sync log (old format)', () => {
+    const old = data({ settings: { ...lists, mutedKeywords: ['deal'] } });
+    expect((mergeSyncData(b as any, old) as any).settings.mutedKeywords).toEqual(['Deal', 'webinar']);
+  });
+
+  it('ignores a malformed remote sync log', () => {
+    const bad = data({ settings: { ...lists, mutedKeywords: [], syncLog: { mutedKeywords: { webinar: { removed: 'yes', at: 'never' } } } } });
+    expect((mergeSyncData(b as any, bad) as any).settings.mutedKeywords).toEqual(['Deal', 'webinar']);
+  });
+});
+
 describe('mergeAlertRules', () => {
   const rule = (id: string, over: Partial<AlertRule> = {}): AlertRule => ({
     id, name: id, kind: 'news', enabled: true, notify: false,
@@ -99,6 +130,15 @@ describe('mergeAlertRules', () => {
     })]);
     expect(out[0]).toMatchObject({ id: 'stack-vulns', builtIn: 'stack-vulns', kind: 'vulns', name: 'My Stack (vulns)', enabled: false, notify: true });
     expect(out[0].root).toEqual({ op: 'any', items: [] });
+  });
+
+  it('propagates a deleted rule, unless the other device edited it after the deletion', () => {
+    const syncLog = { alertRules: { gone: { removed: true, at: '2026-10-10T00:00:00Z' }, edited: { removed: true, at: '2026-10-10T00:00:00Z' } } };
+    const local = data({ settings: { alertRules: [rule('kept')], syncLog } });
+    const remote = data({ settings: { alertRules: [rule('kept'), rule('gone'), rule('edited', { updatedAt: '2026-10-11T00:00:00Z' })] } });
+    for (const merged of [mergeSyncData(local as any, remote) as any, mergeSyncData(remote as any, local) as any]) {
+      expect(merged.settings.alertRules.map((r: AlertRule) => r.id).sort()).toEqual(['edited', 'kept']);
+    }
   });
 
   it('is wired into mergeSyncData along with the local alert gap', () => {

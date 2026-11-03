@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
 import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
+import { cleanSyncLog } from '../sync/syncLog';
 
 interface ThreatFeedDB extends DBSchema {
   articles: {
@@ -386,10 +387,12 @@ export async function importThreatFeedData(data: any): Promise<boolean> {
     }
   }
 
-  // Import settings
-  if (data.settings) {
+  // Import settings (the optional sync log is validated: malformed entries are dropped)
+  if (data.settings && typeof data.settings === 'object') {
     const settingsStore = tx.objectStore('settings');
-    await settingsStore.put({ key: SETTINGS_KEY, value: data.settings });
+    const syncLog = cleanSyncLog(data.settings.syncLog);
+    const { syncLog: _raw, ...rest } = data.settings;
+    await settingsStore.put({ key: SETTINGS_KEY, value: syncLog ? { ...rest, syncLog } : rest });
   }
 
   await tx.done;
