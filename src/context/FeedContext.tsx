@@ -24,7 +24,7 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
-import { isRefreshDue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
+import { isRefreshDue, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
 import { feedsInUse, inUse, withoutDisabledCategories } from '../services/articles/categories';
 import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
@@ -40,6 +40,8 @@ interface RefreshOptions {
   useSnapshot?: boolean;
   // Skip feeds that keep failing (see BACKOFF_*) instead of waiting on them every time
   skipBackedOff?: boolean;
+  // If a refresh is already running, fetch these feeds in a follow-up instead of dropping the request
+  queueIfBusy?: boolean;
 }
 
 // A feed that failed this many refreshes in a row is only retried once per BACKOFF_RETRY_MS
@@ -297,10 +299,16 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Key of the snapshot last applied (see snapshotApplyKey); an unchanged snapshot is not re-applied
   const appliedSnapshotKeyRef = useRef<string | null>(null);
   const lastRefreshStartedRef = useRef(Date.now());
+  // Feeds requested (added, imported, refreshed one by one) while a refresh was running
+  const pendingFeedsRef = useRef(new PendingFeedQueue());
 
   // Core refresh logic. Reads settings/articles through refs, so it is safe to call from any closure.
   const refreshFeedsInternal = useCallback(async (feedsToFetch: Feed[], singleFeedId?: string, options: RefreshOptions = {}) => {
-    if (refreshInFlightRef.current || !navigator.onLine) return;
+    if (!navigator.onLine) return;
+    if (refreshInFlightRef.current) {
+      if (options.queueIfBusy) pendingFeedsRef.current.add(singleFeedId ? [singleFeedId] : feedsToFetch.map(f => f.id));
+      return;
+    }
 
     refreshInFlightRef.current = true;
     lastRefreshStartedRef.current = Date.now();
@@ -469,11 +477,14 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       refreshInFlightRef.current = false;
       setIsRefreshing(false);
+      // One follow-up refresh for the feeds that were requested meanwhile
+      const queued = new Set(pendingFeedsRef.current.drain());
+      if (queued.size > 0) refreshFeedsInternal(feedsRef.current.filter(f => queued.has(f.id)));
     }
   }, []);
 
   const refreshFeeds = useCallback(async (targetFeedId?: string) => {
-    await refreshFeedsInternal(feedsRef.current, targetFeedId, { useSnapshot: true });
+    await refreshFeedsInternal(feedsRef.current, targetFeedId, { useSnapshot: true, queueIfBusy: !!targetFeedId });
   }, [refreshFeedsInternal]);
 
   const refreshFailedFeeds = useCallback(async () => {
@@ -557,7 +568,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await saveSingleFeedToDB(feed);
     }
     // Fetch the new feeds immediately
-    refreshFeedsInternal(added);
+    refreshFeedsInternal(added, undefined, { queueIfBusy: true });
     return added.length;
   }, [refreshFeedsInternal]);
 

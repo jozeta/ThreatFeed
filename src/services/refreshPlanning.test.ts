@@ -49,3 +49,16 @@ describe('PendingFeedQueue', () => {
     expect(q.drain()).toEqual([]);
   });
 });
+
+describe('PendingFeedQueue follow-up flow', () => {
+  it('keeps requests made during a refresh and hands each out only once', () => {
+    const q = new PendingFeedQueue();
+    q.add(['custom-1']);
+    q.add(['custom-2', 'custom-3']);
+    q.add(['custom-1']);
+    expect(q.drain()).toEqual(['custom-1', 'custom-2', 'custom-3']);
+    // Requests arriving after the drain belong to the next follow-up
+    q.add(['custom-4']);
+    expect(q.drain()).toEqual(['custom-4']);
+  });
+});
