@@ -1,0 +1,141 @@
+import { describe, expect, it } from 'vitest';
+import type { Article, KevEntry, LeakSiteVictim, VulnData } from '../../types';
+import { buildFeeds, type FeedInput } from './build';
+import type { FeedLedger } from './ledger';
+
+const now = Date.parse('2026-11-03T12:00:00Z');
+const site = 'https://example.test/TF/';
+const minute = 60 * 1000;
+const hour = 60 * minute;
+const day = 24 * hour;
+const iso = (t: number) => new Date(t).toISOString();
+
+const input = (over: Partial<FeedInput> = {}): FeedInput => ({ articles: [], victims: [], vulns: null, msrc: null, ...over });
+
+const guids = (xml: string): string[] =>
+  [...new DOMParser().parseFromString(xml, 'application/xml').getElementsByTagName('guid')].map((g) => g.textContent ?? '');
+
+const items = (xml: string) =>
+  [...new DOMParser().parseFromString(xml, 'application/xml').getElementsByTagName('item')].map((item) => ({
+    guid: item.getElementsByTagName('guid')[0].textContent,
+    pubDate: item.getElementsByTagName('pubDate')[0].textContent,
+    description: item.getElementsByTagName('description')[0].textContent ?? '',
+  }));
+
+const article = (id: string, over: Partial<Article> = {}): Article => ({
+  id, title: 'Hackers exploit Fortinet firewall zero-day flaw', url: `https://example.com/${id}`, sourceId: id,
+  sourceName: `Outlet ${id}`, publishedAt: iso(now - 2 * day), tags: [], categories: [], read: false, viewed: false,
+  bookmarked: false, ...over,
+});
+
+const victim = (id: string, discoveredAt: number, name = `Victim ${id}`): LeakSiteVictim => ({
+  id, victim: name, group: 'Qilin', country: 'SE', discoveredAt: iso(discoveredAt),
+});
+
+const kev = (cve: string): KevEntry => ({
+  cve, vendor: 'Fortinet', product: 'FortiOS', name: 'FortiOS RCE', dateAdded: iso(now - day).slice(0, 10),
+  dueDate: '2026-11-20', ransomware: false, cwes: [], cvss: 9.8,
+});
+
+const vulnData = (over: Partial<VulnData> = {}): VulnData => ({
+  updatedAt: iso(now), kev: [], nvd: null, notable: [], advisories: [], epssTop: [], exploits: {}, ...over,
+});
+
+describe('buildFeeds', () => {
+  it('first run records exploits as baseline', () => {
+    const cve = 'CVE-2026-1';
+    const data = vulnData({ kev: [kev(cve)], exploits: { [cve]: { pocs: 2 } } });
+    const run1 = buildFeeds(input({ vulns: data }), null, now, site);
+    expect(guids(run1.files.vulns)).toEqual([`kev:${cve}`]);
+    expect(run1.ledger.feeds.vulns[`exploit:${cve}:poc`].published).toBe(false);
+
+    const run2 = buildFeeds(input({ vulns: data }), run1.ledger, now + hour, site);
+    expect(guids(run2.files.vulns)).toEqual([`kev:${cve}`]);
+
+    const withMsf = vulnData({ kev: [kev(cve)], exploits: { [cve]: { pocs: 2, msf: ['exploit/x'] } } });
+    const run3 = buildFeeds(input({ vulns: withMsf }), run2.ledger, now + 2 * hour, site);
+    const exploits = guids(run3.files.vulns).filter((g) => g.startsWith('exploit:'));
+    expect(exploits).toEqual([`exploit:${cve}:metasploit`]);
+  });
+
+  it("keeps a news story's guid when its lead article changes", () => {
+    // A is old enough that its pubDate is its first-seen time; C arrives after run 1
+    const a = article('A', { severity: 'critical', severityScore: 80, publishedAt: iso(now - 2 * day) });
+    const b = article('B', { title: 'Hackers exploit Fortinet firewall zero-day flaw attacks', severity: 'high', severityScore: 60 });
+    const run1 = buildFeeds(input({ articles: [a, b] }), null, now, site);
+    const first = items(run1.files.news);
+    expect(first.map((i) => i.guid)).toEqual(['news:A']);
+
+    const c = article('C', {
+      title: 'Hackers exploit Fortinet firewall zero-day flaw warns', severity: 'critical', severityScore: 95,
+      publishedAt: iso(now + 30 * minute),
+    });
+    const run2 = buildFeeds(input({ articles: [a, b, c] }), run1.ledger, now + hour, site);
+    const second = items(run2.files.news);
+    expect(second).toHaveLength(1);
+    expect(second[0].guid).toBe('news:A');
+    expect(second[0].pubDate).toBe(first[0].pubDate);
+    expect(second[0].description).toContain('2 other outlets');
+    expect(second[0].description).toContain('https://example.com/C');
+  });
+
+  it('one item per CVE across kev and critical-cve', () => {
+    const cve = 'CVE-2026-5';
+    const notable = [{ id: cve, published: iso(now - day), score: 9.8, assigner: 'Acme' }];
+    const run1 = buildFeeds(input({ vulns: vulnData({ kev: [kev(cve)], notable }) }), null, now, site);
+    expect(guids(run1.files.vulns)).toEqual([`kev:${cve}`]);
+
+    const run2 = buildFeeds(input({ vulns: vulnData({ notable }) }), run1.ledger, now + hour, site);
+    expect(guids(run2.files.vulns).filter((g) => g.startsWith('cve:'))).toEqual([]);
+  });
+
+  it('never re-announces after the item leaves the window', () => {
+    const v = victim('V', now - day);
+    const run1 = buildFeeds(input({ victims: [v] }), null, now, site);
+    expect(guids(run1.files.ransomware)).toEqual(['victim:V']);
+    const run1Entry = run1.ledger.feeds.ransomware['victim:V'];
+
+    // V is now older than the window, so it is no candidate and does not touch the ledger
+    const run2 = buildFeeds(input({ victims: [v] }), run1.ledger, now + 10 * day, site);
+    expect(guids(run2.files.ransomware)).not.toContain('victim:V');
+    expect(run2.ledger.feeds.ransomware['victim:V']).toEqual(run1Entry);
+    expect(run2.ledger.feeds.ransomware['victim:V'].lastSeen).toBe(iso(now));
+
+    const run3 = buildFeeds(input({ victims: [v] }), run2.ledger, now + 11 * day, site);
+    expect(guids(run3.files.ransomware)).not.toContain('victim:V');
+    expect(run3.ledger.feeds.ransomware['victim:V']).toEqual(run1Entry);
+  });
+
+  it('applies the caps and the 7-day window, newest first', () => {
+    const victims = Array.from({ length: 450 }, (_, i) => victim(`v${i}`, now - i * minute));
+    // An entry first seen 8 days ago that is still in this run's data stays out of the feed
+    const previous: FeedLedger = {
+      version: 1,
+      feeds: {
+        news: {}, vulns: {},
+        ransomware: { 'victim:late': { firstSeen: iso(now - 8 * day), lastSeen: iso(now - day), published: true, keys: [] } },
+      },
+    };
+    const run = buildFeeds(input({ victims: [...victims, victim('late', now - day)] }), previous, now, site);
+    const out = guids(run.files.ransomware);
+    expect(out).toHaveLength(400);
+    expect(run.counts.ransomware).toBe(400);
+    expect(out[0]).toBe('victim:v0');
+    expect(out[1]).toBe('victim:v1');
+    expect(out).not.toContain('victim:late');
+    expect(run.ledger.feeds.ransomware['victim:late'].lastSeen).toBe(iso(now));
+  });
+
+  it('files are valid XML', () => {
+    const run = buildFeeds(input({ victims: [victim('x', now - hour)], vulns: vulnData({ kev: [kev('CVE-2026-9')] }) }), null, now, site);
+    const titles = { news: 'ThreatFeed — News', vulns: 'ThreatFeed — Vulnerabilities', ransomware: 'ThreatFeed — Ransomware' };
+    for (const feed of ['news', 'vulns', 'ransomware'] as const) {
+      const doc = new DOMParser().parseFromString(run.files[feed], 'application/xml');
+      expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+      const self = doc.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'link')[0];
+      expect(self.getAttribute('href')).toBe(`${site}data/feeds/${feed}.xml`);
+      expect(doc.getElementsByTagName('title')[0].textContent).toBe(titles[feed]);
+      expect(doc.getElementsByTagName('link')[0].textContent).toBe(site);
+    }
+  });
+});
