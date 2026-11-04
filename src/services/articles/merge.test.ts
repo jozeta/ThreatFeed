@@ -21,6 +21,15 @@ describe('mergeFetchedArticles', () => {
     expect(a).toMatchObject({ read: true, bookmarked: true, bookmarkFolder: 'IR', bookmarkNotes: 'note', customTags: ['x'], title: 'New title for A' });
   });
 
+  it('keeps the stored text of a bookmark when the fresh copy has none, and only of a bookmark', () => {
+    const stored = [article('g', { bookmarked: true, content: '<p>Kept</p>' }), article('h', { content: '<p>Old</p>' })];
+    const fresh = [article('g', { content: undefined }), article('h', { content: undefined })];
+    const result = mergeFetchedArticles(stored, fresh, 30);
+    expect(result.find(x => x.id === 'g')!.content).toBe('<p>Kept</p>');
+    expect(result.find(x => x.id === 'h')!.content).toBeUndefined();
+    expect(mergeFetchedArticles(stored, [article('g', { content: '<p>New</p>' })], 30).find(x => x.id === 'g')!.content).toBe('<p>New</p>');
+  });
+
   it('keeps the existing article over a new near-duplicate', () => {
     expect(merged.map(x => x.id)).toContain('b');
     expect(merged.map(x => x.id)).not.toContain('c');

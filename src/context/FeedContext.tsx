@@ -20,6 +20,7 @@ import { loadActors, loadEntities, loadMsrc, loadRansomwareIntel, loadSnapshot, 
 import { buildEntityMatcher } from '../services/intelligence/entityLinks';
 import { EntityMatcherContext } from '../hooks/useEntityMatcher';
 import { createSnapshotLoader } from '../services/snapshotLoader';
+import { loadArticleContent } from '../services/articleContent';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
@@ -343,8 +344,10 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Progressive merges can run several times before React re-renders; keep the ref current for the next one
       articlesRef.current = mergedSnapshot;
       setArticles(prev => mergeFetchedArticles(prev, newItems, maxAgeDays, shown));
-      // Persist fetched items that survived (near-duplicates of existing ones are dropped)
-      await saveArticlesToDB(newItems.filter(a => after.has(a.id)));
+      // Persist fetched items that survived (near-duplicates of existing ones are dropped), as merged: a
+      // bookmark keeps the text stored with it when the snapshot copy has none
+      const fetchedIds = new Set(newItems.map(a => a.id));
+      await saveArticlesToDB(mergedSnapshot.filter(a => fetchedIds.has(a.id)));
       // Delete articles the merge pruned (expired), so they don't come back on reload
       await deleteArticlesFromDB(before.filter(a => !after.has(a.id)).map(a => a.id));
     };
@@ -629,6 +632,17 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const findArticle = (articleId: string) => articlesRef.current.find(a => a.id === articleId);
 
+  // A bookmark stores the article's text with it (snapshot articles carry none), so it stays readable after
+  // the day's content shard has aged out and goes into backups and Gist sync. saveArticlesToDB takes the user
+  // state from the state record updateArticleStateInDB has just written.
+  const storeBookmarkContent = useCallback(async (target: Article) => {
+    if (target.content) return;
+    const content = await loadArticleContent(target);
+    if (!content) return;
+    await saveArticlesToDB([{ ...(findArticle(target.id) ?? target), content }]);
+    patchArticle(target.id, { content });
+  }, [patchArticle]);
+
   const toggleBookmark = useCallback(async (articleId: string) => {
     const target = findArticle(articleId);
     if (!target) return;
@@ -637,12 +651,15 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const folder = newBookmarked ? (target.bookmarkFolder || 'General') : target.bookmarkFolder;
     await updateArticleStateInDB(articleId, { bookmarked: newBookmarked, bookmarkFolder: folder });
     patchArticle(articleId, { bookmarked: newBookmarked, bookmarkFolder: folder });
-  }, [patchArticle]);
+    if (newBookmarked) await storeBookmarkContent(target);
+  }, [patchArticle, storeBookmarkContent]);
 
   const setBookmarkFolder = useCallback(async (articleId: string, folder: string) => {
     await updateArticleStateInDB(articleId, { bookmarkFolder: folder, bookmarked: true });
     patchArticle(articleId, { bookmarkFolder: folder, bookmarked: true });
-  }, [patchArticle]);
+    const target = findArticle(articleId);
+    if (target) await storeBookmarkContent(target);
+  }, [patchArticle, storeBookmarkContent]);
 
   const setBookmarkNotes = useCallback(async (articleId: string, notes: string) => {
     await updateArticleStateInDB(articleId, { bookmarkNotes: notes });
