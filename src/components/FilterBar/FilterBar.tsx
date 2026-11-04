@@ -5,6 +5,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { X, Filter, Calendar, ArrowUpDown, Target, ShieldAlert } from 'lucide-react';
 import { ThreatSeverity } from '../../types';
 import { ViewControls } from '../Header/ViewControls';
+import { NewSinceVisit } from '../Header/NewSinceVisit';
 import { setMobileSlot } from './mobileSlot';
 
 const POPULAR_TAGS = [
@@ -92,6 +93,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ isOpen, onClose }) => {
           <div className="sm:hidden mb-4 pb-4 border-b border-theme-border/60 space-y-3">
             <span className="text-xs font-mono uppercase tracking-wider text-theme-text-muted block">View</span>
             <ViewControls className="flex flex-wrap" labelled />
+            <NewSinceVisit className="flex flex-wrap items-center gap-2 text-xs font-mono text-theme-text-muted" buttonClassName="px-2.5 py-1.5 rounded-md border border-theme-border bg-theme-card hover:text-theme-text" />
             <div ref={setMobileSlot} className="flex flex-wrap items-center gap-2 text-xs font-mono empty:hidden" />
           </div>
 

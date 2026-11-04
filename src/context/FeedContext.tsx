@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useVisitBaseline } from '../hooks/useVisitBaseline';
 import { ActorsData, Article, CveIntel, DataSourceStatus, EntitiesData, Feed, FeedHealth, IncidentData, MsrcData, RansomwareIntel, StatsData, TrendsData, VulnData } from '../types';
 import {
   getAllArticlesFromDB,
@@ -97,6 +98,8 @@ interface FeedContextType {
   toggleRead: (articleId: string) => Promise<void>;
   markViewed: (articleId: string) => Promise<void>;
   markAllAsRead: (ids?: string[]) => Promise<void>;
+  /** Start of "new since your last visit" (fixed for this page load); null until loaded */
+  visitBaseline: number | null;
   addCustomTagToArticle: (articleId: string, tag: string) => Promise<void>;
 }
 
@@ -799,6 +802,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [articles, feeds, settings.disabledCategories],
   );
 
+  const visitBaseline = useVisitBaseline();
+
   const value = useMemo<FeedContextType>(() => ({
     feeds,
     cveIntel,
@@ -840,12 +845,13 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     toggleRead,
     markViewed,
     markAllAsRead,
+    visitBaseline,
     addCustomTagToArticle,
   }), [
     feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, visibleArticles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
-    markAllAsRead, addCustomTagToArticle,
+    markAllAsRead, visitBaseline, addCustomTagToArticle,
   ]);
 
   return (

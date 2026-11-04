@@ -21,6 +21,7 @@ import {
 import { ActiveNavTab } from '../../types';
 import { NavigationTabs } from '../Navigation/NavigationTabs';
 import { ViewControls } from './ViewControls';
+import { NewSinceVisit } from './NewSinceVisit';
 
 // Roughly 10 cm of scrolling on a typical screen (96 CSS px per inch)
 const COLLAPSE_AFTER_PX = 380;
@@ -126,6 +127,8 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline text-theme-border">|</span>
             <span className="hidden sm:inline">
               {totalArticles.toLocaleString()} DISPATCHES · {unreadCount} UNREAD · {bookmarkedCount} BOOKMARKED · {activeSourcesCount} FEEDS
+              {' · '}
+              <NewSinceVisit buttonClassName="ml-2 underline hover:text-theme-text" />
             </span>
           </div>
 

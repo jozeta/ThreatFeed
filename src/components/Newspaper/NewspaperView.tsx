@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EarlierDivider } from '../Common/EarlierDivider';
 import { createPortal } from 'react-dom';
 import { useMobileSlot } from '../FilterBar/mobileSlot';
 import { Article, StoryCluster, NewspaperSectionConfig, ThreatSeverity } from '../../types';
@@ -19,7 +20,7 @@ import { TrendingStrip } from './TrendingStrip';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../Common/LoadMoreButton';
 import { fitGridItems, newspaperModes } from '../../utils/layout';
-import { partitionStream, mergeFills, pruneFills, FILL_POOL } from './streamBlocks';
+import { partitionStream, mergeFills, pruneFills, blockStories, FILL_POOL } from './streamBlocks';
 import {
   Flame,
   ShieldAlert,
@@ -38,6 +39,7 @@ interface NewspaperViewProps {
   isLoading: boolean;
   onOpenArticle: (article: Article) => void;
   onSearch?: (query: string) => void;
+  earlierId?: string | null; // Latest only: the "Earlier" divider goes above the first stream block holding this story
   chronological?: boolean; // newest first, sections and clustering off unless toggled in this view
 }
 
@@ -272,6 +274,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   isLoading,
   onOpenArticle,
   onSearch,
+  earlierId,
   chronological = false,
 }) => {
   const { settings, updateSetting } = useSettings();
@@ -395,6 +398,12 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
       left: fills[`stream:${n}:left`] ?? 0,
     })),
     [chronologicalStories, streamStart, visibleCount, fills]
+  );
+
+  // The first stream block holding a story from before the last visit (-1: none; the lead row is not divided)
+  const earlierBlock = useMemo(
+    () => (earlierId ? chronologicalBlocks.findIndex((b) => blockStories(b).some((s) => s.id === earlierId)) : -1),
+    [earlierId, chronologicalBlocks]
   );
 
   // Group articles by user configured sections
@@ -815,7 +824,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
           <div className="space-y-12">
             {chronologicalBlocks.map((blk, bIdx) => (
               // Keyed by position: when a fill moves the stories after it, the blocks stay and only their content changes
-              <div key={bIdx} className="pt-6 border-t border-theme-border/80">
+              <div key={bIdx} className={earlierBlock === bIdx ? 'pt-2' : 'pt-6 border-t border-theme-border/80'}>
+                {earlierBlock === bIdx && <EarlierDivider className="mb-6" />}
                 {blk.type === 'full-banner' && (
                   <div className="w-full">
                     <BannerArticle
