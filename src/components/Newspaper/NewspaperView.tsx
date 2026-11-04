@@ -315,10 +315,14 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   }, []);
   const leadFill = fills.lead ?? 0;
 
-  // Clustering only depends on which articles are shown and their severity/image (primary pick),
-  // not on read/bookmark state, so key the expensive pass on that and map results to live copies.
+  // Clustering only depends on which articles are shown, their titles, sources, dates and CVEs (matching)
+  // and their severity/image (primary pick), not on read/bookmark state, so key the expensive pass on
+  // that and map results to live copies.
   const clusterSignature = useMemo(
-    () => articles.map((a) => `${a.id}:${a.severityScore ?? 0}:${a.image ? 1 : 0}`).join('|'),
+    () =>
+      articles
+        .map((a) => [a.id, a.title, a.sourceId, a.publishedAt, (a.cves ?? []).join(','), a.severityScore ?? 0, a.image ? 1 : 0].join('|'))
+        .join('\n'),
     [articles]
   );
   const rawClusters = useMemo(() => {
