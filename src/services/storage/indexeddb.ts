@@ -371,7 +371,9 @@ export async function importThreatFeedData(data: any, { fromSync = false }: { fr
 
   const articleStore = tx.objectStore('articles');
   for (const article of articles) {
-    await articleStore.put(article);
+    // An article already here keeps the time it was first seen
+    const firstSeen = (await articleStore.get(article.id))?.fetchedAt;
+    await articleStore.put(firstSeen ? { ...article, fetchedAt: firstSeen } : article);
   }
 
   // Import article state (read/bookmarks), and apply it to cached copies so it shows without a refetch

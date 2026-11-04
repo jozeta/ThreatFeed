@@ -8,13 +8,13 @@ const art = (id: string, fetchedAt?: string, publishedAt = 'invalid') => ({ id, 
 
 describe('visitBaseline', () => {
   it('baseline handles first visit and future timestamps', () => {
-    expect(visitBaseline(null, NOW)).toBe(NOW);
+    expect(visitBaseline(null, NOW)).toBeNull();
     expect(visitBaseline(new Date(NOW + HOUR).toISOString(), NOW)).toBe(NOW);
     expect(visitBaseline(new Date(NOW - 2 * HOUR).toISOString(), NOW)).toBe(NOW - 2 * HOUR);
   });
 
-  it('treats an unparseable stored value as a first visit', () => {
-    expect(visitBaseline('garbage', NOW)).toBe(NOW);
+  it('treats an unparseable stored value as a first visit (no baseline)', () => {
+    expect(visitBaseline('garbage', NOW)).toBeNull();
   });
 });
 

@@ -127,8 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline text-theme-border">|</span>
             <span className="hidden sm:inline">
               {totalArticles.toLocaleString()} DISPATCHES · {unreadCount} UNREAD · {bookmarkedCount} BOOKMARKED · {activeSourcesCount} FEEDS
-              {' · '}
-              <NewSinceVisit buttonClassName="ml-2 underline hover:text-theme-text" />
+              <NewSinceVisit separator=" · " buttonClassName="ml-2 underline hover:text-theme-text" />
             </span>
           </div>
 
