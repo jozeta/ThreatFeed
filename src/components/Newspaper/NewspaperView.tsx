@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EarlierDivider } from '../Common/EarlierDivider';
+import { createPortal } from 'react-dom';
+import { useMobileSlot } from '../FilterBar/mobileSlot';
 import { Article, StoryCluster, NewspaperSectionConfig, ThreatSeverity } from '../../types';
 import { HeroArticle } from '../ArticleCard/HeroArticle';
 import { FeatureArticle } from '../ArticleCard/FeatureArticle';
@@ -17,7 +20,7 @@ import { TrendingStrip } from './TrendingStrip';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../Common/LoadMoreButton';
 import { fitGridItems, newspaperModes } from '../../utils/layout';
-import { partitionStream, mergeFills, pruneFills, FILL_POOL } from './streamBlocks';
+import { partitionStream, mergeFills, pruneFills, blockStories, FILL_POOL } from './streamBlocks';
 import {
   Flame,
   ShieldAlert,
@@ -36,6 +39,7 @@ interface NewspaperViewProps {
   isLoading: boolean;
   onOpenArticle: (article: Article) => void;
   onSearch?: (query: string) => void;
+  earlierId?: string | null; // Latest only: the "Earlier" divider goes above the first stream block holding this story
   chronological?: boolean; // newest first, sections and clustering off unless toggled in this view
 }
 
@@ -270,9 +274,11 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   isLoading,
   onOpenArticle,
   onSearch,
+  earlierId,
   chronological = false,
 }) => {
   const { settings, updateSetting } = useSettings();
+  const mobileSlot = useMobileSlot();
   const [localModes, setLocalModes] = useState({ sections: false, clustering: false });
   const modes = newspaperModes(chronological, settings, localModes);
   const toggleSections = () => chronological
@@ -315,10 +321,14 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
   }, []);
   const leadFill = fills.lead ?? 0;
 
-  // Clustering only depends on which articles are shown and their severity/image (primary pick),
-  // not on read/bookmark state, so key the expensive pass on that and map results to live copies.
+  // Clustering only depends on which articles are shown, their titles, sources, dates and CVEs (matching)
+  // and their severity/image (primary pick), not on read/bookmark state, so key the expensive pass on
+  // that and map results to live copies.
   const clusterSignature = useMemo(
-    () => articles.map((a) => `${a.id}:${a.severityScore ?? 0}:${a.image ? 1 : 0}`).join('|'),
+    () =>
+      articles
+        .map((a) => [a.id, a.title, a.sourceId, a.publishedAt, (a.cves ?? []).join(','), a.severityScore ?? 0, a.image ? 1 : 0].join('|'))
+        .join('\n'),
     [articles]
   );
   const rawClusters = useMemo(() => {
@@ -388,6 +398,12 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
       left: fills[`stream:${n}:left`] ?? 0,
     })),
     [chronologicalStories, streamStart, visibleCount, fills]
+  );
+
+  // The first stream block holding a story from before the last visit (-1: none; the lead row is not divided)
+  const earlierBlock = useMemo(
+    () => (earlierId ? chronologicalBlocks.findIndex((b) => blockStories(b).some((s) => s.id === earlierId)) : -1),
+    [earlierId, chronologicalBlocks]
   );
 
   // Group articles by user configured sections
@@ -481,15 +497,63 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
 
   const isSectionsActive = modes.sections;
 
+  // Sections, Clustering and Customize: in the page from `sm` up, in the Filter sheet on phones (same handlers)
+  const modeControls = (inSheet: boolean) => (
+    <>
+      {/* Section Mode Toggle (Requirement: Disable sections -> Chronological order) */}
+      <button
+        onClick={toggleSections}
+        title={
+          isSectionsActive
+            ? 'Disable sections to view all articles in strict chronological order'
+            : 'Enable editorial section grouping'
+        }
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded transition-colors text-xs font-mono font-bold ${
+          !isSectionsActive
+            ? 'bg-theme-accent text-white shadow-sm'
+            : 'bg-theme-surface text-theme-text hover:bg-theme-card border border-theme-border hover:border-theme-accent'
+        }`}
+      >
+        <Clock className="w-3.5 h-3.5" />
+        <span>{isSectionsActive ? 'Sections: ON' : 'Chronological (Sections OFF)'}</span>
+      </button>
+
+      {/* Clustering Toggle */}
+      <button
+        onClick={toggleClustering}
+        title="Toggle multi-source story clustering"
+        className={`${inSheet ? 'inline-flex' : 'hidden md:inline-flex'} items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+          modes.clustering
+            ? 'bg-theme-surface text-theme-accent border border-theme-accent/40 font-bold'
+            : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface border border-theme-border'
+        }`}
+      >
+        <Layers className="w-3.5 h-3.5" />
+        <span>Clustering: {modes.clustering ? 'ON' : 'OFF'}</span>
+      </button>
+
+      {/* Customize Sections Button (Only shown/enabled when sections are on) */}
+      {isSectionsActive && (
+        <button
+          onClick={() => setIsCustomizingSections(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border hover:border-theme-accent text-theme-text transition-colors font-medium"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5 text-theme-accent" />
+          <span>Customize Sections</span>
+        </button>
+      )}
+    </>
+  );
+
   return (
-    <div className="newspaper-container main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="newspaper-container main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-6">
       {onSearch && <TrendingStrip articles={articles} stackKeywords={settings.stackKeywords} onSearch={onSearch} />}
 
       {/* ─────────────────────────────────────────────────────────────
           EDITORIAL MASTHEAD CONTROLS BAR
           Zero clutter, toggle between Section Grouping and Chronological Order
           ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-6 border-b border-theme-border/60 text-xs font-mono text-theme-text-muted gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 sm:pb-3 mb-3 sm:mb-6 border-b border-theme-border/60 text-xs font-mono text-theme-text-muted gap-3">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <span className="font-bold uppercase tracking-wider text-theme-text">
             {isSectionsActive ? 'EDITORIAL SECTION EDITION' : 'CHRONOLOGICAL DISPATCH STREAM'}
@@ -504,49 +568,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Section Mode Toggle (Requirement: Disable sections -> Chronological order) */}
-          <button
-            onClick={toggleSections}
-            title={
-              isSectionsActive
-                ? 'Disable sections to view all articles in strict chronological order'
-                : 'Enable editorial section grouping'
-            }
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded transition-colors text-xs font-mono font-bold ${
-              !isSectionsActive
-                ? 'bg-theme-accent text-white shadow-sm'
-                : 'bg-theme-surface text-theme-text hover:bg-theme-card border border-theme-border hover:border-theme-accent'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>{isSectionsActive ? 'Sections: ON' : 'Chronological (Sections OFF)'}</span>
-          </button>
-
-          {/* Clustering Toggle */}
-          <button
-            onClick={toggleClustering}
-            title="Toggle multi-source story clustering"
-            className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-              modes.clustering
-                ? 'bg-theme-surface text-theme-accent border border-theme-accent/40 font-bold'
-                : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface border border-theme-border'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Clustering: {modes.clustering ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {/* Customize Sections Button (Only shown/enabled when sections are on) */}
-          {isSectionsActive && (
-            <button
-              onClick={() => setIsCustomizingSections(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-theme-surface hover:bg-theme-card border border-theme-border hover:border-theme-accent text-theme-text transition-colors font-medium"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-theme-accent" />
-              <span>Customize Sections</span>
-            </button>
-          )}
+        <div className="hidden sm:flex items-center gap-2 flex-wrap">
+          {modeControls(false)}
         </div>
       </div>
 
@@ -567,7 +590,7 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
             return (
               <section key={group.config.id} className="pt-2">
                 {/* Section Header */}
-                <div className="flex items-center justify-between mb-6 pb-2 border-b-2 border-theme-accent">
+                <div className="flex items-center justify-between mb-3 sm:mb-6 pb-2 border-b-2 border-theme-accent">
                   <div className="flex items-center gap-2">
                     {getSectionIcon(group.config.id)}
                     <h2 className="font-serif text-xl sm:text-2xl font-bold text-theme-text tracking-tight uppercase">
@@ -801,7 +824,8 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
           <div className="space-y-12">
             {chronologicalBlocks.map((blk, bIdx) => (
               // Keyed by position: when a fill moves the stories after it, the blocks stay and only their content changes
-              <div key={bIdx} className="pt-6 border-t border-theme-border/80">
+              <div key={bIdx} className={earlierBlock === bIdx ? 'pt-2' : 'pt-6 border-t border-theme-border/80'}>
+                {earlierBlock === bIdx && <EarlierDivider className="mb-6" />}
                 {blk.type === 'full-banner' && (
                   <div className="w-full">
                     <BannerArticle
@@ -895,6 +919,9 @@ export const NewspaperView: React.FC<NewspaperViewProps> = ({
         onClose={() => setSelectedCluster(null)}
         onOpenArticle={onOpenArticle}
       />
+
+      {/* Phones: the same buttons, shown in the Filter sheet while it is open */}
+      {mobileSlot && createPortal(modeControls(true), mobileSlot)}
 
       {/* Customize Sections Modal */}
       <CustomizeSectionsModal

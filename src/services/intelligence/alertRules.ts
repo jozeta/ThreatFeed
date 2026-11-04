@@ -209,6 +209,32 @@ export function rulesNeedVulns(rules: AlertRule[], s: RuleLists): boolean {
   return rules.some(r => r.enabled && r.kind === 'vulns' && (!r.builtIn || builtInTerms(r, s).length > 0));
 }
 
+const STACK_TEMPLATE_NAMES = ['My stack: critical CVEs', 'My stack: exploited'] as const;
+
+/**
+ * Ready-made custom Vulns rules for the "Add from template" control. They start disabled (the user turns them on
+ * after a look) with notify on. A custom rule cannot follow the live stack list the way the built-in does, so the
+ * vendor condition holds the stack as it is now; the editor shows and edits it.
+ */
+export function stackRuleTemplates(stack: string[], now: Date): AlertRule[] {
+  const stamp = now.toISOString();
+  const make = (name: string, rest: VulnCondition | ConditionGroup<VulnCondition>): AlertRule => ({
+    id: crypto.randomUUID(), name, kind: 'vulns', enabled: false, notify: true,
+    root: { op: 'all', items: [{ field: 'vendor', values: [...stack] }, rest] },
+    createdAt: stamp, updatedAt: stamp,
+  });
+  return [
+    make(STACK_TEMPLATE_NAMES[0], { field: 'cvss', min: 9 }),
+    make(STACK_TEMPLATE_NAMES[1], { op: 'any', items: [{ field: 'kev' }, { field: 'epss', min: 0.5 }] }),
+  ];
+}
+
+/** True when rules named like both stack templates already exist, so adding them again would only duplicate them */
+export function hasStackTemplates(rules: AlertRule[]): boolean {
+  const names = new Set(rules.map(r => r.name));
+  return STACK_TEMPLATE_NAMES.every(n => names.has(n));
+}
+
 export function resolveRoot(rule: AlertRule, s: RuleLists): AlertRule['root'] {
   switch (rule.builtIn) {
     case 'watchlist': return { op: 'any', items: [{ field: 'keyword', values: s.watchlistKeywords }] };

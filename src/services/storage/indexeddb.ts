@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
 import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
 import { cleanSyncLog, syncLogForImport } from '../sync/syncLog';
+import { keepBookmarkText } from '../articles/merge';
 
 interface ThreatFeedDB extends DBSchema {
   articles: {
@@ -102,10 +103,16 @@ export async function saveArticlesToDB(newArticles: Article[]): Promise<void> {
   const articleStore = tx.objectStore('articles');
   const stateStore = tx.objectStore('articleState');
 
-  for (const article of newArticles) {
+  for (const incoming of newArticles) {
+    let article = incoming;
     // Check if user already marked this article read/viewed/bookmarked.
     // Copy rather than mutate: callers' objects may already be in React state.
     const existingState = await stateStore.get(article.id);
+    const stored = await articleStore.get(article.id);
+    // fetchedAt is when it was first seen here; a re-fetched copy keeps the stored one
+    if (stored?.fetchedAt) article = { ...article, fetchedAt: stored.fetchedAt };
+    // A copy without text (snapshot articles, an older tab's merge) must not wipe a bookmark's stored text
+    article = keepBookmarkText(article, stored, !!existingState?.bookmarked);
     await articleStore.put(existingState ? {
       ...article,
       read: existingState.read,
@@ -367,7 +374,9 @@ export async function importThreatFeedData(data: any, { fromSync = false }: { fr
 
   const articleStore = tx.objectStore('articles');
   for (const article of articles) {
-    await articleStore.put(article);
+    // An article already here keeps the time it was first seen
+    const firstSeen = (await articleStore.get(article.id))?.fetchedAt;
+    await articleStore.put(firstSeen ? { ...article, fetchedAt: firstSeen } : article);
   }
 
   // Import article state (read/bookmarks), and apply it to cached copies so it shows without a refetch

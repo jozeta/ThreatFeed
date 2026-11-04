@@ -102,3 +102,10 @@ export function pruneFills(prev: Record<string, number>, isLive: (key: string) =
   stale.forEach((key) => delete next[key]);
   return next;
 }
+
+/** Every story a block shows: its own, then (feature blocks) those filling its right and left columns */
+export function blockStories<T>(b: StreamBlock<T>): T[] {
+  return b.type === 'feature-left-stack-right'
+    ? [b.main, ...b.side, ...b.rightPool.slice(0, b.rightFill), ...b.leftPool.slice(0, b.leftFill)]
+    : b.items;
+}

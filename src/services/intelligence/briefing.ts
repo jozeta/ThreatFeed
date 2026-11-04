@@ -6,6 +6,7 @@ import { checkWatchlistMatch } from './watchlist';
 import { stackMatches } from './stack';
 import { computeTrending, TrendingEntity } from './trending';
 import { ransomwareVictims } from './ransomware';
+import { safeHttpUrl } from '../rss/sanitizer';
 
 export interface BriefingStory {
   cluster: StoryCluster;
@@ -178,4 +179,65 @@ export function briefingToMarkdown(b: Briefing): string {
   }
 
   return out.join('\n');
+}
+
+const escapeHtml = (text: unknown) =>
+  String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+
+/**
+ * The briefing as a self-contained HTML document (inline styles only; it is a download or clipboard payload, not part
+ * of the site). Same sections as the Markdown. Every text is escaped and links must pass safeHttpUrl.
+ */
+export function briefingToHtml(b: Briefing): string {
+  const e = escapeHtml;
+  const a = (url: string | undefined, label: string) => {
+    const href = safeHttpUrl(url);
+    return href ? `<a href="${e(href)}" style="color:#1d4ed8">${e(label)}</a>` : e(label);
+  };
+  const em = (text: string) => `<em>${e(text)}</em>`;
+  const h2Style = 'font-size:16px;border-bottom:2px solid #1f2937;padding-bottom:4px;margin:24px 0 8px';
+  const section = (title: string, items: string[]) =>
+    items.length === 0 ? '' : `<h2 style="${h2Style}">${e(title)}</h2>\n<ul style="padding-left:20px;margin:0">\n${items.map(i => `<li style="margin:4px 0">${i}</li>`).join('\n')}\n</ul>`;
+
+  const stories = (items: BriefingStory[], extra?: (s: BriefingStory) => string) =>
+    items.map(s => {
+      const p = s.cluster.primaryArticle;
+      return `<strong>${e((p.severity || 'info').toUpperCase())}</strong> ${a(p.url, p.title)}${e(sources(s))}${extra ? extra(s) : ''}`;
+    });
+
+  const date = new Date(b.generatedAt).toUTCString();
+  const body: string[] = [
+    section('Critical & High Severity', stories(b.topStories, s => (s.cluster.primaryArticle.cves?.length ? ` · ${e(s.cluster.primaryArticle.cves.slice(0, 3).join(', '))}` : ''))),
+    section('Recently Added to CISA KEV', b.newKev.map(k =>
+      `<strong>${e(k.cve)}</strong> (added ${e(k.intel.kevDateAdded)}${k.intel.kevRansomware ? ', used by ransomware' : ''})${k.intel.kevName ? `: ${e(k.intel.kevName)}` : ''}${k.intel.epss !== undefined ? ` · EPSS ${(k.intel.epss * 100).toFixed(1)}%` : ''}`)),
+    section('Watchlist Hits', stories(b.watchlist, s => ` · ${em(s.watchlistTerms.slice(0, 3).join(', '))}`)),
+    section('Relevant to Your Stack', stories(b.stack, s => ` · ${em(s.stackTerms.slice(0, 3).join(', '))}`)),
+    section('Vulnerabilities in Your Stack', [
+      ...b.stackVulns.kev.map(k => `<strong>${e(k.cve)}</strong> added to CISA KEV ${e(k.dateAdded)}: ${e(k.name)}${k.cvss ? ` · CVSS ${e(k.cvss)}` : ''} · ${em(k.terms.join(', '))}`),
+      ...b.stackVulns.cves.map(r => `<strong>${e(r.id)}</strong> (CVSS ${e(r.score)}): ${e(r.description ?? '')} · ${em(r.terms.join(', '))}`),
+      ...b.stackVulns.advisories.map(x => `${a(x.url, x.id)} (${e(x.severity)}, ${e(x.ecosystem)}/${e(x.package)}): ${e(x.summary)} · ${em(x.terms.join(', '))}`),
+    ]),
+    b.ransomware.count > 0
+      ? `<h2 style="${h2Style}">Ransomware Activity</h2>\n<p>${b.ransomware.count} new leak-site victims: ${e(b.ransomware.byGroup.slice(0, 12).map(([g, n]) => `${g} (${n})`).join(', '))}</p>`
+      : '',
+    section('New Breaches (Have I Been Pwned)', b.breaches.map(br =>
+      `<strong>${e(br.title)}</strong>${br.domain ? ` (${e(br.domain)})` : ''}: ${e(br.records.toLocaleString('en-US'))} accounts · ${e(br.dataClasses.slice(0, 5).join(', '))}`)),
+    section('Trending This Week', b.trending.map(t =>
+      `${e(t.name)} (${e(t.kind)}): ${t.count} mentions${t.previous ? `, ${t.previous} the week before` : ''}`)),
+  ].filter(Boolean);
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThreatFeed Daily Briefing</title>
+</head>
+<body style="font-family:Georgia,serif;color:#111827;background:#ffffff;max-width:760px;margin:24px auto;padding:0 16px;line-height:1.5">
+<h1 style="font-size:24px;margin:0 0 4px">ThreatFeed Daily Briefing</h1>
+<p style="color:#4b5563;margin:0">${em(`${date} · last ${b.windowHours}h · ${b.articleCount} articles`)}</p>
+${body.join('\n')}
+</body>
+</html>
+`;
 }

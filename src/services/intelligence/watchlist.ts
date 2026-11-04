@@ -145,3 +145,25 @@ export function checkWatchlistMatch(
     matchedTerms
   };
 }
+
+const DEFAULT_TERM_SET = new Set(DEFAULT_WATCHLIST_KEYWORDS.map(k => k.toLowerCase()));
+
+/** True when the term ships in the default watchlist; anything else was added by the user. */
+export function isDefaultTerm(term: string): boolean {
+  return DEFAULT_TERM_SET.has(term.trim().toLowerCase());
+}
+
+/** Number of articles published at or after `since` (ms epoch) that match each term. */
+export function termCounts(articles: Article[], terms: string[], since: number): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const term of terms) counts.set(term, 0);
+  const byTrimmed = new Map(terms.map(t => [t.trim(), t]));
+  for (const a of articles) {
+    if (Date.parse(a.publishedAt) < since) continue;
+    for (const matched of checkWatchlistMatch(a, terms).matchedTerms) {
+      const key = byTrimmed.get(matched) ?? matched;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}

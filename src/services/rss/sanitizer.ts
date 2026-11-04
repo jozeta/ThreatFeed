@@ -1,11 +1,20 @@
 import DOMPurify from 'dompurify';
 import { Article } from '../../types';
 
-// Hook to ensure all links open in a new tab with noopener noreferrer
+// Hook: links open in a new tab with noopener noreferrer; feed classes are stripped
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A') {
     node.setAttribute('target', '_blank');
     node.setAttribute('rel', 'noopener noreferrer');
+  }
+  // Feed HTML must not use the app's own (Tailwind) classes to restyle or overlay the UI (SEC-004):
+  // only `language-*` tokens on code/pre (syntax hints) survive.
+  if (node.hasAttribute('class')) {
+    const kept = node.tagName === 'CODE' || node.tagName === 'PRE'
+      ? (node.getAttribute('class') ?? '').split(/\s+/).filter((token) => /^language-[\w+#.-]+$/.test(token))
+      : [];
+    if (kept.length) node.setAttribute('class', kept.join(' '));
+    else node.removeAttribute('class');
   }
 });
 

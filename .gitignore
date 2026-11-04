@@ -34,6 +34,7 @@ public/data/actors.json
 public/data/trends.json
 public/data/stats.json
 public/data/entities.json
+public/data/content/
 .cache/
 
 # Brainstorming companion mockups

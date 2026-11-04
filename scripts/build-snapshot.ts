@@ -10,7 +10,7 @@
  *   npm run snapshot
  */
 import { JSDOM } from 'jsdom';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +31,8 @@ const { buildFeeds } = await import('../src/services/feeds/build');
 const { readPreviousLedger } = await import('../src/services/feeds/previous');
 const { refreshActors, decodeActors, encodeActors } = await import('../src/services/intelligence/actors');
 const { buildEntities } = await import('../src/services/intelligence/entities');
+const { plainText } = await import('../src/services/feeds/rss');
+const { shardWindow, groupContentByDay, readPreviousShards, planContentShards } = await import('../src/services/contentShards');
 const { countStatsByDay, mergeStats, decodeStats } = await import('../src/services/intelligence/stats');
 const { countEntitiesByDay, mergeTrends, pickPreviousTrends, trendsVocab, decodeTrends, TREND_RECOUNT_DAYS } = await import('../src/services/intelligence/trends');
 type Feed = import('../src/types').Feed;
@@ -64,6 +66,7 @@ const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and
 const ENTITIES_OUT = resolve(root, 'public/data/entities.json'); // the names text links to their panels, loaded after first paint
 const STATS_OUT = resolve(root, 'public/data/stats.json'); // daily counts of CVEs, KEV additions, exploits and victims, 400 days: the dashboards
 const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // mention counts per entity (daily, then weekly), two years: the detail panels' mention history
+const CONTENT_DIR = resolve(root, 'public/data/content'); // article text per publish day (content/<YYYY-MM-DD>.json): the reader and bookmarks, on demand
 const FEEDS_DIR = resolve(root, 'public/data/feeds'); // the RSS feeds and their published-items ledger (seen.json), read by feed readers and the next run
 const FEED_SITE_URL = (process.env.FEED_SITE_URL || 'https://jozeta.github.io/ThreatFeed/').replace(/\/?$/, '/');
 const CWE_NAMES: Record<string, string> = JSON.parse(readFileSync(resolve(root, 'scripts/data/cwe-names.json'), 'utf8')).names;
@@ -81,7 +84,8 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 const USER_AGENT = 'ThreatFeed snapshot bot (+https://github.com/jozeta/ThreatFeed)';
 const MAX_ARTICLES_PER_FEED = 25;
 const MAX_AGE_DAYS = 30;
-const MAX_CONTENT_CHARS = 10000; // keeps the snapshot small; the reader links to the original for the rest
+const MAX_CONTENT_CHARS = 10000; // keeps the content shards small; the reader links to the original for the rest
+const MAX_SNAPSHOT_DESCRIPTION_CHARS = 600; // the lists show a few lines; the reader loads the full text from the shard
 const CONCURRENCY = 8;
 const TIMEOUT_MS = 20000;
 
@@ -583,6 +587,11 @@ const previousLedgerPromise = readPreviousLedger(
   readCachedLedger,
 );
 const previousStatsPromise = loadPreviousStats();
+// The published content shards of the last MAX_AGE_DAYS days: the app keeps articles that long, longer than they
+// stay in the snapshot (MAX_ARTICLES_PER_FEED), so their text is carried over
+const previousShardsPromise = PREVIOUS_BASE
+  ? readPreviousShards(PREVIOUS_BASE, shardWindow(Date.now(), MAX_AGE_DAYS), getJson)
+  : Promise.resolve({ shards: new Map<string, Record<string, string>>(), failed: [] });
 const dailyPromise = Promise.all([rlPromise, previousActorsPromise])
   .then(([rl, previousActors]) => loadDailySources(previousIntel, rl.updates, !previousActors?.actors.length));
 const kevEntries = await loadKev();
@@ -797,7 +806,25 @@ vulns.cveGroups = cveGroups;
 
 mkdirSync(dirname(OUT), { recursive: true });
 const generatedAt = new Date().toISOString();
-const json = JSON.stringify({ version: 1, generatedAt, feedHealth, sources, cveIntel, incidents, articles });
+// Article text goes to per-day content shards: the previous run's shards with this run's text on top, days
+// older than MAX_AGE_DAYS dropped. The directory is rewritten whole. If a previous shard couldn't be read the
+// directory is left empty, and the deploy workflow keeps the published shards. The snapshot keeps the list
+// fields and a capped description
+const previousShards = await previousShardsPromise;
+const contentShards = planContentShards(previousShards, groupContentByDay(articles), shardWindow(Date.now(), MAX_AGE_DAYS));
+rmSync(CONTENT_DIR, { recursive: true, force: true });
+mkdirSync(CONTENT_DIR, { recursive: true });
+let contentBytes = 0;
+for (const [day, dayContent] of contentShards?.shards ?? []) {
+  const shardJson = JSON.stringify({ version: 1, day, content: dayContent });
+  writeFileSync(resolve(CONTENT_DIR, `${day}.json`), shardJson);
+  contentBytes += shardJson.length;
+}
+const snapshotArticles = articles.map(({ content: _content, ...a }) => ({
+  ...a,
+  description: a.description && a.description.length > MAX_SNAPSHOT_DESCRIPTION_CHARS ? plainText(a.description, MAX_SNAPSHOT_DESCRIPTION_CHARS) : a.description,
+}));
+const json = JSON.stringify({ version: 1, generatedAt, feedHealth, sources, cveIntel, incidents, articles: snapshotArticles });
 writeFileSync(OUT, json);
 const vulnsJson = JSON.stringify({ version: 1, generatedAt, ...vulns });
 writeFileSync(VULNS_OUT, vulnsJson);
@@ -859,6 +886,9 @@ if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)))
 const healthy = results.filter(r => r.health.status === 'healthy').length;
 const mb = (s: string) => `${(s.length / 1e6).toFixed(2)} MB`;
 console.log(`Snapshot: ${healthy}/${feeds.length} feeds healthy, ${articles.length} articles, ${Object.keys(cveIntel).length} CVEs with intel (${Object.values(cveIntel).filter(i => i.kev).length} in KEV), ${mb(json)}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+console.log(contentShards
+  ? `Content shards: ${contentShards.shards.size} days, ${contentShards.fresh} articles from this run, ${contentShards.carried} carried over${PREVIOUS_BASE ? '' : ' (no PREVIOUS_SNAPSHOT_URL)'}, ${(contentBytes / 1024).toFixed(0)} KB`
+  : `Content shards: not written, previous shards unreadable (${previousShards.failed.map(f => `${f.day}: ${f.error}`).join(', ')}); the workflow keeps the published ones`);
 console.log(`Vulnerabilities: ${vulns.kev.length} KEV entries (${vulns.kev.filter(k => k.cvss).length} with CVSS, ${vulns.kev.filter(k => k.ssvc).length} with SSVC), ${vulns.nvd?.total ?? 'no'} NVD CVEs (${NVD_DAYS}d, ${notable.length} critical), ${watchable.length} CVSS 7–8.9 (${mb(JSON.stringify(vulns.watchable))}), ${advisories.length} GitHub advisories (${ADVISORY_DAYS}d), ${epssTop.length} top-EPSS CVEs, ${Object.keys(exploits).length} with public exploits, ${mb(vulnsJson)}`);
 console.log(`Ransomware: ${victims.length} leak-site victims (${VICTIM_DAYS}d), ${Object.keys(groups).length} group profiles, ${Object.values(intelGroups).filter(g => g.ttps).length} with TTPs, ${Object.values(intelGroups).filter(g => g.leakSites).length} with leak-site status, ${Object.values(intelGroups).filter(g => g.attack).length} in ATT&CK, ${Object.values(intelGroups).filter(g => g.references).length} in Malpedia, ${Object.values(intelGroups).filter(g => g.cves).length} with CVEs, ${ransomwareIntel.attacks.length} public reports, ${payments?.families.length ?? 0} payment families, ${breaches.length} HIBP breaches, ${mb(ransomwareJson)}`);
 console.log(`Patch Tuesday: ${msrc.months.map(m => `${m.id} ${m.cves.length} CVEs (${m.cves.filter(c => c.exploited).length} exploited)`).join(', ') || 'no data'}, ${mb(msrcJson)}`);

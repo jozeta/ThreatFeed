@@ -6,6 +6,15 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Briefing: "Copy rich text" (HTML for pasting into mail or docs, with a Markdown fallback) and "Download .html"; the Markdown buttons stay
+- Alert Rules: "Add from template: my stack" adds two disabled Vulns rules, "critical CVEs" (CVSS 9+) and "exploited" (KEV or EPSS 50%+), for the products in My Stack
+- Watchlist badges: your own terms get a strong badge and the default terms a subtle one; Settings shows how many stories each term matched in 7 days
+- Phones: a compact toolbar, and the view controls stay in the header on tabs without the Filter sheet, so the first headline starts higher
+- Story grouping on the front page is faster (indexed instead of pairwise comparison, same groups)
+- Feed HTML can no longer use the app's own CSS classes, and reader content is contained so it cannot cover the page
+- "New since your last visit": the header shows how many stories arrived since you last had the page open ("37 new since 08:12") with a Catch up button that marks everything older as read, and Latest has an "Earlier" divider where those stories end. Nothing counts as new on a first visit. Stories count from when your browser first saw them, not from each refresh.
+- Faster loading: the duplicate check finds near-identical titles through a word index instead of comparing every pair, and runs once per merge instead of twice (same results)
+- The snapshot is about a quarter of its old size (2.7 MB instead of 10 MB, 0.57 MB instead of 2.4 MB compressed): article text now ships in per-day files that the reader loads when you open a story, and bookmarking a story stores its text with it (bookmarks still missing their text get it filled in once per session, and a copy without text never replaces it). The per-day files carry the last 30 days over from run to run; if a previous day can't be read, the run keeps the published files instead of writing partial ones
 - Fonts are self-hosted instead of loaded from Google Fonts, and the built site sends a Content-Security-Policy (no inline scripts)
 - ESLint (`npm run lint`) runs in CI, including a rule against unsanitized HTML in the DOM
 - Gist sync no longer brings back muted keywords, watchlist/stack terms, saved searches, bookmark folders or alert rules that were deleted on another device (deletions are remembered for 90 days)

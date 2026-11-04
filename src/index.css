@@ -191,7 +191,11 @@ body {
   color: var(--color-accent);
 }
 
-/* Reader HTML content styling */
+/* Reader HTML content styling; contain: feed content can't paint or position outside its box */
+.reader-html-content {
+  contain: layout paint;
+}
+
 .reader-html-content img {
   max-width: 100%;
   height: auto;

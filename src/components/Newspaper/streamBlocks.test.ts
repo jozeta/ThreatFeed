@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { partitionStream, mergeFills, pruneFills, FILL_POOL, type StreamBlock } from './streamBlocks';
+import { partitionStream, mergeFills, pruneFills, blockStories, FILL_POOL, type StreamBlock } from './streamBlocks';
 
 const stories = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `s${i}` }));
 const none = () => ({ right: 0, left: 0 });
@@ -14,6 +14,13 @@ function shown(blocks: StreamBlock<{ id: string }>[]): string[] {
       : b.items.map((s) => s.id)
   );
 }
+
+describe('blockStories', () => {
+  it('lists what a block shows, fillers included', () => {
+    const blocks = partitionStream(stories(12), byOrder({ right: 2, left: 1 }));
+    expect(blocks.flatMap((b) => blockStories(b)).map((s) => s.id)).toEqual(stories(12).map((s) => s.id));
+  });
+});
 
 describe('partitionStream', () => {
   it('cycles feature + stack, quad, duo, banner, and shows every story once in order', () => {

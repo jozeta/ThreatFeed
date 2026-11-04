@@ -56,6 +56,23 @@ function networkFirst(request, timeoutMs) {
   return Promise.race([network, slow]).catch(fallback);
 }
 
+// Content shards (data/content/<YYYY-MM-DD>.json) are one file per publish day. The app keeps articles 30 days,
+// so shards older than that are dropped from the cache, which would otherwise gain a file every day
+const CONTENT_SHARD = /\/data\/content\/(\d{4}-\d{2}-\d{2})\.json$/;
+const CONTENT_KEEP_DAYS = 31;
+
+function pruneContentShards() {
+  const cutoff = new Date(Date.now() - CONTENT_KEEP_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return caches.open(CACHE_NAME).then((cache) =>
+    cache.keys().then((requests) =>
+      Promise.all(requests.map((request) => {
+        const match = CONTENT_SHARD.exec(new URL(request.url).pathname);
+        return match && match[1] < cutoff ? cache.delete(request) : undefined;
+      }))
+    )
+  );
+}
+
 // Cache first: only for files whose content can never change under the same URL
 function cacheFirst(request) {
   return caches.match(request).then((cached) => cached || fetch(request).then((response) => cacheCopy(request, response)));
@@ -104,6 +121,7 @@ self.addEventListener('fetch', (event) => {
   // Feed list and snapshot change between deploys (the snapshot every 30 minutes)
   if (url.pathname.includes('/data/')) {
     event.respondWith(networkFirst(event.request));
+    if (CONTENT_SHARD.test(url.pathname)) event.waitUntil(pruneContentShards().catch(() => {}));
     return;
   }
 

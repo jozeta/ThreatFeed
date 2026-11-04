@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import { firstEarlierId } from './services/lastVisit';
 import { useFeeds } from './context/FeedContext';
 import { useSettings } from './context/SettingsContext';
 import { useFilter } from './context/FilterContext';
@@ -50,7 +51,7 @@ const GroupPanelHost = lazy(() => import('./components/EntityPanelHosts').then((
 const TagPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.TagPanelHost })));
 
 export const App: React.FC = () => {
-  const { articles, feeds, isRefreshing, activeArticle, setActiveArticle } = useFeeds();
+  const { articles, feeds, isRefreshing, activeArticle, setActiveArticle, visitBaseline } = useFeeds();
   const { settings } = useSettings();
   const { filters, updateFilter } = useFilter();
   // A category filter whose category was turned off would leave an empty list: go back to All
@@ -124,6 +125,14 @@ export const App: React.FC = () => {
       }
     );
   }, [articles, filters, activeTab, isSearching, settings.hideReadArticles, feeds, settings.watchlistKeywords, scores, settings.mutedKeywords, settings.frontPageHiddenCategories]);
+
+  // Latest only (and only while it is a newest-first stream): where the stories from before the last visit begin
+  const earlierId = useMemo(
+    () => activeTab === 'latest' && visitBaseline !== null && !(isSearching && filters.sortBy === 'relevance')
+      ? firstEarlierId(displayArticles, visitBaseline)
+      : null,
+    [activeTab, visitBaseline, isSearching, filters.sortBy, displayArticles]
+  );
 
   // Trending entities, the briefing and similar views jump to a search
   const handleSearch = (query: string) => {
@@ -219,9 +228,10 @@ export const App: React.FC = () => {
         {(activeTab === 'newspaper' || activeTab === 'latest' || activeTab === 'unread') && (() => {
           const layout = settings.layout;
           const viewProps = { articles: displayArticles, isLoading: isRefreshing, onOpenArticle: handleOpenArticle };
-          return layout === 'newspaper' ? <NewspaperView key={activeTab} {...viewProps} onSearch={handleSearch} chronological={activeTab === 'latest'} />
-            : layout === 'list-thumbnails' ? <ListThumbnailView {...viewProps} />
-            : <ListView {...viewProps} />;
+          const earlierProps = { earlierId };
+          return layout === 'newspaper' ? <NewspaperView key={activeTab} {...viewProps} {...earlierProps} onSearch={handleSearch} chronological={activeTab === 'latest'} />
+            : layout === 'list-thumbnails' ? <ListThumbnailView {...viewProps} {...earlierProps} />
+            : <ListView {...viewProps} {...earlierProps} />;
         })()}
 
         <Suspense fallback={<div className="main-content-container mx-auto px-4 py-12 text-xs font-mono text-theme-text-muted">Loading…</div>}>

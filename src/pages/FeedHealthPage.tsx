@@ -924,11 +924,11 @@ export const FeedHealthPage: React.FC<FeedHealthPageProps> = ({ onOpenSettings }
                                   <span className="text-theme-border">|</span>
 
                                   <span
-                                    title={`Fetched: ${formatFullDateTime(article.fetchedAt || health?.lastFetchedAt || article.publishedAt)}`}
+                                    title={`First seen: ${formatFullDateTime(article.fetchedAt || health?.lastFetchedAt || article.publishedAt)}`}
                                     className="inline-flex items-center gap-1 cursor-help text-theme-text"
                                   >
                                     <Clock className="w-3 h-3 text-theme-accent flex-shrink-0" />
-                                    <span>Fetched {formatRelativeTime(article.fetchedAt || health?.lastFetchedAt || article.publishedAt)}</span>
+                                    <span>First seen {formatRelativeTime(article.fetchedAt || health?.lastFetchedAt || article.publishedAt)}</span>
                                   </span>
                                 </div>
                               </div>

@@ -5,7 +5,7 @@ import { useFeeds } from '../../context/FeedContext';
 import { useVulns } from '../../hooks/useVulns';
 import { AlertRule, BuiltInRule } from '../../types';
 import {
-  ALERT_GAP_OPTIONS, buildVulnItems, builtInTerms, duplicateRule, matchedVulnCves, matchesNews, matchesVuln, resolveRoot,
+  ALERT_GAP_OPTIONS, buildVulnItems, builtInTerms, duplicateRule, matchedVulnCves, matchesNews, matchesVuln, resolveRoot, stackRuleTemplates, hasStackTemplates,
 } from '../../services/intelligence/alertRules';
 import { applyRuleEdit, containsField } from '../../services/intelligence/ruleForm';
 import { notificationsSupported, requestNotificationPermission } from '../../services/notifications';
@@ -87,6 +87,10 @@ export const AlertRulesSettings: React.FC = () => {
     const copy = duplicateRule(rule, lists, new Date(), crypto.randomUUID());
     setEditing({ rule: copy, isNew: true, kindLocked: true });
   };
+
+  // Adds both stack templates disabled; the user enables them from the list once they have looked at them
+  const templatesAdded = hasStackTemplates(rules);
+  const addTemplates = () => setRules([...rules, ...stackRuleTemplates(settings.stackKeywords, new Date())]);
 
   const save = (rule: AlertRule) => {
     const next = applyRuleEdit(rules, rule, !!editing?.isNew);
@@ -189,7 +193,21 @@ export const AlertRulesSettings: React.FC = () => {
           requestNotify={requestNotify}
         />
       ) : (
-        <button className={toggleClass(false)} onClick={() => setEditing({ rule: newRule(), isNew: true })}>+ New rule</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className={toggleClass(false)} onClick={() => setEditing({ rule: newRule(), isNew: true })}>+ New rule</button>
+          <button
+            className={toggleClass(false)}
+            onClick={addTemplates}
+            disabled={settings.stackKeywords.length === 0 || templatesAdded}
+            title={settings.stackKeywords.length === 0
+              ? 'Add products to My Stack first'
+              : templatesAdded
+                ? 'Both my stack rules are already in the list; edit them there'
+                : 'Adds two disabled Vulns rules for the products in My Stack'}
+          >
+            Add from template: my stack
+          </button>
+        </div>
       )}
 
       <div className="space-y-2">

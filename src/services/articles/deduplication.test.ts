@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { deduplicateArticles } from './deduplication';
 import { article } from '../../test/fixtures';
+import { makeArticles } from '../../test/fixtures/articles2000';
+import { MIN_COMPARABLE_TOKENS, wordTokens } from './titleTokens';
+import type { Article } from '../../types';
 
 const when = '2026-10-20T00:00:00Z';
 const a = (id: string, title: string) => article(id, { title, publishedAt: when });
@@ -75,5 +78,98 @@ describe('deduplicateArticles with long-vowel marks and combining marks', () => 
       a('2', 'Sarbarhet i Ivanti utnyttjas aktivt'),
     ]);
     expect(ids(out)).toEqual(['1', '2']);
+  });
+});
+
+// The implementation before PERF-001 (bucketed linear scan, word sets rebuilt per call), kept as the
+// reference the indexed version must match exactly.
+function referenceDedup(articles: Article[]): Article[] {
+  const TITLE_SIMILARITY_THRESHOLD = 0.82;
+  const DUPLICATE_WINDOW_MS = 48 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const titleWordSet = (title: string) => {
+    const cleaned = title.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
+    return new Set(cleaned ? cleaned.split(' ').flatMap(wordTokens) : []);
+  };
+  const jaccard = (w1: Set<string>, w2: Set<string>) => {
+    if (w1.size === 0 || w2.size === 0) return 0;
+    let intersection = 0;
+    for (const word of w1) if (w2.has(word)) intersection++;
+    const union = w1.size + w2.size - intersection;
+    return union === 0 ? 0 : intersection / union;
+  };
+
+  const seenIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  const deduped: Article[] = [];
+  const byDay = new Map<number, { words: Set<string>; pubTime: number }[]>();
+
+  for (const article of articles) {
+    if (seenIds.has(article.id)) continue;
+    if (article.url && seenUrls.has(article.url)) continue;
+    const words = titleWordSet(article.title || '');
+    const pubTime = new Date(article.publishedAt).getTime();
+    const hasDate = !isNaN(pubTime);
+    if (hasDate && words.size >= MIN_COMPARABLE_TOKENS) {
+      const day = Math.floor(pubTime / DAY_MS);
+      let isDuplicateTitle = false;
+      for (let d = day - 2; d <= day + 2 && !isDuplicateTitle; d++) {
+        const bucket = byDay.get(d);
+        if (!bucket) continue;
+        isDuplicateTitle = bucket.some(
+          existing =>
+            Math.abs(existing.pubTime - pubTime) < DUPLICATE_WINDOW_MS &&
+            jaccard(existing.words, words) > TITLE_SIMILARITY_THRESHOLD
+        );
+      }
+      if (isDuplicateTitle) continue;
+      const bucket = byDay.get(day);
+      if (bucket) bucket.push({ words, pubTime });
+      else byDay.set(day, [{ words, pubTime }]);
+    }
+    seenIds.add(article.id);
+    if (article.url) seenUrls.add(article.url);
+    deduped.push(article);
+  }
+  return deduped;
+}
+
+describe('deduplicateArticles on 2,000 articles', () => {
+  const fixture = makeArticles(2000, 42);
+
+  it('dedup matches the reference on 2,000 articles', () => {
+    const expected = ids(referenceDedup(fixture));
+    // The fixture really exercises the fuzzy check: a good share is dropped
+    expect(expected.length).toBeLessThan(1900);
+    expect(ids(deduplicateArticles(fixture))).toEqual(expected);
+    // Again with warm caches, and in other orders
+    expect(ids(deduplicateArticles(fixture))).toEqual(expected);
+    const reversed = [...fixture].reverse();
+    expect(ids(deduplicateArticles(reversed))).toEqual(ids(referenceDedup(reversed)));
+    for (const seed of [1, 7, 99]) {
+      const other = makeArticles(2000, seed);
+      expect(ids(deduplicateArticles(other))).toEqual(ids(referenceDedup(other)));
+    }
+  });
+
+  it('matches the reference at the similarity threshold (word sets of every size from a small vocabulary)', () => {
+    const vocab = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g7', 'h8', 'i9', 'j10', 'k11', 'l12'];
+    let s = 12345;
+    const rand = () => ((s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    const list = Array.from({ length: 1500 }, (_, i) =>
+      article(`v${i}`, {
+        title: vocab.filter(() => rand() < 0.7).join(' '),
+        publishedAt: new Date(Date.UTC(2026, 9, 1) + Math.floor(rand() * 5 * 86400000)).toISOString(),
+      })
+    );
+    expect(ids(deduplicateArticles(list))).toEqual(ids(referenceDedup(list)));
+  });
+
+  it('dedup is fast', () => {
+    // Fresh objects, so the word-set cache is cold
+    const cold = makeArticles(2000, 3).map(a => ({ ...a }));
+    const start = performance.now();
+    deduplicateArticles(cold);
+    expect(performance.now() - start).toBeLessThan(200);
   });
 });

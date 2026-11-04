@@ -10,6 +10,7 @@ import { extractIOCs } from '../../services/intelligence/iocExtractor';
 import { iocLookupLinks } from '../../services/intelligence/iocLinks';
 import { checkWatchlistMatch } from '../../services/intelligence/watchlist';
 import { sanitizeHtml } from '../../services/rss/sanitizer';
+import { loadArticleContent } from '../../services/articleContent';
 import { panelStack, READER_LEVEL, usePanelLayer } from '../Common/panelStack';
 import { EntityText, useLinkedHtml } from '../EntityText';
 import { TagChip } from '../TagChip';
@@ -80,12 +81,25 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notesInput, setNotesInput] = useState(article.bookmarkNotes || '');
 
-  const extractedIOCs = useMemo(() => {
-    return extractIOCs(`${article.title} ${article.description || ''} ${article.content || ''}`);
-  }, [article]);
+  // Snapshot articles carry no text: it is loaded from the day's content shard, with the description shown meanwhile
+  const [loaded, setLoaded] = useState<{ id: string; content: string } | null>(null);
+  const { id: articleId, publishedAt, content: ownContent } = article;
+  useEffect(() => {
+    if (ownContent) return;
+    let cancelled = false;
+    loadArticleContent({ id: articleId, publishedAt }).then((content) => {
+      if (!cancelled && content) setLoaded({ id: articleId, content });
+    });
+    return () => { cancelled = true; };
+  }, [articleId, publishedAt, ownContent]);
+  const content = article.content || (loaded?.id === article.id ? loaded.content : '');
 
-  // Content is sanitized at ingest; sanitizing again at render is cheap insurance for raw HTML
-  const safeContent = useMemo(() => sanitizeHtml(article.content || ''), [article.content]);
+  const extractedIOCs = useMemo(() => {
+    return extractIOCs(`${article.title} ${article.description || ''} ${content}`);
+  }, [article, content]);
+
+  // Content is sanitized at ingest; sanitizing again at render is cheap insurance for raw HTML (shard text comes off the network)
+  const safeContent = useMemo(() => sanitizeHtml(content), [content]);
   // Names in the article open their panels: linked in the DOM after React has put the sanitized HTML there
   const contentRef = useRef<HTMLDivElement>(null);
   useLinkedHtml(contentRef, safeContent);
@@ -521,7 +535,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
           {/* Article Summary or Content */}
           <div className="prose prose-slate dark:prose-invert max-w-none font-serif text-base sm:text-lg text-theme-text/90 leading-relaxed space-y-4 mb-8">
-            {article.content ? (
+            {content ? (
               <div
                 ref={contentRef}
                 dangerouslySetInnerHTML={{ __html: safeContent }}

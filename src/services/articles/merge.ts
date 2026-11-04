@@ -19,7 +19,58 @@ function withUserState(fresh: Article, existing: Article): Article {
   for (const key of USER_STATE_KEYS) {
     (merged as any)[key] = existing[key];
   }
-  return merged;
+  // fetchedAt means "first seen on this device" (new-since-last-visit); a re-fetch must not reset it
+  if (existing.fetchedAt) merged.fetchedAt = existing.fetchedAt;
+  return keepBookmarkText(merged, existing, !!existing.bookmarked);
+}
+
+/**
+ * Snapshot copies carry no text (it ships in content shards); a bookmark keeps the text stored with it. Returns
+ * `incoming` with the stored text when it has none and the stored article is bookmarked, otherwise `incoming`.
+ */
+export function keepBookmarkText<T extends Pick<Article, 'content'>>(
+  incoming: T,
+  stored: Pick<Article, 'content'> | undefined,
+  bookmarked: boolean,
+): T {
+  return !incoming.content && bookmarked && stored?.content ? { ...incoming, content: stored.content } : incoming;
+}
+
+/**
+ * Bookmarks that have no stored text but whose day file may still hold it (published within the last
+ * `maxAgeDays` days), newest first. Their text is fetched once per session and stored with the bookmark.
+ */
+export function bookmarksMissingText(articles: Article[], now: number, maxAgeDays: number): Article[] {
+  const cutoff = now - maxAgeDays * 24 * 60 * 60 * 1000;
+  return articles
+    .filter(a => a.bookmarked && !a.content)
+    .filter(a => {
+      const t = new Date(a.publishedAt).getTime();
+      return !isNaN(t) && t >= cutoff;
+    })
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+}
+
+/**
+ * Applies a merge result computed from an earlier copy of the list (`merged`) to the current list, so changes
+ * made in between (read and bookmark toggles, notes, tags, stored text) survive: articles that weren't fetched
+ * are taken as they are now, fetched ones get the current user state, and articles removed in between stay
+ * removed unless they were just fetched.
+ */
+export function applyMergeResult(merged: Article[], current: Article[], fetchedIds: Set<string>): Article[] {
+  const currentById = new Map(current.map(a => [a.id, a]));
+  const out: Article[] = [];
+  for (const article of merged) {
+    const now = currentById.get(article.id);
+    if (!now) {
+      if (fetchedIds.has(article.id)) out.push(article);
+    } else if (!fetchedIds.has(article.id) || now === article) {
+      out.push(now);
+    } else {
+      out.push(withUserState(article, now));
+    }
+  }
+  return out;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findDemoBookmarks, mergeFetchedArticles } from './merge';
+import { applyMergeResult, bookmarksMissingText, findDemoBookmarks, keepBookmarkText, mergeFetchedArticles } from './merge';
 import { deduplicateArticles } from './deduplication';
 import { article } from '../../test/fixtures';
 import type { Article } from '../../types';
@@ -21,6 +21,15 @@ describe('mergeFetchedArticles', () => {
     expect(a).toMatchObject({ read: true, bookmarked: true, bookmarkFolder: 'IR', bookmarkNotes: 'note', customTags: ['x'], title: 'New title for A' });
   });
 
+  it('keeps the stored text of a bookmark when the fresh copy has none, and only of a bookmark', () => {
+    const stored = [article('g', { bookmarked: true, content: '<p>Kept</p>' }), article('h', { content: '<p>Old</p>' })];
+    const fresh = [article('g', { content: undefined }), article('h', { content: undefined })];
+    const result = mergeFetchedArticles(stored, fresh, 30);
+    expect(result.find(x => x.id === 'g')!.content).toBe('<p>Kept</p>');
+    expect(result.find(x => x.id === 'h')!.content).toBeUndefined();
+    expect(mergeFetchedArticles(stored, [article('g', { content: '<p>New</p>' })], 30).find(x => x.id === 'g')!.content).toBe('<p>New</p>');
+  });
+
   it('keeps the existing article over a new near-duplicate', () => {
     expect(merged.map(x => x.id)).toContain('b');
     expect(merged.map(x => x.id)).not.toContain('c');
@@ -31,6 +40,17 @@ describe('mergeFetchedArticles', () => {
     const old = article('e', { publishedAt: '2020-01-01T00:00:00Z' });
     const oldBookmark = article('f', { publishedAt: '2020-01-01T00:00:00Z', bookmarked: true });
     expect(mergeFetchedArticles([old, oldBookmark], [], 30).map(a => a.id)).toEqual(['f']);
+  });
+});
+
+describe('mergeFetchedArticles first-seen time', () => {
+  it('re-fetching an existing article keeps the original fetchedAt; new ones keep their own', () => {
+    const old = article('a', { fetchedAt: '2026-11-04T08:00:00.000Z' });
+    const refetched = article('a', { fetchedAt: '2026-11-04T17:55:00.000Z' });
+    const fresh = article('b', { title: 'Something else entirely', fetchedAt: '2026-11-04T17:55:00.000Z' });
+    const out = mergeFetchedArticles([old], [refetched, fresh], 0);
+    expect(out.find((x) => x.id === 'a')!.fetchedAt).toBe('2026-11-04T08:00:00.000Z');
+    expect(out.find((x) => x.id === 'b')!.fetchedAt).toBe('2026-11-04T17:55:00.000Z');
   });
 });
 
@@ -82,5 +102,65 @@ describe('mergeFetchedArticles bookmark priority', () => {
     const merged = mergeFetchedArticles([first, later], [], 30);
     expect(merged.map(x => x.id)).toContain('later');
     expect(merged.map(x => x.id)).not.toContain('first');
+  });
+});
+
+describe('applyMergeResult', () => {
+  // The merge ran on `before`; the user toggled state in between, giving `current`
+  const before = [article('a', { title: 'A' }), article('b', { title: 'B' }), article('gone', { title: 'Gone' })];
+  const fetched = [article('a', { title: 'A updated' }), article('n', { title: 'New one' })];
+  const merged = mergeFetchedArticles(before, fetched, 30);
+  const current = [
+    { ...before[0], read: true, bookmarked: true, bookmarkFolder: 'IR' },
+    { ...before[1], read: true, content: '<p>stored</p>' },
+  ];
+  const result = applyMergeResult(merged, current, new Set(fetched.map(x => x.id)));
+
+  it('keeps the merge order and adds the fetched articles', () => {
+    expect(result.map(x => x.id)).toEqual(['a', 'b', 'n']);
+  });
+
+  it('takes fresh content for fetched articles but the user state toggled in between', () => {
+    expect(result[0]).toMatchObject({ title: 'A updated', read: true, bookmarked: true, bookmarkFolder: 'IR' });
+  });
+
+  it('takes articles that were not fetched as they are now', () => {
+    expect(result[1]).toBe(current[1]);
+  });
+
+  it('does not bring back an article removed in between', () => {
+    expect(result.map(x => x.id)).not.toContain('gone');
+  });
+
+  it('matches merging into the current list directly', () => {
+    expect(result).toEqual(mergeFetchedArticles(current, fetched, 30));
+  });
+});
+
+describe('keepBookmarkText', () => {
+  it('keeps the stored text of a bookmark when the incoming copy has none', () => {
+    const incoming = article('a', { content: undefined });
+    expect(keepBookmarkText(incoming, { content: '<p>Kept</p>' }, true).content).toBe('<p>Kept</p>');
+  });
+
+  it('takes the incoming copy when it has text, the article isn\'t bookmarked or nothing is stored', () => {
+    expect(keepBookmarkText(article('a', { content: '<p>New</p>' }), { content: '<p>Old</p>' }, true).content).toBe('<p>New</p>');
+    expect(keepBookmarkText(article('a', { content: undefined }), { content: '<p>Old</p>' }, false).content).toBeUndefined();
+    expect(keepBookmarkText(article('a', { content: undefined }), undefined, true).content).toBeUndefined();
+  });
+});
+
+describe('bookmarksMissingText', () => {
+  const now = Date.parse('2026-11-04T12:00:00Z');
+  it('lists bookmarks without text published within the window, newest first', () => {
+    const list = [
+      article('old', { bookmarked: true, content: undefined, publishedAt: '2026-10-01T00:00:00Z' }),
+      article('recent', { bookmarked: true, content: undefined, publishedAt: '2026-11-01T00:00:00Z' }),
+      article('newest', { bookmarked: true, content: undefined, publishedAt: '2026-11-04T08:00:00Z' }),
+      article('has-text', { bookmarked: true, content: '<p>x</p>', publishedAt: '2026-11-03T00:00:00Z' }),
+      article('not-bookmarked', { bookmarked: false, content: undefined, publishedAt: '2026-11-03T00:00:00Z' }),
+      article('bad-date', { bookmarked: true, content: undefined, publishedAt: 'garbage' }),
+    ];
+    expect(bookmarksMissingText(list, now, 30).map(a => a.id)).toEqual(['newest', 'recent']);
   });
 });
