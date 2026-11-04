@@ -877,7 +877,7 @@ export const SettingsPage: React.FC = () => {
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30"
               >
                 <span>{kw}</span>
-                <span className="font-normal opacity-70">{keywordCounts.get(kw) ?? 0} {keywordCounts.get(kw) === 1 ? 'story' : 'stories'}, 7 days</span>
+                <span className="font-normal text-slate-600 dark:text-theme-text-muted">{keywordCounts.get(kw) ?? 0} {keywordCounts.get(kw) === 1 ? 'story' : 'stories'}, 7 days</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveKeyword(kw)}

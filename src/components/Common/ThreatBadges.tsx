@@ -94,7 +94,7 @@ export const WatchlistBadge: React.FC<WatchlistBadgeProps> = ({ terms, className
         className={`inline-flex items-center text-[10px] font-mono uppercase tracking-wide text-theme-text-muted ${className}`}
       >
         <span>WATCHLIST: {ordered[0]}</span>
-        {terms.length > 1 && <span className="ml-1 opacity-80">+{terms.length - 1}</span>}
+        {terms.length > 1 && <span className="ml-1">+{terms.length - 1}</span>}
       </span>
     );
   }
