@@ -18,35 +18,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ThreatFeed" />
 
-    <!-- Editorial Fonts: Newsreader (Serif) + Inter (Sans) + JetBrains Mono (Monospace) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&display=swap" rel="stylesheet">
+    <!-- Editorial Fonts: Newsreader (Serif) + Inter (Sans) + JetBrains Mono (Monospace), self-hosted under public/vendor/ -->
+    <link rel="stylesheet" href="/vendor/inter-v20/fonts.css" />
+    <link rel="stylesheet" href="/vendor/jetbrains-mono-v24/fonts.css" />
+    <link rel="stylesheet" href="/vendor/newsreader-v26/fonts.css" />
 
     <title>ThreatFeed — Security Intelligence Daily</title>
-    <script>
-      // A TV screen (#/…?tv=1 or ?dash=1, e.g. after its automatic reload) is always dark: paint it dark before the app
-      // boots so a light theme never flashes white. App removes this once the dark TV overlay is on screen.
-      if (/[?&](tv|dash)=1(&|$)/.test(location.hash)) {
-        var tvBoot = document.createElement('style');
-        tvBoot.id = 'tv-boot-bg';
-        tvBoot.textContent = 'html,body{background:#07090c!important}';
-        document.head.appendChild(tvBoot);
-      }
-    </script>
+    <script src="/tv-boot.js"></script>
   </head>
   <body class="bg-theme-bg text-theme-text antialiased selection:bg-rose-500 selection:text-white min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Register service worker if supported
-      if ('serviceWorker' in navigator && !window.location.host.includes('localhost') && !window.location.host.includes('127.0.0.1')) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch((err) => {
-            console.log('SW registration skipped or failed:', err);
-          });
-        });
-      }
-    </script>
+    <script src="/register-sw.js"></script>
   </body>
 </html>
