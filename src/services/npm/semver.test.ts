@@ -66,11 +66,35 @@ describe('parseGhsaRange', () => {
     expect(t(v('2.0.0'))).toBe(true);
     expect(t(v('2.0.1'))).toBe(false);
   });
-  it('expands bare versions missing minor/patch', () => {
-    const t = parseGhsaRange('<= 3.1')!;
-    expect(t(v('3.1.0'))).toBe(true);
-    expect(t(v('3.1.1'))).toBe(false);
+  it('reads partial bounds the way that widens the vulnerable range', () => {
+    const le = parseGhsaRange('<= 3.1')!;
+    expect(le(v('3.1.0'))).toBe(true);
+    expect(le(v('3.1.5'))).toBe(true);
+    expect(le(v('3.2.0'))).toBe(false);
+    const leMajor = parseGhsaRange('<= 3')!;
+    expect(leMajor(v('3.9.9'))).toBe(true);
+    expect(leMajor(v('4.0.0'))).toBe(false);
+    const eq = parseGhsaRange('= 3.1')!;
+    expect(eq(v('3.0.9'))).toBe(false);
+    expect(eq(v('3.1.0'))).toBe(true);
+    expect(eq(v('3.1.7'))).toBe(true);
+    expect(eq(v('3.2.0'))).toBe(false);
+    const gt = parseGhsaRange('> 3.1')!;
+    expect(gt(v('3.1.0'))).toBe(false);
+    expect(gt(v('3.1.1'))).toBe(true);
+    const lt = parseGhsaRange('< 3.1')!;
+    expect(lt(v('3.0.9'))).toBe(true);
+    expect(lt(v('3.1.0'))).toBe(false);
     expect(parseGhsaRange('>= 3')!(v('3.0.0'))).toBe(true);
+    expect(parseGhsaRange('>= 3.1')!(v('3.0.9'))).toBe(false);
+  });
+  it('any lower bound of 0.0.0 means from the beginning', () => {
+    for (const r of ['>= 0.0.0', '>= 0.0', '>= 0']) {
+      expect(parseGhsaRange(r)!(v('0.0.0-alpha')), r).toBe(true);
+    }
+  });
+  it('strict precedence: a prerelease is below its release', () => {
+    expect(parseGhsaRange('>= 4.0.0')!(v('4.0.0-rc.1'))).toBe(false);
   });
   it('>= 0 matches everything, prereleases included', () => {
     const t = parseGhsaRange('>= 0')!;
@@ -104,6 +128,9 @@ describe('osvAffected', () => {
     expect(osvAffected(v('1.2.2'), ev)).toBe(true);
     expect(osvAffected(v('1.2.3'), ev)).toBe(false);
     expect(osvAffected(v('2.0.0'), ev)).toBe(false);
+  });
+  it('introduced 0.0.0 also means from the beginning', () => {
+    expect(osvAffected(v('0.0.0-alpha'), [{ introduced: '0.0.0' }, { fixed: '1.0.0' }])).toBe(true);
   });
   it('last_affected is inclusive', () => {
     const ev = [{ introduced: '1.0.0' }, { last_affected: '1.5.0' }];

@@ -81,42 +81,66 @@ export function compareVersions(a: Version, b: Version): -1 | 0 | 1 {
 
 const ZERO: Version = { major: 0, minor: 0, patch: 0, pre: [] };
 
-/** Bound as written in an advisory: full semver, or a partial "3" / "3.1" read as 3.0.0 / 3.1.0. */
-function parseBound(s: string): Version | null {
+interface Bound {
+  version: Version;
+  /** Which part was omitted in an advisory bound: "3" is major-only, "3.1" is minor-only. */
+  partial: 'major' | 'minor' | null;
+}
+
+/** Bound as written in an advisory: full semver, or a partial "3" / "3.1" (no prerelease). */
+function parseBound(s: string): Bound | null {
   const full = parseVersion(s);
-  if (full) return full;
+  if (full) return { version: full, partial: null };
   const m = PARTIAL_RE.exec(s);
   if (!m) return null;
   const major = safeInt(m[1]);
   const minor = m[2] === undefined ? 0 : safeInt(m[2]);
   if (major === null || minor === null) return null;
-  return { major, minor, patch: 0, pre: [] };
+  return { version: { major, minor, patch: 0, pre: [] }, partial: m[2] === undefined ? 'major' : 'minor' };
 }
 
-// "0" means "from the very beginning": it must include 0.0.0 prereleases, which sort below 0.0.0.
-const isBeginning = (s: string) => s === '0';
+/** First version beyond everything a partial bound covers: "3" -> 4.0.0, "3.1" -> 3.2.0. */
+function partialCeiling(b: Version, partial: 'major' | 'minor'): Version {
+  return partial === 'major'
+    ? { major: b.major + 1, minor: 0, patch: 0, pre: [] }
+    : { major: b.major, minor: b.minor + 1, patch: 0, pre: [] };
+}
+
+// 0.0.0 as a lower bound means "from the very beginning": it must include 0.0.0 prereleases,
+// which sort below 0.0.0.
+const isZero = (v: Version) => v.major === 0 && v.minor === 0 && v.patch === 0 && !v.pre.length;
 
 const COMPARATOR_RE = /^(>=|<=|>|<|=)\s*(\S+)$/;
 
-/** GitHub Advisory `vulnerable_version_range`, e.g. ">= 3.25.0, < 3.90.0". Null when unparseable. */
+/**
+ * GitHub Advisory `vulnerable_version_range`, e.g. ">= 3.25.0, < 3.90.0". Null when unparseable.
+ * A partial bound is read the way that widens the vulnerable range: "<= 3.1" covers all of 3.1.x
+ * and "= 3.1" is 3.1.x.
+ */
 export function parseGhsaRange(range: string): RangeTest | null {
   const tests: RangeTest[] = [];
   for (const part of range.split(',')) {
     const m = COMPARATOR_RE.exec(part.trim());
     if (!m) return null;
     const [, op, text] = m;
-    if (op === '>=' && isBeginning(text)) {
-      tests.push(() => true);
-      continue;
-    }
     const bound = parseBound(text);
     if (!bound) return null;
-    switch (op) {
-      case '>=': tests.push((v) => compareVersions(v, bound) >= 0); break;
-      case '>': tests.push((v) => compareVersions(v, bound) > 0); break;
-      case '<=': tests.push((v) => compareVersions(v, bound) <= 0); break;
-      case '<': tests.push((v) => compareVersions(v, bound) < 0); break;
-      default: tests.push((v) => compareVersions(v, bound) === 0); break;
+    const { version: base, partial } = bound;
+    const ceiling = partial ? partialCeiling(base, partial) : null;
+    if (op === '>=' && isZero(base)) {
+      tests.push(() => true);
+    } else if (op === '>=') {
+      tests.push((v) => compareVersions(v, base) >= 0);
+    } else if (op === '>') {
+      tests.push((v) => compareVersions(v, base) > 0);
+    } else if (op === '<') {
+      tests.push((v) => compareVersions(v, base) < 0);
+    } else if (op === '<=') {
+      tests.push(ceiling ? (v) => compareVersions(v, ceiling) < 0 : (v) => compareVersions(v, base) <= 0);
+    } else {
+      tests.push(ceiling
+        ? (v) => compareVersions(v, base) >= 0 && compareVersions(v, ceiling) < 0
+        : (v) => compareVersions(v, base) === 0);
     }
   }
   return (v) => tests.every((t) => t(v));
@@ -138,9 +162,9 @@ export function osvAffected(v: Version, events: OsvEvent[]): boolean | null {
     const kind = keys[0];
     const text = e[kind];
     if (typeof text !== 'string') return null;
-    const beginning = kind === 'introduced' && isBeginning(text);
-    const ver = beginning ? ZERO : parseVersion(text);
+    const ver = parseVersion(text) ?? (text === '0' ? ZERO : null);
     if (!ver) return null;
+    const beginning = kind === 'introduced' && isZero(ver);
     resolved.push({ kind, ver, beginning });
   }
   if (!resolved.some((r) => r.kind === 'introduced')) return null;
