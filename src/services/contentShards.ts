@@ -37,7 +37,7 @@ export function parseShardContent(data: unknown): DayContent | null {
 
 /**
  * Reads the previously published shards for the given days. A 404 means the day has no shard and isn't an error;
- * any other failure is listed, and that day then has only this run's text.
+ * any other failure is tried once more, and if it fails again the day is listed as failed.
  */
 export async function readPreviousShards(
   base: string,
@@ -46,15 +46,21 @@ export async function readPreviousShards(
 ): Promise<{ shards: Map<string, DayContent>; failed: { day: string; error: string }[] }> {
   const shards = new Map<string, DayContent>();
   const failed: { day: string; error: string }[] = [];
-  await Promise.all(days.map(async (day) => {
+  type DayRead = { content: DayContent } | { missing: true } | { error: string };
+  const readDay = async (day: string): Promise<DayRead> => {
     try {
       const content = parseShardContent(await getJson(`${base}content/${day}.json`));
-      if (content) shards.set(day, content);
-      else failed.push({ day, error: 'not a content shard' });
+      return content ? { content } : { error: 'not a content shard' };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      if (error !== 'HTTP 404') failed.push({ day, error });
+      return error === 'HTTP 404' ? { missing: true } : { error };
     }
+  };
+  await Promise.all(days.map(async (day) => {
+    let result = await readDay(day);
+    if ('error' in result) result = await readDay(day);
+    if ('content' in result) shards.set(day, result.content);
+    else if ('error' in result) failed.push({ day, error: result.error });
   }));
   failed.sort((a, b) => a.day.localeCompare(b.day));
   return { shards, failed };
@@ -83,4 +89,18 @@ export function mergeContentShards(
     shards.set(day, merged);
   }
   return { shards, carried, fresh };
+}
+
+/**
+ * The shards to write this run, or null when any previous shard couldn't be read: writing then would replace that
+ * day's published text with this run's text only, so nothing is written and the deploy workflow keeps the
+ * published shards instead (this run's text appears with the next run).
+ */
+export function planContentShards(
+  previous: { shards: Map<string, DayContent>; failed: { day: string; error: string }[] },
+  current: Map<string, DayContent>,
+  window: string[],
+): ReturnType<typeof mergeContentShards> | null {
+  if (previous.failed.length) return null;
+  return mergeContentShards(previous.shards, current, window);
 }

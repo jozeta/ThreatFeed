@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { groupContentByDay, mergeContentShards, parseShardContent, readPreviousShards, shardWindow, type DayContent } from './contentShards';
+import { groupContentByDay, mergeContentShards, parseShardContent, planContentShards, readPreviousShards, shardWindow, type DayContent } from './contentShards';
 
 const NOW = Date.parse('2026-11-04T12:00:00Z');
 
@@ -66,5 +66,35 @@ describe('readPreviousShards', () => {
     expect(getJson).toHaveBeenCalledWith('https://example.test/data/content/2026-11-03.json');
     expect(Object.fromEntries(shards)).toEqual({ '2026-11-03': { a: 'A' } });
     expect(failed).toEqual([{ day: '2026-10-31', error: 'HTTP 503' }, { day: '2026-11-01', error: 'not a content shard' }]);
+    // a failure is tried once more, a 404 and a good read are not
+    expect(getJson.mock.calls.filter(([u]) => u.endsWith('2026-10-31.json'))).toHaveLength(2);
+    expect(getJson.mock.calls.filter(([u]) => u.endsWith('2026-11-02.json'))).toHaveLength(1);
+    expect(getJson.mock.calls.filter(([u]) => u.endsWith('2026-11-03.json'))).toHaveLength(1);
+  });
+
+  it('keeps a day whose first read fails but whose retry succeeds', async () => {
+    let calls = 0;
+    const getJson = vi.fn(async () => {
+      if (calls++ === 0) throw new Error('HTTP 502');
+      return { version: 1, day: '2026-11-03', content: { a: 'A' } };
+    });
+    const { shards, failed } = await readPreviousShards('https://example.test/data/', ['2026-11-03'], getJson);
+    expect(Object.fromEntries(shards)).toEqual({ '2026-11-03': { a: 'A' } });
+    expect(failed).toEqual([]);
+  });
+});
+
+describe('planContentShards', () => {
+  const window = shardWindow(NOW, 30);
+  const current = new Map<string, DayContent>([['2026-11-04', { d: 'D' }]]);
+
+  it('merges when every previous shard was read', () => {
+    const plan = planContentShards({ shards: new Map([['2026-11-03', { a: 'A' }]]), failed: [] }, current, window);
+    expect(plan && Object.fromEntries(plan.shards)).toEqual({ '2026-11-03': { a: 'A' }, '2026-11-04': { d: 'D' } });
+  });
+
+  it('writes nothing when any previous shard couldn\'t be read', () => {
+    const previous = { shards: new Map([['2026-11-03', { a: 'A' }]]), failed: [{ day: '2026-11-02', error: 'HTTP 503' }] };
+    expect(planContentShards(previous, current, window)).toBeNull();
   });
 });

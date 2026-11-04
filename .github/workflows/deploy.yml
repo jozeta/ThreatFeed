@@ -134,7 +134,8 @@ jobs:
             fi
           done || true
       # The article text (content shards, one file per publish day) is carried over from the published site by the
-      # snapshot. If a failed snapshot left none, deploy the published last 30 days rather than a site whose reader
+      # snapshot. If the snapshot failed, or wrote none because a previous shard couldn't be read (it then leaves
+      # the directory empty), deploy the published last 30 days rather than a site whose reader
       # shows only descriptions. Best effort: missing days (404) are skipped and this step never fails the run.
       - name: Keep the published content shards
         continue-on-error: true
@@ -145,7 +146,7 @@ jobs:
           kept=0
           for i in $(seq 0 30); do
             day=$(date -u -d "-$i day" +%Y-%m-%d)
-            if curl -sfL --max-time 60 -o "$dir/$day.json.tmp" "https://jozeta.github.io/ThreatFeed/data/content/$day.json" && [ -s "$dir/$day.json.tmp" ]; then
+            if curl -sfL --retry 2 --retry-delay 10 --max-time 60 -o "$dir/$day.json.tmp" "https://jozeta.github.io/ThreatFeed/data/content/$day.json" && [ -s "$dir/$day.json.tmp" ]; then
               mv "$dir/$day.json.tmp" "$dir/$day.json"; kept=$((kept + 1))
             else
               rm -f "$dir/$day.json.tmp"
