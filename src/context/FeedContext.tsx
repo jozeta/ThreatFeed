@@ -26,7 +26,7 @@ import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
 import { rescoreArticle } from '../services/rss/parser';
 import { deduplicateArticles } from '../services/articles/deduplication';
-import { bookmarkedFirst } from '../services/articles/merge';
+import { bookmarkedFirst, bookmarksMissingText } from '../services/articles/merge';
 import { isRefreshDue, shouldPauseWhenHidden, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
 import { feedsInUse, inUse, withoutDisabledCategories } from '../services/articles/categories';
 import { applyMergeResult, findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
@@ -645,6 +645,28 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await saveArticlesToDB([{ ...(findArticle(target.id) ?? target), content }]);
     patchArticle(target.id, { content });
   }, [patchArticle]);
+
+  // Bookmarks can lack their text (bookmarked offline or while the day file failed to load, or wiped by a tab
+  // still running an older version). Once per session, after the first refresh, fetch it for those whose day
+  // file is still published (30 days), one at a time and at most BACKFILL_LIMIT of them.
+  const backfillDoneRef = useRef(false);
+  useEffect(() => {
+    if (!initialSyncDone || backfillDoneRef.current) return;
+    backfillDoneRef.current = true;
+    const BACKFILL_LIMIT = 50;
+    void (async () => {
+      for (const target of bookmarksMissingText(articlesRef.current, Date.now(), 30).slice(0, BACKFILL_LIMIT)) {
+        // Skip one un-bookmarked, removed or filled in meanwhile
+        const current = articlesRef.current.find(a => a.id === target.id);
+        if (!current?.bookmarked || current.content) continue;
+        try {
+          await storeBookmarkContent(current);
+        } catch (err) {
+          console.warn('Could not store the text of a bookmark:', err);
+        }
+      }
+    })();
+  }, [initialSyncDone, storeBookmarkContent]);
 
   const toggleBookmark = useCallback(async (articleId: string) => {
     const target = findArticle(articleId);

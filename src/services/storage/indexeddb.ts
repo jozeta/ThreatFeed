@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
 import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
 import { cleanSyncLog, syncLogForImport } from '../sync/syncLog';
+import { keepBookmarkText } from '../articles/merge';
 
 interface ThreatFeedDB extends DBSchema {
   articles: {
@@ -107,9 +108,11 @@ export async function saveArticlesToDB(newArticles: Article[]): Promise<void> {
     // Check if user already marked this article read/viewed/bookmarked.
     // Copy rather than mutate: callers' objects may already be in React state.
     const existingState = await stateStore.get(article.id);
+    const stored = await articleStore.get(article.id);
     // fetchedAt is when it was first seen here; a re-fetched copy keeps the stored one
-    const firstSeen = (await articleStore.get(article.id))?.fetchedAt;
-    if (firstSeen) article = { ...article, fetchedAt: firstSeen };
+    if (stored?.fetchedAt) article = { ...article, fetchedAt: stored.fetchedAt };
+    // A copy without text (snapshot articles, an older tab's merge) must not wipe a bookmark's stored text
+    article = keepBookmarkText(article, stored, !!existingState?.bookmarked);
     await articleStore.put(existingState ? {
       ...article,
       read: existingState.read,

@@ -21,9 +21,34 @@ function withUserState(fresh: Article, existing: Article): Article {
   }
   // fetchedAt means "first seen on this device" (new-since-last-visit); a re-fetch must not reset it
   if (existing.fetchedAt) merged.fetchedAt = existing.fetchedAt;
-  // Snapshot copies carry no text (it ships in content shards); a bookmark keeps the text stored with it
-  if (!merged.content && existing.bookmarked && existing.content) merged.content = existing.content;
-  return merged;
+  return keepBookmarkText(merged, existing, !!existing.bookmarked);
+}
+
+/**
+ * Snapshot copies carry no text (it ships in content shards); a bookmark keeps the text stored with it. Returns
+ * `incoming` with the stored text when it has none and the stored article is bookmarked, otherwise `incoming`.
+ */
+export function keepBookmarkText<T extends Pick<Article, 'content'>>(
+  incoming: T,
+  stored: Pick<Article, 'content'> | undefined,
+  bookmarked: boolean,
+): T {
+  return !incoming.content && bookmarked && stored?.content ? { ...incoming, content: stored.content } : incoming;
+}
+
+/**
+ * Bookmarks that have no stored text but whose day file may still hold it (published within the last
+ * `maxAgeDays` days), newest first. Their text is fetched once per session and stored with the bookmark.
+ */
+export function bookmarksMissingText(articles: Article[], now: number, maxAgeDays: number): Article[] {
+  const cutoff = now - maxAgeDays * 24 * 60 * 60 * 1000;
+  return articles
+    .filter(a => a.bookmarked && !a.content)
+    .filter(a => {
+      const t = new Date(a.publishedAt).getTime();
+      return !isNaN(t) && t >= cutoff;
+    })
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }
 
 /**

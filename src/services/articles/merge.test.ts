@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMergeResult, findDemoBookmarks, mergeFetchedArticles } from './merge';
+import { applyMergeResult, bookmarksMissingText, findDemoBookmarks, keepBookmarkText, mergeFetchedArticles } from './merge';
 import { deduplicateArticles } from './deduplication';
 import { article } from '../../test/fixtures';
 import type { Article } from '../../types';
@@ -134,5 +134,33 @@ describe('applyMergeResult', () => {
 
   it('matches merging into the current list directly', () => {
     expect(result).toEqual(mergeFetchedArticles(current, fetched, 30));
+  });
+});
+
+describe('keepBookmarkText', () => {
+  it('keeps the stored text of a bookmark when the incoming copy has none', () => {
+    const incoming = article('a', { content: undefined });
+    expect(keepBookmarkText(incoming, { content: '<p>Kept</p>' }, true).content).toBe('<p>Kept</p>');
+  });
+
+  it('takes the incoming copy when it has text, the article isn\'t bookmarked or nothing is stored', () => {
+    expect(keepBookmarkText(article('a', { content: '<p>New</p>' }), { content: '<p>Old</p>' }, true).content).toBe('<p>New</p>');
+    expect(keepBookmarkText(article('a', { content: undefined }), { content: '<p>Old</p>' }, false).content).toBeUndefined();
+    expect(keepBookmarkText(article('a', { content: undefined }), undefined, true).content).toBeUndefined();
+  });
+});
+
+describe('bookmarksMissingText', () => {
+  const now = Date.parse('2026-11-04T12:00:00Z');
+  it('lists bookmarks without text published within the window, newest first', () => {
+    const list = [
+      article('old', { bookmarked: true, content: undefined, publishedAt: '2026-10-01T00:00:00Z' }),
+      article('recent', { bookmarked: true, content: undefined, publishedAt: '2026-11-01T00:00:00Z' }),
+      article('newest', { bookmarked: true, content: undefined, publishedAt: '2026-11-04T08:00:00Z' }),
+      article('has-text', { bookmarked: true, content: '<p>x</p>', publishedAt: '2026-11-03T00:00:00Z' }),
+      article('not-bookmarked', { bookmarked: false, content: undefined, publishedAt: '2026-11-03T00:00:00Z' }),
+      article('bad-date', { bookmarked: true, content: undefined, publishedAt: 'garbage' }),
+    ];
+    expect(bookmarksMissingText(list, now, 30).map(a => a.id)).toEqual(['newest', 'recent']);
   });
 });
