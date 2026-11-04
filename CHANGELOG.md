@@ -6,6 +6,7 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Faster loading: the duplicate check finds near-identical titles through a word index instead of comparing every pair, and runs once per merge instead of twice (same results)
 - The snapshot is about a quarter of its old size (2.7 MB instead of 10 MB, 0.57 MB instead of 2.4 MB compressed): article text now ships in per-day files that the reader loads when you open a story, and bookmarking a story stores its text with it
 - Fonts are self-hosted instead of loaded from Google Fonts, and the built site sends a Content-Security-Policy (no inline scripts)
 - ESLint (`npm run lint`) runs in CI, including a rule against unsanitized HTML in the DOM

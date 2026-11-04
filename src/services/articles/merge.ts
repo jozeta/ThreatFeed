@@ -25,6 +25,28 @@ function withUserState(fresh: Article, existing: Article): Article {
 }
 
 /**
+ * Applies a merge result computed from an earlier copy of the list (`merged`) to the current list, so changes
+ * made in between (read and bookmark toggles, notes, tags, stored text) survive: articles that weren't fetched
+ * are taken as they are now, fetched ones get the current user state, and articles removed in between stay
+ * removed unless they were just fetched.
+ */
+export function applyMergeResult(merged: Article[], current: Article[], fetchedIds: Set<string>): Article[] {
+  const currentById = new Map(current.map(a => [a.id, a]));
+  const out: Article[] = [];
+  for (const article of merged) {
+    const now = currentById.get(article.id);
+    if (!now) {
+      if (fetchedIds.has(article.id)) out.push(article);
+    } else if (!fetchedIds.has(article.id) || now === article) {
+      out.push(now);
+    } else {
+      out.push(withUserState(article, now));
+    }
+  }
+  return out;
+}
+
+/**
  * Seed articles that earlier versions shipped pre-bookmarked as a demo. A bookmark the user made always
  * has an article state record (written by updateArticleStateInDB); a seeded one doesn't.
  */

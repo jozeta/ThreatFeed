@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findDemoBookmarks, mergeFetchedArticles } from './merge';
+import { applyMergeResult, findDemoBookmarks, mergeFetchedArticles } from './merge';
 import { deduplicateArticles } from './deduplication';
 import { article } from '../../test/fixtures';
 import type { Article } from '../../types';
@@ -91,5 +91,37 @@ describe('mergeFetchedArticles bookmark priority', () => {
     const merged = mergeFetchedArticles([first, later], [], 30);
     expect(merged.map(x => x.id)).toContain('later');
     expect(merged.map(x => x.id)).not.toContain('first');
+  });
+});
+
+describe('applyMergeResult', () => {
+  // The merge ran on `before`; the user toggled state in between, giving `current`
+  const before = [article('a', { title: 'A' }), article('b', { title: 'B' }), article('gone', { title: 'Gone' })];
+  const fetched = [article('a', { title: 'A updated' }), article('n', { title: 'New one' })];
+  const merged = mergeFetchedArticles(before, fetched, 30);
+  const current = [
+    { ...before[0], read: true, bookmarked: true, bookmarkFolder: 'IR' },
+    { ...before[1], read: true, content: '<p>stored</p>' },
+  ];
+  const result = applyMergeResult(merged, current, new Set(fetched.map(x => x.id)));
+
+  it('keeps the merge order and adds the fetched articles', () => {
+    expect(result.map(x => x.id)).toEqual(['a', 'b', 'n']);
+  });
+
+  it('takes fresh content for fetched articles but the user state toggled in between', () => {
+    expect(result[0]).toMatchObject({ title: 'A updated', read: true, bookmarked: true, bookmarkFolder: 'IR' });
+  });
+
+  it('takes articles that were not fetched as they are now', () => {
+    expect(result[1]).toBe(current[1]);
+  });
+
+  it('does not bring back an article removed in between', () => {
+    expect(result.map(x => x.id)).not.toContain('gone');
+  });
+
+  it('matches merging into the current list directly', () => {
+    expect(result).toEqual(mergeFetchedArticles(current, fetched, 30));
   });
 });

@@ -28,7 +28,7 @@ import { deduplicateArticles } from '../services/articles/deduplication';
 import { bookmarkedFirst } from '../services/articles/merge';
 import { isRefreshDue, shouldPauseWhenHidden, PendingFeedQueue, shouldApplySnapshot, snapshotApplyKey } from '../services/refreshPlanning';
 import { feedsInUse, inUse, withoutDisabledCategories } from '../services/articles/categories';
-import { findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
+import { applyMergeResult, findDemoBookmarks, isExpired, mergeFetchedArticles } from '../services/articles/merge';
 import { useSettings } from './SettingsContext';
 
 interface RefreshProgress {
@@ -334,19 +334,19 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Score CVE-bearing articles with the latest KEV/EPSS data
       const intel = cveIntelRef.current;
       const newItems = fetchedItems.map(a => (a.cves?.length ? rescoreArticle(a, feedById.get(a.sourceId), intel) : a));
-      // Work out the DB changes from the ref snapshot: title/date-based dedup and the age cutoff
-      // don't depend on read state, so it agrees with the state update below.
+      // Merge once, from the ref snapshot, and use that one result for the DB changes and for state
       const before = articlesRef.current;
       // Articles of turned-off categories stay in state but never win a near-duplicate check over shown ones
       const shown = inUse(feedsRef.current, settings.disabledCategories ?? []);
       const mergedSnapshot = mergeFetchedArticles(before, newItems, maxAgeDays, shown);
       const after = new Set(mergedSnapshot.map(a => a.id));
+      const fetchedIds = new Set(newItems.map(a => a.id));
       // Progressive merges can run several times before React re-renders; keep the ref current for the next one
       articlesRef.current = mergedSnapshot;
-      setArticles(prev => mergeFetchedArticles(prev, newItems, maxAgeDays, shown));
+      // Read/bookmark toggles made since the ref snapshot are kept from prev
+      setArticles(prev => applyMergeResult(mergedSnapshot, prev, fetchedIds));
       // Persist fetched items that survived (near-duplicates of existing ones are dropped), as merged: a
       // bookmark keeps the text stored with it when the snapshot copy has none
-      const fetchedIds = new Set(newItems.map(a => a.id));
       await saveArticlesToDB(mergedSnapshot.filter(a => fetchedIds.has(a.id)));
       // Delete articles the merge pruned (expired), so they don't come back on reload
       await deleteArticlesFromDB(before.filter(a => !after.has(a.id)).map(a => a.id));
