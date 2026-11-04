@@ -44,6 +44,8 @@ minutes** and on push to `main`: test → snapshot → build → deploy to Pages
   Sources, Feed Health, Settings. `src/components/` has the newspaper layouts, reader, charts and
   TV views.
 - Default feeds: `public/data/feeds.json`; service worker: `public/sw.js`.
+- The 1 Nov 2026 audit (findings by ID: BUG-, PERF-, SEC-, UI-, FEAT-…, with a status table) is
+  `docs/audit/2026-11-01-audit.md`; update its status table when a finding is fixed.
 
 ## Rules
 
