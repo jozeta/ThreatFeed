@@ -71,6 +71,12 @@ describe('mergeSyncData deletions (TEST-008)', () => {
     expect((mergeSyncData(withPkgs(['a']) as any, withPkgs(['b'])) as any).settings.npmPackages).toEqual(['a', 'b']);
   });
 
+  it('never takes the OSV lookup opt-in from the remote, even on a device with no settings yet', () => {
+    const remote = data({ settings: { ...lists, npmOsvLookup: true } });
+    expect((mergeSyncData(data({ settings: null }) as any, remote) as any).settings.npmOsvLookup).toBe(false);
+    expect((mergeSyncData(data({ settings: { ...lists, npmOsvLookup: false } }) as any, remote) as any).settings.npmOsvLookup).toBe(false);
+  });
+
   it('unions as before when neither side has a sync log (old format)', () => {
     const old = data({ settings: { ...lists, mutedKeywords: ['deal'] } });
     expect((mergeSyncData(b as any, old) as any).settings.mutedKeywords).toEqual(['Deal', 'webinar']);

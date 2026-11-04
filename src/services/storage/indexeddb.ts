@@ -345,6 +345,19 @@ export async function exportAllThreatFeedData() {
 }
 
 /**
+ * Validates the npm fields of imported settings. Malformed package entries are dropped. The OSV lookup sends package
+ * names to a third party, so a backup restore (the user's own file) may carry it but synced data never changes it:
+ * a fromSync import keeps this device's current value (off when there is none).
+ */
+export function cleanImportedSettings(imported: any, current: Partial<UserSettings> | undefined, fromSync: boolean) {
+  return {
+    ...imported,
+    npmPackages: cleanPackageList(imported.npmPackages),
+    npmOsvLookup: fromSync ? current?.npmOsvLookup === true : imported.npmOsvLookup === true,
+  };
+}
+
+/**
  * Restores a backup (default) or writes Gist-merged data (`fromSync`). Only a backup restore records add events for the
  * restored items: doing that on every sync would date every present item "now" and beat newer deletions on other devices.
  */
@@ -405,9 +418,9 @@ export async function importThreatFeedData(data: any, { fromSync = false }: { fr
   // restored, so a later Gist sync doesn't delete restored items again; synced data already carries the merged log
   if (data.settings && typeof data.settings === 'object') {
     const settingsStore = tx.objectStore('settings');
-    const settings = { ...data.settings, npmPackages: cleanPackageList(data.settings.npmPackages), npmOsvLookup: data.settings.npmOsvLookup === true };
     const now = new Date();
-    const current = fromSync ? undefined : await settingsStore.get(SETTINGS_KEY);
+    const current = await settingsStore.get(SETTINGS_KEY);
+    const settings = cleanImportedSettings(data.settings, current?.value, fromSync);
     const syncLog = fromSync ? cleanSyncLog(data.settings.syncLog, now) : syncLogForImport(current?.value?.syncLog, settings, now);
     // Entries that aren't a valid npm name or name@version are dropped; syncLogForImport above only sees the cleaned list
     await settingsStore.put({ key: SETTINGS_KEY, value: { ...settings, syncLog } });
