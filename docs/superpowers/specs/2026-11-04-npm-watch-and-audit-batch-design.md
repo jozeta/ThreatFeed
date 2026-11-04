@@ -222,6 +222,58 @@ malicious release affects them. The owner asked for the npm part to be **extensi
 - On the pages, the new charts go into each tab's existing stats area. The layout follows what is
   already there (no redesign).
 
+## Settled after the builder check (my calls)
+
+- **Complete private matching:**
+  - Besides the 90-day detailed list, `npm-advisories.json` carries a compact **matching index of
+    every reviewed npm advisory** (all time): id, package, vulnerable ranges, first patched
+    version, severity, withdrawn flag.
+  - A "not affected" is therefore backed by GitHub's whole reviewed dataset, not just 90 days. The
+    detailed fields are loaded for the 90-day list and fetched from the advisory link for older
+    ones.
+  - Malware stays at 90 days, so the "My packages" view says "malware: last 90 days checked".
+- **Status words:**
+  - **affected:** a matching advisory exists.
+  - **not affected:** checked against all reviewed advisories, plus OSV when it is on.
+  - **no version:** the package was entered without a version, so it is flagged for every advisory
+    on the package and shown as "check your version".
+  - **unknown:** a range couldn't be parsed. This is never shown as safe.
+- **Notification baseline is per device:**
+  - When a package is added, or the app first sees the list on a device, the advisory keys that
+    already affect it are stored as seen. The key is advisory id + package + version, or the
+    package name for unversioned entries.
+  - An advisory notifies the first time it becomes affecting on that device. That includes an
+    updated advisory whose new range now covers a watched version.
+  - Each device alerts on its own, as with other notifications. The package list syncs; the seen
+    set doesn't.
+- **"Median days from publish to fix" is dropped** (no release dates without a new registry call).
+  It is replaced by "Share of advisories with a fix available" (donut).
+- **EPSS:**
+  - The job looks up EPSS for the 90-day advisories' CVEs, in the existing FIRST batch calls,
+    refreshed at most once a day.
+  - A7's "EPSS rose above Y" stores the last-seen score per CVE in the alert state and fires on a
+    below-to-above crossing.
+  - Defaults are X = CVSS 9.0 and Y = 0.5 (50%). Both are editable in the existing alert-rule
+    editor.
+- **Carry-over:**
+  - A missing previous file (404) means a full backfill.
+  - A previous copy that can't be read means the file is not written, and the workflow keeps the
+    published copy, the same pattern as trends, stats and feeds.
+  - Withdrawn advisories stay in the list marked "withdrawn" (struck through) and are excluded
+    from matching, alerts, charts and RSS.
+- **Content shards:**
+  - Rebuilt each run from the snapshot's articles, covering the snapshot's 30-day window, so
+    nothing accumulates.
+  - Live-fetched articles keep their content in IndexedDB as today.
+  - An article whose shard has aged out shows its description and the original link.
+- **npm RSS:** it uses the existing feed builder and ledger. Items link to the app's advisory panel
+  (`#/vulns/npm?advisory=`), and the description names the GitHub advisory URL as the source.
+- **Delivery:** three separately reviewed and merged parts, in order A, B, C. A2 and A3 (shards,
+  dedup, clustering) carry the most regression risk, so they get equivalence tests and a browser
+  check before A merges.
+- **Charts:** `StackedBars` lives in `src/pages/vulns/StackedBars.tsx`. It moves to
+  `src/components/charts/` and is generalised there; the existing page keeps using it.
+
 ## Non-goals
 - No package.json or lockfile import (the owner chose typed names). This can come later.
 - No other ecosystems (PyPI and others) in this round. The data model keeps an `ecosystem` field so
