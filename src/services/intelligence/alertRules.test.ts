@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem,
-  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, matchedVulnCves, alertSettingsFrom, rulesNeedVulns,
+  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, matchedVulnCves, alertSettingsFrom, rulesNeedVulns, stackRuleTemplates,
 } from './alertRules';
 import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord, UserSettings } from '../../types';
 import { article } from '../../test/fixtures';
@@ -328,5 +328,42 @@ describe('rulesNeedVulns', () => {
     };
     expect(rulesNeedVulns([...builtIns, custom], empty)).toBe(true);
     expect(rulesNeedVulns([...builtIns, { ...custom, enabled: false }], empty)).toBe(false);
+  });
+});
+
+describe('stackRuleTemplates', () => {
+  const now = new Date('2026-10-30T12:00:00Z');
+  const templates = stackRuleTemplates(['Fortinet', 'Okta'], now);
+
+  it('returns two disabled custom Vulns rules with notify on, passing sanitizeRule', () => {
+    expect(templates.map(t => t.name)).toEqual(['My stack: critical CVEs', 'My stack: exploited']);
+    expect(new Set(templates.map(t => t.id)).size).toBe(2);
+    for (const t of templates) {
+      expect(t).toMatchObject({ kind: 'vulns', enabled: false, notify: true });
+      expect(t.builtIn).toBeUndefined();
+      expect(sanitizeRule(t)).toEqual(t);
+    }
+  });
+
+  it('matches vendor AND cvss >= 9 for the critical template', () => {
+    const root = templates[0].root as ConditionGroup<VulnCondition>;
+    expect(matchesVuln(root, vuln({ vendor: 'Fortinet', cvss: 9.1 }), ctx())).toBe(true);
+    expect(matchesVuln(root, vuln({ vendor: 'Fortinet', cvss: 8.9 }), ctx())).toBe(false);
+    expect(matchesVuln(root, vuln({ vendor: 'Cisco', cvss: 9.8 }), ctx())).toBe(false);
+  });
+
+  it('matches vendor AND (KEV OR EPSS >= 0.5) for the exploited template', () => {
+    const root = templates[1].root as ConditionGroup<VulnCondition>;
+    expect(matchesVuln(root, vuln({ vendor: 'Okta', kev: true }), ctx())).toBe(true);
+    expect(matchesVuln(root, vuln({ vendor: 'Okta', epss: 0.5 }), ctx())).toBe(true);
+    expect(matchesVuln(root, vuln({ vendor: 'Okta', epss: 0.4 }), ctx())).toBe(false);
+    expect(matchesVuln(root, vuln({ vendor: 'Cisco', kev: true }), ctx())).toBe(false);
+  });
+
+  it('copies the stack list instead of sharing it', () => {
+    const stack = ['Fortinet'];
+    const [t] = stackRuleTemplates(stack, now);
+    stack.push('Okta');
+    expect(JSON.stringify(t.root)).not.toContain('Okta');
   });
 });

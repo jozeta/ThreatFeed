@@ -6,12 +6,12 @@ import { buildHash } from '../hooks/useHashRoute';
 import { useOpenTrending } from '../hooks/useOpenTrending';
 import { useSettings } from '../context/SettingsContext';
 import { EntityLink, EntityText } from '../components/EntityText';
-import { buildBriefing, briefingToMarkdown, BriefingStory } from '../services/intelligence/briefing';
+import { buildBriefing, briefingToMarkdown, briefingToHtml, BriefingStory } from '../services/intelligence/briefing';
 import { downloadText } from '../services/intelligence/iocExport';
 import { SeverityBadge, CveChip } from '../components/Common/ThreatBadges';
 import { Sparkline } from '../components/Common/Sparkline';
 import { formatRelativeTime } from '../utils/date';
-import { ClipboardList, Copy, Check, Download, ShieldAlert, Target, Layers, Skull, TrendingUp, Server, Database } from 'lucide-react';
+import { ClipboardList, Copy, Check, Download, FileText, ShieldAlert, Target, Layers, Skull, TrendingUp, Server, Database } from 'lucide-react';
 
 interface BriefingPageProps {
   onOpenArticle: (article: Article) => void;
@@ -44,6 +44,7 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
   const { open: openTrending, clickHint } = useOpenTrending(onSearch);
   const [windowHours, setWindowHours] = useState(24);
   const [copied, setCopied] = useState(false);
+  const [copiedRich, setCopiedRich] = useState(false);
 
   const briefing = useMemo(
     () => buildBriefing(articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, Date.now(), incidents, vulns),
@@ -57,6 +58,20 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  // Rich text for pasting into mail or docs; browsers without ClipboardItem get the Markdown instead
+  const handleCopyRich = async () => {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+      await navigator.clipboard.writeText(markdown());
+    } else {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([briefingToHtml(briefing)], { type: 'text/html' }),
+        'text/plain': new Blob([markdown()], { type: 'text/plain' }),
+      })]);
+    }
+    setCopiedRich(true);
+    setTimeout(() => setCopiedRich(false), 2000);
+  };
+  const handleDownloadHtml = () => downloadText(`threatfeed-briefing-${briefing.generatedAt.slice(0, 10)}.html`, briefingToHtml(briefing), 'text/html');
   const handleDownload = () => downloadText(`threatfeed-briefing-${briefing.generatedAt.slice(0, 10)}.md`, markdown(), 'text/markdown');
 
   const storyRow = (s: BriefingStory, terms: string[] = []) => {
@@ -111,6 +126,14 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
           <button onClick={handleDownload} className="px-3 py-1.5 rounded bg-theme-card border border-theme-border text-theme-text hover:border-theme-accent transition-colors flex items-center gap-1.5">
             <Download className="w-3.5 h-3.5" />
             <span>Download .md</span>
+          </button>
+          <button onClick={handleCopyRich} className="px-3 py-1.5 rounded bg-theme-card border border-theme-border text-theme-text hover:border-theme-accent transition-colors flex items-center gap-1.5">
+            {copiedRich ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <FileText className="w-3.5 h-3.5" />}
+            <span>{copiedRich ? 'Copied' : 'Copy rich text'}</span>
+          </button>
+          <button onClick={handleDownloadHtml} className="px-3 py-1.5 rounded bg-theme-card border border-theme-border text-theme-text hover:border-theme-accent transition-colors flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            <span>Download .html</span>
           </button>
         </div>
       </div>
