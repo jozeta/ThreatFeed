@@ -19,6 +19,8 @@ function withUserState(fresh: Article, existing: Article): Article {
   for (const key of USER_STATE_KEYS) {
     (merged as any)[key] = existing[key];
   }
+  // fetchedAt means "first seen on this device" (new-since-last-visit); a re-fetch must not reset it
+  if (existing.fetchedAt) merged.fetchedAt = existing.fetchedAt;
   // Snapshot copies carry no text (it ships in content shards); a bookmark keeps the text stored with it
   if (!merged.content && existing.bookmarked && existing.content) merged.content = existing.content;
   return merged;

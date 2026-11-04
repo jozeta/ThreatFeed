@@ -102,10 +102,14 @@ export async function saveArticlesToDB(newArticles: Article[]): Promise<void> {
   const articleStore = tx.objectStore('articles');
   const stateStore = tx.objectStore('articleState');
 
-  for (const article of newArticles) {
+  for (const incoming of newArticles) {
+    let article = incoming;
     // Check if user already marked this article read/viewed/bookmarked.
     // Copy rather than mutate: callers' objects may already be in React state.
     const existingState = await stateStore.get(article.id);
+    // fetchedAt is when it was first seen here; a re-fetched copy keeps the stored one
+    const firstSeen = (await articleStore.get(article.id))?.fetchedAt;
+    if (firstSeen) article = { ...article, fetchedAt: firstSeen };
     await articleStore.put(existingState ? {
       ...article,
       read: existingState.read,

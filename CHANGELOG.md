@@ -6,7 +6,7 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
-- "New since your last visit": the header shows how many stories arrived since you last had the page open ("37 new since 08:12") with a Catch up button that marks everything older as read, and Latest has an "Earlier" divider where those stories end. First visit counts the last 24 hours.
+- "New since your last visit": the header shows how many stories arrived since you last had the page open ("37 new since 08:12") with a Catch up button that marks everything older as read, and Latest has an "Earlier" divider where those stories end. Nothing counts as new on a first visit. Stories count from when your browser first saw them, not from each refresh.
 - Faster loading: the duplicate check finds near-identical titles through a word index instead of comparing every pair, and runs once per merge instead of twice (same results)
 - The snapshot is about a quarter of its old size (2.7 MB instead of 10 MB, 0.57 MB instead of 2.4 MB compressed): article text now ships in per-day files that the reader loads when you open a story, and bookmarking a story stores its text with it
 - Fonts are self-hosted instead of loaded from Google Fonts, and the built site sends a Content-Security-Policy (no inline scripts)

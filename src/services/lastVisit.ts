@@ -3,12 +3,10 @@ import type { Article } from '../types';
 /** IndexedDB key (see getStoredValue) of the time the page was last hidden or closed */
 export const LAST_VISIT_KEY = 'lastVisitAt';
 
-const FIRST_VISIT_WINDOW_MS = 24 * 3600_000;
-
-/** The time "new" is measured from: the stored last visit, clamped to now; 24 h back on a first visit */
+/** The time "new" is measured from: the stored last visit, clamped to now; now on a first visit (nothing is "new" yet) */
 export function visitBaseline(stored: string | null, now: number): number {
   const t = stored ? Date.parse(stored) : NaN;
-  if (Number.isNaN(t)) return now - FIRST_VISIT_WINDOW_MS;
+  if (Number.isNaN(t)) return now;
   return Math.min(t, now);
 }
 

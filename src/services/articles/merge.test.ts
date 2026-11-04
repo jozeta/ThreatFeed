@@ -43,6 +43,17 @@ describe('mergeFetchedArticles', () => {
   });
 });
 
+describe('mergeFetchedArticles first-seen time', () => {
+  it('re-fetching an existing article keeps the original fetchedAt; new ones keep their own', () => {
+    const old = article('a', { fetchedAt: '2026-11-04T08:00:00.000Z' });
+    const refetched = article('a', { fetchedAt: '2026-11-04T17:55:00.000Z' });
+    const fresh = article('b', { title: 'Something else entirely', fetchedAt: '2026-11-04T17:55:00.000Z' });
+    const out = mergeFetchedArticles([old], [refetched, fresh], 0);
+    expect(out.find((x) => x.id === 'a')!.fetchedAt).toBe('2026-11-04T08:00:00.000Z');
+    expect(out.find((x) => x.id === 'b')!.fetchedAt).toBe('2026-11-04T17:55:00.000Z');
+  });
+});
+
 describe('mergeFetchedArticles with articles of turned-off categories', () => {
   it('lets a shown copy win the near-duplicate check over a hidden earlier one', () => {
     const hidden = article('h', { sourceId: 'off-feed', title: 'Fortinet patches critical FortiOS flaw today' });
