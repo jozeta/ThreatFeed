@@ -271,8 +271,14 @@ exist. What remains is Copy as rich text and Download HTML.
   - Withdrawn advisories stay in the list marked "withdrawn" (struck through) and are excluded
     from matching, alerts, charts and RSS.
 - **Content shards:**
-  - Rebuilt each run from the snapshot's articles, covering the snapshot's 30-day window, so
-    nothing accumulates.
+  - Carried over: each run reads the previously published shards of the last 30 days, lays this
+    run's text on top (this run wins per article) and drops days older than 30 days, so text
+    outlives the article's stay in the snapshot. A previous shard is read again once on a non-404
+    failure; if any still can't be read, no shards are written that run and the workflow keeps the
+    published ones (this run's text appears with the next run), the same pattern as trends, stats
+    and feeds.
+  - A bookmark stores its text with the article in IndexedDB; a copy without text never replaces
+    it, and once per session bookmarks without text whose shard is still published get it filled in.
   - Live-fetched articles keep their content in IndexedDB as today.
   - An article whose shard has aged out shows its description and the original link.
 - **npm RSS:** it uses the existing feed builder and ledger. Items link to the app's advisory panel
