@@ -285,6 +285,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Initialization error:', err);
       setInitialSyncDone(true);
     }
+    // Runs once; refreshFeedsInternal is declared below and stable (useCallback with no deps)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

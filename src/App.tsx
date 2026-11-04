@@ -123,7 +123,7 @@ export const App: React.FC = () => {
         hiddenCategories: activeTab === 'newspaper' && !filters.selectedCategory ? settings.frontPageHiddenCategories : [],
       }
     );
-  }, [articles, filters, activeTab, settings.hideReadArticles, feeds, settings.watchlistKeywords, scores, settings.mutedKeywords, settings.frontPageHiddenCategories]);
+  }, [articles, filters, activeTab, isSearching, settings.hideReadArticles, feeds, settings.watchlistKeywords, scores, settings.mutedKeywords, settings.frontPageHiddenCategories]);
 
   // Trending entities, the briefing and similar views jump to a search
   const handleSearch = (query: string) => {

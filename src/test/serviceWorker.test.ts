@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { runInNewContext } from 'node:vm';
 // The real public/sw.js, run against an in-memory Cache Storage and a scripted network
 import source from '../../public/sw.js?raw';
 const ORIGIN = 'https://jozeta.github.io';
+// Node's vm module (the tests run in Node; the app's tsconfig has browser types only, hence no static import)
+const { runInNewContext } = (globalThis as any).process.getBuiltinModule('node:vm') as { runInNewContext: (code: string, context: object) => unknown };
 
 type Network = (url: string) => Promise<Response>;
 

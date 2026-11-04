@@ -9,7 +9,7 @@ import { ExternalLink } from 'lucide-react';
 export const PaymentsTab: React.FC<{ families: PaymentFamily[]; updatedAt: string }> = ({ families, updatedAt }) => {
   const [family, setFamily] = useState('');
   const selected = families.find((f) => f.family === family);
-  const shown = selected ? [selected] : families;
+  const shown = useMemo(() => (selected ? [selected] : families), [selected, families]);
 
   const years = useMemo(() => {
     const totals = new Map<string, number>();

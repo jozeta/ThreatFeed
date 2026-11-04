@@ -208,7 +208,7 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onSelectFeed }) => {
               enabled: true,
             }))
         );
-      } catch (err) {
+      } catch {
         alert('Failed to parse OPML file.');
       }
     };
