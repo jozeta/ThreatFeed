@@ -70,6 +70,11 @@ malicious release affects them. The owner asked for the npm part to be **extensi
 - Matching itself is unchanged; this is display only.
 
 ### A7. FEAT-001: alerts for "my stack" (my calls)
+
+*Found while planning:* the built-in `stack-vulns` rule and custom Vulns rules already support
+the vendor, CVSS, EPSS and KEV conditions. What remains is two one-click rule templates (see the
+Part A plan, Task 8); the bullets below describe the behaviour they produce.
+
 - New alert-rule conditions on vulnerability data, evaluated whenever `vulns.json` is newer:
   - a new CVE for a stack product with CVSS at or above X
   - a stack CVE added to CISA KEV
@@ -80,6 +85,10 @@ malicious release affects them. The owner asked for the npm part to be **extensi
   condition, and never again after a reload.
 
 ### A8. FEAT-002: share the Briefing (my calls)
+
+*Found while planning:* Copy and download as Markdown, and the 24 h and 7 d periods, already
+exist. What remains is Copy as rich text and Download HTML.
+
 - A "Share" menu on Briefing offers Copy as Markdown, Copy as rich text (HTML clipboard) and
   Download .html (print-friendly).
 - Period: last 24 h or 7 days. It covers the sections the Briefing shows, with the top items per
