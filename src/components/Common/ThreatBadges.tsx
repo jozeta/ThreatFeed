@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useSettings } from '../../context/SettingsContext';
+import { isDefaultTerm } from '../../services/intelligence/watchlist';
 import { stackMatches } from '../../services/intelligence/stack';
 import { useFeeds } from '../../context/FeedContext';
 import { cachedCvss, CvssInfo, fetchCvss } from '../../services/intelligence/cvss';
@@ -81,13 +82,30 @@ interface WatchlistBadgeProps {
 export const WatchlistBadge: React.FC<WatchlistBadgeProps> = ({ terms, className = '' }) => {
   if (!terms || terms.length === 0) return null;
 
+  // Only terms the user added get the strong badge; matches on the broad defaults are a quiet label.
+  // The user's own term is listed first.
+  const own = terms.filter(t => !isDefaultTerm(t));
+  const ordered = [...own, ...terms.filter(t => isDefaultTerm(t))];
+
+  if (own.length === 0) {
+    return (
+      <span
+        title={`Matched default watchlist keyword: ${terms.join(', ')}`}
+        className={`inline-flex items-center text-[10px] font-mono uppercase tracking-wide text-theme-text-muted ${className}`}
+      >
+        <span>WATCHLIST: {ordered[0]}</span>
+        {terms.length > 1 && <span className="ml-1 opacity-80">+{terms.length - 1}</span>}
+      </span>
+    );
+  }
+
   return (
     <span
-      title={`Matched Watchlist Keyword: ${terms.join(', ')}`}
+      title={`Matched Watchlist Keyword: ${ordered.join(', ')}`}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wide bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10 ${className}`}
     >
       <Target className="w-3 h-3 text-amber-500 animate-pulse" />
-      <span>WATCHLIST: {terms[0]}</span>
+      <span>WATCHLIST: {ordered[0]}</span>
       {terms.length > 1 && <span className="opacity-80">+{terms.length - 1}</span>}
     </span>
   );
