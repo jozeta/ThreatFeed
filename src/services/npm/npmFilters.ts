@@ -43,7 +43,13 @@ export interface NpmFilters {
 export const DEFAULT_NPM_FILTERS: NpmFilters = { severity: '', type: 'vulnerability', mine: false, fix: false, kev: false, cve: false, days: 30, query: '', pkg: '' };
 
 /** A watched entry an advisory affects (or may affect), as matchPackages listed it */
-export interface AffectedEntry { entry: string; vulnerable: string; patched?: string; unparsed?: boolean }
+export interface AffectedEntry {
+  entry: string;
+  versioned: boolean; // false for an entry without a version: listed for the package, not known to affect it
+  vulnerable: string;
+  patched?: string;
+  unparsed?: boolean;
+}
 
 const time = (iso: string) => Date.parse(iso) || 0;
 
@@ -105,7 +111,7 @@ export function affectingByAdvisory(results: PackageResult[]): Map<string, Affec
   for (const r of results) {
     const entry = formatPackageEntry(r.entry);
     for (const a of r.advisories) {
-      const hit: AffectedEntry = { entry, vulnerable: a.vulnerable };
+      const hit: AffectedEntry = { entry, versioned: Boolean(r.entry.version), vulnerable: a.vulnerable };
       if (a.patched) hit.patched = a.patched;
       if (a.unparsed) hit.unparsed = true;
       const list = map.get(a.id);

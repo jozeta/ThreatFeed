@@ -13,20 +13,22 @@ const OSV_CACHE_KEY = 'npmOsv';
 interface OsvCache { at: string; key: string; results: [string, OsvResult][] }
 
 // The tab and the advisory panel both match: one lookup per list at a time, shared
-let inFlight: { key: string; promise: Promise<Map<string, OsvResult> | null> } | null = null;
+interface Lookup { key: string; promise: Promise<Map<string, OsvResult> | null> }
+let inFlight: Lookup | null = null;
 function lookUp(key: string, entries: PackageEntry[], known: ReadonlySet<string>): Promise<Map<string, OsvResult> | null> {
-  if (inFlight?.key !== key) {
-    const promise = osvQueryBatch(entries, known).then(async (results) => {
-      if (results) {
-        const cache: OsvCache = { at: new Date().toISOString(), key, results: [...results] };
-        await saveStoredValue(OSV_CACHE_KEY, cache).catch(() => undefined);
-      }
-      return results;
-    });
-    inFlight = { key, promise };
-    void promise.finally(() => { if (inFlight?.promise === promise) inFlight = null; });
-  }
-  return inFlight!.promise;
+  if (inFlight?.key === key) return inFlight.promise;
+  const lookup: Lookup = { key, promise: Promise.resolve(null) };
+  lookup.promise = osvQueryBatch(entries, known).then(async (results) => {
+    // Kept only while it is still the latest lookup: an answer for an older list never overwrites a newer one
+    if (results && inFlight === lookup) {
+      const cache: OsvCache = { at: new Date().toISOString(), key, results: [...results] };
+      await saveStoredValue(OSV_CACHE_KEY, cache).catch(() => undefined);
+    }
+    if (inFlight === lookup) inFlight = null;
+    return results;
+  });
+  inFlight = lookup;
+  return lookup.promise;
 }
 
 export interface NpmMatches {

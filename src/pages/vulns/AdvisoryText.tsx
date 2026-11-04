@@ -43,7 +43,7 @@ export function advisoryTextParts(text: string): AdvisoryTextPart[] {
 export const AdvisoryText: React.FC<{ text: string; className?: string }> = ({ text, className = '' }) => (
   <p className={`whitespace-pre-wrap break-words ${className}`}>
     {advisoryTextParts(text).map((p, i) => ('href' in p
-      ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" className="text-theme-accent underline break-all">{p.label}</a>
+      ? <a key={i} href={p.href} title={p.href} target="_blank" rel="noopener noreferrer" className="text-theme-accent underline break-all">{p.label}</a>
       : <React.Fragment key={i}>{p.text}</React.Fragment>))}
   </p>
 );

@@ -110,7 +110,7 @@ describe('filterNpmRows', () => {
   });
 
   it('keeps only rows affecting a watched package with "affects my packages"', () => {
-    const affecting = new Map([['GHSA-cccc-cccc-cccc', [{ entry: 'express@3.0.0', vulnerable: '< 4.0.0', patched: '4.0.0' }]]]);
+    const affecting = new Map([['GHSA-cccc-cccc-cccc', [{ entry: 'express@3.0.0', versioned: true, vulnerable: '< 4.0.0', patched: '4.0.0' }]]]);
     expect(ids(filterNpmRows(rows, filters({ mine: true }), affecting, NOW))).toEqual(['GHSA-cccc-cccc-cccc']);
   });
 });
@@ -131,8 +131,8 @@ describe('affectingByAdvisory', () => {
     const map = affectingByAdvisory(results);
     expect([...map.keys()]).toEqual(['GHSA-aaaa-aaaa-aaaa']);
     expect(map.get('GHSA-aaaa-aaaa-aaaa')).toEqual([
-      { entry: 'lodash@4.17.15', vulnerable: '< 4.17.21', patched: '4.17.21' },
-      { entry: 'lodash', vulnerable: '< 4.17.21', patched: '4.17.21' },
+      { entry: 'lodash@4.17.15', versioned: true, vulnerable: '< 4.17.21', patched: '4.17.21' },
+      { entry: 'lodash', versioned: false, vulnerable: '< 4.17.21', patched: '4.17.21' },
     ]);
   });
 });

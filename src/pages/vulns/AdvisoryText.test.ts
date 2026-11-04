@@ -43,6 +43,7 @@ describe('advisory text', () => {
     for (const a of links) {
       expect(a.getAttribute('rel')).toBe('noopener noreferrer');
       expect(a.getAttribute('target')).toBe('_blank');
+      expect(a.getAttribute('title')).toBe(a.getAttribute('href'));
     }
     // The full stop after a bare URL stays text
     expect(el.textContent).toContain('https://example.com/a.');

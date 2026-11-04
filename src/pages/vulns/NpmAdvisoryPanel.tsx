@@ -68,20 +68,25 @@ const RangesTable: React.FC<{ ranges: NpmRange[] }> = ({ ranges }) => (
   </table>
 );
 
-/** The watched entries this advisory lists, each with the upgrade that clears it and the one that clears everything known */
-const YourPackages: React.FC<{ hits: AffectedEntry[]; results: PackageResult[] }> = ({ hits, results }) => (
-  <div className="p-3 rounded-lg border border-rose-500/40 bg-rose-500/10">
-    <SectionTitle>Your packages affected</SectionTitle>
+/**
+ * The watched entries this advisory lists. A versioned entry is affected: the upgrade that clears it, and the one
+ * that clears everything known. An entry without a version is only listed for its package: where it's fixed.
+ */
+const YourPackages: React.FC<{ hits: AffectedEntry[]; results: PackageResult[]; versioned: boolean }> = ({ hits, results, versioned }) => (
+  <div className={`p-3 rounded-lg border ${versioned ? 'border-rose-500/40 bg-rose-500/10' : 'border-theme-border bg-theme-surface'}`}>
+    <SectionTitle>{versioned ? 'Your packages affected' : 'Listed for your package (version not given)'}</SectionTitle>
     <ul className="space-y-1.5 text-xs font-mono">
       {hits.map((h) => {
         const minSafe = results.find((r) => formatPackageEntry(r.entry) === h.entry)?.minSafeVersion;
         return (
           <li key={`${h.entry} ${h.vulnerable}`}>
             <span className="font-bold text-theme-text">{h.entry}</span>
-            <span className="text-theme-text-muted"> · {h.unparsed ? 'range unreadable, may be affected' : `in ${h.vulnerable}`}</span>
+            <span className="text-theme-text-muted"> · {h.unparsed ? 'range unreadable, may be affected' : `${versioned ? 'in' : 'vulnerable'} ${h.vulnerable}`}</span>
             <span className="block text-theme-text">
-              {h.patched ? <>Upgrade to <strong className="text-emerald-600 dark:text-emerald-400">{h.patched}</strong> or later</> : 'No fixed version for this advisory yet'}
-              {minSafe && minSafe !== h.patched && <span className="text-theme-text-muted"> · {minSafe} clears every known advisory</span>}
+              {versioned
+                ? (h.patched ? <>Upgrade to <strong className="text-emerald-600 dark:text-emerald-400">{h.patched}</strong> or later</> : 'No fixed version for this advisory yet')
+                : (h.patched ? <>Fixed in <strong className="text-emerald-600 dark:text-emerald-400">{h.patched}</strong> · add your version in Settings to check</> : 'No fixed version for this advisory yet')}
+              {versioned && minSafe && minSafe !== h.patched && <span className="text-theme-text-muted"> · {minSafe} clears every known advisory</span>}
             </span>
           </li>
         );
@@ -107,6 +112,8 @@ export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, l
   const severity = a?.severity ?? (found?.kind === 'index' ? found.severity : found?.kind === 'malware' ? 'critical' : undefined);
   const withdrawn = a?.withdrawn ?? (found?.kind === 'index' && found.withdrawn ? 'yes' : undefined);
   const references = (a?.references ?? []).map(safeHttpUrl).filter(Boolean);
+  const yours = hits.filter((h) => h.versioned);
+  const listedOnly = hits.filter((h) => !h.versioned);
 
   const facts: [string, React.ReactNode][] = a ? [
     ...a.cvss.map((c) => [`CVSS v${c.version}`, (
@@ -142,7 +149,7 @@ export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, l
             {found?.kind === 'malware' && <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white">Malware</span>}
             {a?.kev && <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white">Known exploited (CISA KEV)</span>}
             {withdrawn && <span className="px-1.5 py-0.5 rounded bg-theme-text text-theme-bg">Withdrawn</span>}
-            {hits.length > 0 && <span className="px-1.5 py-0.5 rounded border border-rose-500/40 text-rose-600 dark:text-rose-300">Affects your packages</span>}
+            {yours.length > 0 && <span className="px-1.5 py-0.5 rounded border border-rose-500/40 text-rose-600 dark:text-rose-300">Affects your packages</span>}
           </div>
         </div>
         <PanelCloseButton />
@@ -162,7 +169,8 @@ export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, l
       )}
       {withdrawn && <p className="text-xs font-serif italic text-theme-text-muted">GitHub withdrew this advisory: it is no longer matched against your packages.</p>}
 
-      {hits.length > 0 && <YourPackages hits={hits} results={results} />}
+      {yours.length > 0 && <YourPackages hits={yours} results={results} versioned />}
+      {listedOnly.length > 0 && <YourPackages hits={listedOnly} results={results} versioned={false} />}
 
       {a?.description && <AdvisoryText text={a.description} className="text-sm font-serif text-theme-text leading-relaxed" />}
 

@@ -71,7 +71,10 @@ const PackageCard: React.FC<{ result: PackageResult; osvChecking: boolean }> = (
       <p className="mt-1 text-[11px] font-mono text-theme-text-muted flex flex-wrap items-center gap-x-2 gap-y-1">
         {hasAdvisories && <span>{listed} {listed === 1 ? 'advisory' : 'advisories'}</span>}
         {hasAdvisories && <SeverityCounts advisories={r.advisories} />}
-        {hasAdvisories && (r.minSafeVersion
+        {hasAdvisories && r.status === 'no-version' && (r.minSafeVersion
+          ? <span>versions ≥ <strong className="text-emerald-600 dark:text-emerald-400">{r.minSafeVersion}</strong> clear every known advisory · add your version to check</span>
+          : <span>no version clears every known advisory yet · add your version to check</span>)}
+        {hasAdvisories && r.status !== 'no-version' && (r.minSafeVersion
           ? <span>upgrade to <strong className="text-emerald-600 dark:text-emerald-400">{r.minSafeVersion}</strong></span>
           : <span className="text-orange-500">no version clear of all yet</span>)}
         <span>{r.malwareCheckedDays === null ? 'malware list not loaded' : `malware checked: last ${r.malwareCheckedDays} days`}</span>
@@ -122,7 +125,7 @@ const Ranges: React.FC<{ row: NpmRow }> = ({ row }) => (
 /** "Your lodash@4.17.15" under a row that affects a watched package */
 const YourHits: React.FC<{ hits?: AffectedEntry[] }> = ({ hits }) => (hits?.length ? (
   <span className="block mt-0.5 text-[10px] font-mono font-bold text-rose-600 dark:text-rose-300">
-    Yours: {hits.map((h) => `${h.entry}${h.unparsed ? ' (range unreadable)' : ''}`).join(', ')}
+    Yours: {hits.map((h) => `${h.entry}${h.versioned ? '' : ' (version not given)'}${h.unparsed ? ' (range unreadable)' : ''}`).join(', ')}
   </span>
 ) : null);
 
@@ -163,7 +166,7 @@ export const NpmTab: React.FC<NpmTabProps> = ({ advisories, malware, matches, on
     days: (NPM_DAY_RANGES as readonly number[]).includes(Number(daysParam)) ? (Number(daysParam) as NpmDays) : DEFAULT_NPM_FILTERS.days,
     type: TYPES.some((t) => t.id === typeParam) ? (typeParam as NpmFilters['type']) : DEFAULT_NPM_FILTERS.type,
     severity: (SEVERITIES as readonly string[]).includes(severityParam) ? severityParam : '',
-    mine: flags.has('mine'),
+    mine: flags.has('mine') && entries.length > 0, // a shared link's filter means nothing without a list
     fix: flags.has('fix'),
     kev: flags.has('kev'),
     cve: flags.has('cve'),
