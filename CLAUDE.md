@@ -51,7 +51,6 @@ minutes** and on push to `main`: test → snapshot → build → deploy to Pages
   waivers are in `.claude-standards`.
 - The built site has a Content-Security-Policy (meta tag, added at build time in `vite.config.ts`):
   no inline scripts, fonts are self-hosted under `public/vendor/<name>-<version>/`.
-
 - **All feed HTML is untrusted.** Render article content only after DOMPurify; entity linking
   works on DOM text nodes (`entityDom.ts`), never on HTML strings.
 - Keep it static-hostable: no server code, no secrets in the client. Snapshot API keys live only
