@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
+const PHONE = '(max-width: 639px)';
+
 /**
  * Where the Filter sheet shows the phone-only controls that belong to the page (the newspaper's
  * Sections / Clustering / Customize buttons). The sheet registers its container while it is open;
@@ -14,9 +16,19 @@ export function setMobileSlot(el: HTMLElement | null) {
   listeners.forEach((l) => l());
 }
 
+/** The sheet's phone container, or null on screens from `sm` up (so the controls aren't rendered twice there) */
 export function useMobileSlot(): HTMLElement | null {
-  return useSyncExternalStore(
+  const phone = useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(PHONE);
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia(PHONE).matches,
+  );
+  const el = useSyncExternalStore(
     (cb) => { listeners.add(cb); return () => { listeners.delete(cb); }; },
     () => slot,
   );
+  return phone ? el : null;
 }
