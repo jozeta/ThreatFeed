@@ -452,6 +452,8 @@ export interface UserSettings {
   frontPageHiddenCategories: string[]; // categories left off the newspaper front page
   savedSearches: string[];
   hiddenVulnVendors: string[]; // KEV vendors left off the Vulnerabilities page
+  npmPackages: string[]; // npm packages to watch for advisories: `name` (any version) or `name@exact.version`
+  npmOsvLookup: boolean; // also query OSV.dev for the full history of the watched packages (sends names and versions to Google)
   watchedCves: string[]; // CVEs the user follows: alerts on KEV listing, EPSS jumps and new coverage
   newspaperSections: NewspaperSectionConfig[];
   bookmarkFolders: string[];
@@ -462,7 +464,7 @@ export interface UserSettings {
   syncLog?: SyncLog; // when list items were last added/removed, so Gist sync can propagate deletions
 }
 
-export type SyncCollection = 'watchlistKeywords' | 'stackKeywords' | 'mutedKeywords' | 'savedSearches' | 'bookmarkFolders' | 'alertRules';
+export type SyncCollection = 'watchlistKeywords' | 'stackKeywords' | 'mutedKeywords' | 'savedSearches' | 'bookmarkFolders' | 'npmPackages' | 'alertRules';
 export interface SyncEvent { removed: boolean; at: string } // at: ISO time
 /** Latest add/remove event per item: list items keyed by lowercased term, alert rules by id (removals only) */
 export type SyncLog = Partial<Record<SyncCollection, Record<string, SyncEvent>>>;

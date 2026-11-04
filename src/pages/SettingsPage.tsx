@@ -6,6 +6,7 @@ import { WATCHLIST_PRESETS, termCounts } from '../services/intelligence/watchlis
 import { AlertRulesSettings } from './settings/AlertRulesSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { VulnVendorSettings } from './settings/VulnVendorSettings';
+import { NpmPackagesSettings } from './settings/NpmPackagesSettings';
 import { SyncSettings } from './settings/SyncSettings';
 import { exportAllThreatFeedData, importThreatFeedData } from '../services/storage/indexeddb';
 import {
@@ -944,6 +945,7 @@ export const SettingsPage: React.FC = () => {
       <AlertRulesSettings />
       <IntelligenceSettings />
       <VulnVendorSettings />
+      <NpmPackagesSettings />
 
       {/* SECTION 6: EDITORIAL SECTIONS & MULTI-SOURCE CLUSTERING */}
       <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">

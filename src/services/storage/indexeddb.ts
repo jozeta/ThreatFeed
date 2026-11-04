@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
 import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
 import { cleanSyncLog, syncLogForImport } from '../sync/syncLog';
+import { cleanPackageList } from '../npm/packageList';
 import { keepBookmarkText } from '../articles/merge';
 
 interface ThreatFeedDB extends DBSchema {
@@ -404,10 +405,12 @@ export async function importThreatFeedData(data: any, { fromSync = false }: { fr
   // restored, so a later Gist sync doesn't delete restored items again; synced data already carries the merged log
   if (data.settings && typeof data.settings === 'object') {
     const settingsStore = tx.objectStore('settings');
+    const settings = { ...data.settings, npmPackages: cleanPackageList(data.settings.npmPackages), npmOsvLookup: data.settings.npmOsvLookup === true };
     const now = new Date();
     const current = fromSync ? undefined : await settingsStore.get(SETTINGS_KEY);
-    const syncLog = fromSync ? cleanSyncLog(data.settings.syncLog, now) : syncLogForImport(current?.value?.syncLog, data.settings, now);
-    await settingsStore.put({ key: SETTINGS_KEY, value: { ...data.settings, syncLog } });
+    const syncLog = fromSync ? cleanSyncLog(data.settings.syncLog, now) : syncLogForImport(current?.value?.syncLog, settings, now);
+    // Entries that aren't a valid npm name or name@version are dropped; syncLogForImport above only sees the cleaned list
+    await settingsStore.put({ key: SETTINGS_KEY, value: { ...settings, syncLog } });
   }
 
   await tx.done;

@@ -24,6 +24,14 @@ describe('recordListChanges', () => {
     expect(recordListChanges({}, {}, NOW)).toBeUndefined();
   });
 
+  it('records adds and removals of watched npm packages', () => {
+    const log = recordListChanges({ npmPackages: ['lodash@4.17.15', 'express'] }, { npmPackages: ['express', '@types/node'] }, NOW)!;
+    expect(log.npmPackages).toEqual({
+      'lodash@4.17.15': { removed: true, at: NOW.toISOString() },
+      '@types/node': { removed: false, at: NOW.toISOString() },
+    });
+  });
+
   it('tombstones deleted alert rules by id', () => {
     const rule = (id: string) => ({ id } as AlertRule);
     const log = recordListChanges({ alertRules: [rule('a'), rule('B')] }, { alertRules: [rule('a')] }, NOW)!;
@@ -124,6 +132,7 @@ describe('syncLogForImport', () => {
   });
 
   it('works for a backup without a log and with no current log', () => {
+    expect(syncLogForImport(undefined, { npmPackages: ['Express'] }, NOW)).toEqual({ npmPackages: { express: { removed: false, at: NOW.toISOString() } } });
     expect(syncLogForImport(undefined, { bookmarkFolders: ['General'] }, NOW)).toEqual({ bookmarkFolders: { general: { removed: false, at: NOW.toISOString() } } });
   });
 });
