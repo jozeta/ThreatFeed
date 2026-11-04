@@ -10,10 +10,6 @@ import {
   Moon,
   Monitor,
   SlidersHorizontal,
-  Newspaper,
-  List,
-  LayoutGrid,
-  CheckCheck,
   WifiOff,
   X,
   Keyboard,
@@ -21,15 +17,10 @@ import {
   Radio,
   Activity,
   Star,
-  Tv,
-  Hash,
-  LayoutDashboard
 } from 'lucide-react';
-import { LayoutMode, ActiveNavTab } from '../../types';
+import { ActiveNavTab } from '../../types';
 import { NavigationTabs } from '../Navigation/NavigationTabs';
-import { useHashRoute } from '../../hooks/useHashRoute';
-import { layoutLocked } from '../../utils/layout';
-import { enterTv, tvAvailable } from '../tv/tvRoute';
+import { ViewControls } from './ViewControls';
 
 // Roughly 10 cm of scrolling on a typical screen (96 CSS px per inch)
 const COLLAPSE_AFTER_PX = 380;
@@ -58,8 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
     refreshProgress,
     lastUpdated,
     refreshFeeds,
-    markAllAsRead,
-    isOffline,
+      isOffline,
     feedHealth,
   } = useFeeds();
 
@@ -81,17 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
     else updateSettings({ theme: 'dark' });
   };
 
-  const [route] = useHashRoute();
-  const layoutDisabled = layoutLocked(route);
-  const handleLayoutChange = (mode: LayoutMode) => {
-    updateSettings({ layout: mode });
-  };
-  const layoutButtonClass = (mode: LayoutMode) =>
-    `p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-      settings.layout === mode && !layoutDisabled
-        ? 'bg-theme-surface text-theme-accent shadow-sm'
-        : `text-theme-text-muted ${layoutDisabled ? '' : 'hover:text-theme-text'}`
-    }`;
 
   // After the page has scrolled about 10 cm, the status bar and masthead slide up out of view and
   // only the tabs and toolbar stay pinned. A transform (not a height change) keeps the page from jumping.
@@ -249,18 +228,18 @@ export const Header: React.FC<HeaderProps> = ({
     </div>
 
       {/* Main Newspaper Masthead */}
-      <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center relative">
+      <div className="main-content-container mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-5 text-center relative">
         <div className="inline-block cursor-pointer" onClick={() => resetFilters()}>
-          <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-theme-text uppercase select-none hover:opacity-90 transition-opacity">
+          <h1 className="font-serif text-2xl sm:text-5xl md:text-6xl font-black tracking-tight text-theme-text uppercase select-none hover:opacity-90 transition-opacity">
             THREATFEED
           </h1>
-          <p className="font-mono text-[10px] sm:text-xs tracking-[0.28em] text-theme-accent uppercase font-bold mt-1">
+          <p className="font-mono text-[10px] sm:text-xs tracking-[0.28em] text-theme-accent uppercase font-bold sm:mt-1">
             SECURITY INTELLIGENCE DAILY
           </p>
         </div>
 
         {/* Date Display */}
-        <div className="mt-2 flex items-center justify-center gap-3 text-xs font-mono text-theme-text-muted tracking-wider">
+        <div className="mt-1 sm:mt-2 flex items-center justify-center gap-3 text-xs font-mono text-theme-text-muted tracking-wider">
           <div className="h-[1px] w-8 sm:w-16 bg-theme-border" />
           <time dateTime={new Date().toISOString()}>{formatMastheadDate()}</time>
           <div className="h-[1px] w-8 sm:w-16 bg-theme-border" />
@@ -331,80 +310,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Right: Layout Switcher, Refresh, Read All, Theme, Settings */}
-        <div className="flex items-center gap-1 sm:gap-2 ml-auto">
-          {/* Layout switcher buttons (Requirement 9) */}
-          <div className="flex items-center border border-theme-border rounded-md p-0.5 bg-theme-card">
-            <button
-              onClick={() => handleLayoutChange('newspaper')}
-              disabled={layoutDisabled}
-              title="Newspaper Editorial Layout"
-              aria-label="Newspaper Editorial Layout"
-              className={layoutButtonClass('newspaper')}
-            >
-              <Newspaper className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleLayoutChange('list-thumbnails')}
-              disabled={layoutDisabled}
-              title="List + Thumbnails Layout"
-              aria-label="List + Thumbnails Layout"
-              className={layoutButtonClass('list-thumbnails')}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleLayoutChange('list')}
-              disabled={layoutDisabled}
-              title="Compact List Layout"
-              aria-label="Compact List Layout"
-              className={layoutButtonClass('list')}
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Full-screen modes, where the page offers them */}
-          {(['tv', 'dash'] as const).filter((kind) => tvAvailable(route.page).includes(kind)).map((kind) => (
-            <button
-              key={kind}
-              onClick={() => enterTv(kind)}
-              title={kind === 'tv' ? 'TV mode' : 'Dashboard'}
-              aria-label={kind === 'tv' ? 'TV mode' : 'Dashboard'}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text text-xs font-mono transition-colors flex items-center gap-1"
-            >
-              {kind === 'tv' ? <Tv className="w-4 h-4" /> : <LayoutDashboard className="w-4 h-4" />}
-              <span className="hidden xl:inline">{kind === 'tv' ? 'TV' : 'Dashboard'}</span>
-            </button>
-          ))}
-          {/* Mixed mode: Latest news with the Vulns numbers mixed in */}
-          {route.page === 'latest' && (
-            <button
-              onClick={() => enterTv('tv', { mix: '1' })}
-              title="TV with numbers"
-              aria-label="TV with numbers"
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text text-xs font-mono transition-colors flex items-center gap-1"
-            >
-              <span className="relative">
-                <Tv className="w-4 h-4" />
-                <Hash className="w-2.5 h-2.5 absolute -right-1 -bottom-1 bg-theme-card rounded-sm" strokeWidth={3} />
-              </span>
-              <span className="hidden xl:inline">TV+</span>
-            </button>
-          )}
-
-          <div className="w-[1px] h-5 bg-theme-border mx-1 hidden sm:block" />
-
-          {/* Mark all as read */}
-          <button
-            onClick={() => markAllAsRead()}
-            title="Mark all as read"
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-md border border-theme-border bg-theme-card text-theme-text-muted hover:text-theme-text text-xs font-mono transition-colors flex items-center gap-1"
-          >
-            <CheckCheck className="w-4 h-4" />
-            <span className="hidden lg:inline">Mark Read</span>
-          </button>
-        </div>
+        {/* Right: view switcher, full-screen modes and Mark Read (in the Filter sheet on phones) */}
+        <ViewControls className="hidden sm:flex ml-auto" />
       </div>
     </div>
   </header>
