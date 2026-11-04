@@ -509,3 +509,6 @@ export interface AlertRule {
   root: ConditionGroup<NewsCondition> | ConditionGroup<VulnCondition>;
   builtIn?: BuiltInRule; createdAt: string; updatedAt: string;
 }
+
+// npm vulnerability watch: the published npm-advisories.json and npm-malware.json
+export type { NpmRange, NpmAdvisory, NpmIndexRange, NpmIndexEntry, NpmAdvisoryData, NpmMalwareTuple, NpmMalwareData } from '../services/npm/advisories';

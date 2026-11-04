@@ -34,6 +34,8 @@ public/data/actors.json
 public/data/trends.json
 public/data/stats.json
 public/data/entities.json
+public/data/npm-advisories.json
+public/data/npm-malware.json
 public/data/content/
 .cache/
 
