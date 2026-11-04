@@ -16,13 +16,14 @@ https://jozeta.github.io/ThreatFeed/.
 npm install
 npm run dev          # Vite dev server (without a local snapshot it fetches feeds live via the CORS gateway)
 npm test             # vitest + jsdom
+npm run lint         # ESLint: typescript-eslint, React hook rules, no-unsanitized (unsafe DOM sinks)
 npm run build        # tsc && vite build → dist/
 npm run preview
 npm run snapshot     # tsx scripts/build-snapshot.ts → public/data/snapshot.json etc. (hits real feeds/APIs)
 npm run world-map    # regenerate public/data/world-map.json
 ```
 
-CI (`ci.yml`): `npm ci`, `npm test`, `npm run build` on Node 22. `deploy.yml` runs **every 30
+CI (`ci.yml`): `npm ci`, `npm run lint`, `npm test`, `npm run build` on Node 22. `deploy.yml` runs **every 30
 minutes** and on push to `main`: test → snapshot → build → deploy to Pages.
 
 ## Architecture
@@ -45,6 +46,11 @@ minutes** and on push to `main`: test → snapshot → build → deploy to Pages
 - Default feeds: `public/data/feeds.json`; service worker: `public/sw.js`.
 
 ## Rules
+
+- Follow the shared rulebook `~/Desktop/code/tools/standards/STANDARDS.md`; this repo's decisions and
+  waivers are in `.claude-standards`.
+- The built site has a Content-Security-Policy (meta tag, added at build time in `vite.config.ts`):
+  no inline scripts, fonts are self-hosted under `public/vendor/<name>-<version>/`.
 
 - **All feed HTML is untrusted.** Render article content only after DOMPurify; entity linking
   works on DOM text nodes (`entityDom.ts`), never on HTML strings.

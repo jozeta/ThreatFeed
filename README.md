@@ -205,7 +205,8 @@ Three RSS 2.0 feeds are published by the scheduled snapshot job, so you can foll
 - **Framework**: React 18 + TypeScript
 - **Bundler**: Vite
 - **Styling**: Tailwind CSS + Custom CSS Variables + Print Media Queries
-- **Typography**: Newsreader (Editorial Serif) + Inter (Sans-Serif UI) + JetBrains Mono (Code/Threat Indicators)
+- **Typography**: Newsreader (Editorial Serif) + Inter (Sans-Serif UI) + JetBrains Mono (Code/Threat Indicators), self-hosted (no Google Fonts requests)
+- **Security**: a Content-Security-Policy on the built site (scripts and fonts from the site only), DOMPurify for feed HTML, ESLint with `no-unsanitized`
 - **Local Persistence**: IndexedDB via `idb`
 - **Security & Sanitization**: DOMPurify
 - **Icons**: Lucide React

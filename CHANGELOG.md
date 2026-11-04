@@ -6,6 +6,8 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Fonts are self-hosted instead of loaded from Google Fonts, and the built site sends a Content-Security-Policy (no inline scripts)
+- ESLint (`npm run lint`) runs in CI, including a rule against unsanitized HTML in the DOM
 - Gist sync no longer brings back muted keywords, watchlist/stack terms, saved searches, bookmark folders or alert rules that were deleted on another device (deletions are remembered for 90 days)
 - CISA deadline highlights ("due today", this week, next 14 days) now use your local date instead of the UTC date, which was wrong for a few hours every day
 - Titles in Japanese, Chinese, Russian, Greek, Arabic and accented Swedish are no longer treated as duplicates or merged into one story just because they share a Latin word
