@@ -1,0 +1,4 @@
+# Decisions and waivers for ~/Desktop/code/tools/standards/STANDARDS.md
+design=own
+design_decided=2026-11-04
+waive=SEC-3P-1: an RSS reader must fetch third-party feeds, article images, CORS proxies, EPSS/GitHub APIs and (in CI) NVD/CISA data; fonts and all code are self-hosted

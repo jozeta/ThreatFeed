@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 // The real public/sw.js, run against an in-memory Cache Storage and a scripted network
 import source from '../../public/sw.js?raw';
 const ORIGIN = 'https://jozeta.github.io';
+// Node's vm module (the tests run in Node; the app's tsconfig has browser types only, hence no static import)
+const { runInNewContext } = (globalThis as any).process.getBuiltinModule('node:vm') as { runInNewContext: (code: string, context: object) => unknown };
 
 type Network = (url: string) => Promise<Response>;
 
@@ -22,7 +24,8 @@ function loadWorker(network: Network) {
   const listeners: Record<string, (event: any) => void> = {};
   const self = { addEventListener: (type: string, fn: (e: any) => void) => (listeners[type] = fn), skipWaiting() {}, clients: { claim() {} } };
   const fetchSpy = vi.fn((req: Request) => network(req.url));
-  new Function('self', 'caches', 'fetch', 'location', source)(self, caches, fetchSpy, new URL(ORIGIN));
+  // A sandboxed context holding only the worker's globals (no eval or new Function)
+  runInNewContext(source, { self, caches, fetch: fetchSpy, location: new URL(ORIGIN), URL, setTimeout, clearTimeout, console });
 
   const request = (path: string, navigate = false, init?: RequestInit) => {
     let responded: Promise<Response | undefined> | undefined;

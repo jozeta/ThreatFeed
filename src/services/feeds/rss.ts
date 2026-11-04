@@ -1,7 +1,8 @@
 import { stripHtmlToText } from '../rss/sanitizer';
 
 // Characters that are not allowed in XML 1.0 documents, plus lone UTF-16 surrogates
-const INVALID_XML_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+// eslint-disable-next-line no-control-regex -- matching control characters is the point: XML 1.0 forbids them
+const INVALID_XML_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
 export interface RssItem {
   guid: string;

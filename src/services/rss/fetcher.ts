@@ -365,7 +365,6 @@ export async function fetchFeed(
   }
 
   let lastResult: AttemptResult | null = null;
-  let successfulGatewayLabel = '';
   let unreachableVia: string | null = null;
 
   for (const tier of tiers) {
@@ -404,7 +403,6 @@ export async function fetchFeed(
     if (res.success) {
       const filteredArticles = filterAndLimitArticles(res.articles, maxArticlesPerFeed, maxArticleAgeDays);
       attemptedGateways.push(`${tier.label} (OK ${res.latencyMs}ms, ${filteredArticles.length} items${retryNote})`);
-      successfulGatewayLabel = tier.type;
 
       return {
         articles: filteredArticles,
@@ -416,7 +414,7 @@ export async function fetchFeed(
           articleCount: filteredArticles.length,
           httpStatus: res.httpStatus || 200,
           latencyMs: res.latencyMs,
-          gatewayUsed: successfulGatewayLabel,
+          gatewayUsed: tier.type,
           rawSnippet: res.rawSnippet,
           attemptedGateways
         }

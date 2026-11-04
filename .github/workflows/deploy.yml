@@ -28,6 +28,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       # A second copy of the trends history (the published trends.json is the first), for runs that can't read it
       - uses: actions/cache/restore@v6

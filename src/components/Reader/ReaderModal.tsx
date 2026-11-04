@@ -136,7 +136,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [article.id, hasNext, hasPrev, onNext, onPrev, onClose, toggleBookmark, toggleRead]);
+  }, [article.id, article.url, hasNext, hasPrev, onNext, onPrev, onClose, toggleBookmark, toggleRead]);
 
   const handleShare = async () => {
     if (navigator.share) {

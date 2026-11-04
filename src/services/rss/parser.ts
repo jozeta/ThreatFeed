@@ -386,7 +386,9 @@ export function parseRss2Json(jsonData: any, feed: Feed): Article[] {
       try {
         const d = new Date(rawDate);
         if (!isNaN(d.getTime())) publishedAt = d.toISOString();
-      } catch {}
+      } catch {
+        // Unparseable date: keep the fetch time
+      }
 
       let image = item.thumbnail || item.enclosure?.link;
       if (!image && (item.content || item.description)) {
