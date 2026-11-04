@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVulnItems, matchesNews, matchesVuln, EvalContext, VulnItem,
-  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, matchedVulnCves, alertSettingsFrom, rulesNeedVulns, stackRuleTemplates,
+  createBuiltInRules, resolveRoot, builtInTerms, duplicateRule, migrateAlertRules, sanitizeRule, matchedVulnCves, alertSettingsFrom, rulesNeedVulns, stackRuleTemplates, hasStackTemplates,
 } from './alertRules';
 import { ConditionGroup, NewsCondition, VulnCondition, VulnData, AlertRule, KevEntry, CveRecord, UserSettings } from '../../types';
 import { article } from '../../test/fixtures';
@@ -334,6 +334,12 @@ describe('rulesNeedVulns', () => {
 describe('stackRuleTemplates', () => {
   const now = new Date('2026-10-30T12:00:00Z');
   const templates = stackRuleTemplates(['Fortinet', 'Okta'], now);
+
+  it('reports the templates as added only when rules with both names exist', () => {
+    expect(hasStackTemplates([])).toBe(false);
+    expect(hasStackTemplates([templates[0]])).toBe(false);
+    expect(hasStackTemplates(templates)).toBe(true);
+  });
 
   it('returns two disabled custom Vulns rules with notify on, passing sanitizeRule', () => {
     expect(templates.map(t => t.name)).toEqual(['My stack: critical CVEs', 'My stack: exploited']);

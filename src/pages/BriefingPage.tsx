@@ -53,20 +53,32 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
 
   const stackVulnCount = briefing.stackVulns.kev.length + briefing.stackVulns.cves.length + briefing.stackVulns.advisories.length;
   const markdown = () => briefingToMarkdown(briefing);
+  // Clipboard access can be denied (permissions, an unfocused page): the copy then just doesn't happen
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(markdown());
+    try {
+      await navigator.clipboard.writeText(markdown());
+    } catch (err) {
+      console.warn('Could not copy the briefing:', err);
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  // Rich text for pasting into mail or docs; browsers without ClipboardItem get the Markdown instead
+  // Rich text for pasting into mail or docs; browsers without ClipboardItem, or where it fails, get the Markdown
   const handleCopyRich = async () => {
-    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
-      await navigator.clipboard.writeText(markdown());
-    } else {
-      await navigator.clipboard.write([new ClipboardItem({
-        'text/html': new Blob([briefingToHtml(briefing)], { type: 'text/html' }),
-        'text/plain': new Blob([markdown()], { type: 'text/plain' }),
-      })]);
+    try {
+      try {
+        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) throw new Error('no rich clipboard');
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([briefingToHtml(briefing)], { type: 'text/html' }),
+          'text/plain': new Blob([markdown()], { type: 'text/plain' }),
+        })]);
+      } catch {
+        await navigator.clipboard.writeText(markdown());
+      }
+    } catch (err) {
+      console.warn('Could not copy the briefing:', err);
+      return;
     }
     setCopiedRich(true);
     setTimeout(() => setCopiedRich(false), 2000);
