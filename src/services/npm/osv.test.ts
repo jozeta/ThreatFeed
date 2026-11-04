@@ -23,7 +23,7 @@ const MAL_DETAIL = {
   id: 'MAL-2025-1',
   summary: 'Malicious code in evil (npm)',
   aliases: ['GHSA-mmmm-mmmm-mmmm'],
-  affected: [{ package: { ecosystem: 'npm', name: 'evil' }, ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }] }] }],
+  affected: [{ package: { ecosystem: 'npm', name: 'Evil' }, ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }] }] }],
 };
 
 const OLD_DETAIL = {

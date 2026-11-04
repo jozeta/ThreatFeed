@@ -108,7 +108,7 @@ function decodeDetail(raw: unknown, id: string): Detail | null {
 function packageRanges(detail: Detail, name: string): OsvRange[] {
   const ranges: OsvRange[] = [];
   for (const a of detail.affected) {
-    if (!isObject(a) || a.package?.ecosystem !== 'npm' || a.package?.name !== name || !Array.isArray(a.ranges)) continue;
+    if (!isObject(a) || a.package?.ecosystem !== 'npm' || String(a.package?.name).toLowerCase() !== name.toLowerCase() || !Array.isArray(a.ranges)) continue;
     for (const r of a.ranges) {
       if (isObject(r) && r.type === 'SEMVER') ranges.push(...eventRanges(r.events));
     }

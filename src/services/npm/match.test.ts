@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NpmAdvisory, NpmAdvisoryData, NpmIndexEntry, NpmMalwareData, NpmMalwareTuple } from './advisories';
-import { affectingKeys, knownAdvisoryIds, matchPackages } from './match';
+import { affectingKeys, knownAdvisoryIds, matchPackages, OSV_ONLY_RANGE } from './match';
 import type { OsvResult } from './osv';
 
 const NOW = '2026-11-04T00:00:00Z';
@@ -74,6 +74,7 @@ describe('matchPackages', () => {
     const [r] = matchPackages([{ name: 'lodash', version: 'latest' }], data([LODASH]), null);
     expect(r.status).toBe('unknown');
     expect(r.advisories.map(a => a.id)).toEqual(['GHSA-aaaa-aaaa-aaaa']);
+    expect(matchPackages([{ name: 'left-pad', version: 'latest' }], data([LODASH]), null)[0].status).toBe('unknown');
   });
 
   it('ignores withdrawn advisories', () => {
@@ -118,6 +119,29 @@ describe('matchPackages', () => {
     expect(matchPackages([{ name: 'lodash', version: '4.17.10' }], data([LODASH, unfixed]), null)[0].minSafeVersion).toBeUndefined();
   });
 
+  it('matches advisory package names case-insensitively, in the index and the malware list', () => {
+    const electron: NpmIndexEntry = ['GHSA-6h98-cf9g-vmg2', 'high', [['Electron', '>= 1.7.0, < 1.7.6', '1.7.6']]];
+    const m = malware([['GHSA-mmmm-mmmm-mmmm', 'Evil-Pkg', '>= 0', NOW]]);
+    const [r] = matchPackages([{ name: 'electron', version: '1.7.5' }], data([electron]), null);
+    expect(r.status).toBe('affected');
+    expect(r.advisories.map(a => a.id)).toEqual(['GHSA-6h98-cf9g-vmg2']);
+    expect(matchPackages([{ name: 'electron' }], data([electron]), null)[0].status).toBe('no-version');
+    expect(matchPackages([{ name: 'evil-pkg', version: '1.0.0' }], data([]), m)[0]).toMatchObject({ status: 'affected', malware: true });
+  });
+
+  it('moves the minimum safe version past a fix that another advisory still covers', () => {
+    const a: NpmIndexEntry = ['GHSA-aaaa-1111-aaaa', 'high', [['pkg', '< 1.2.0', '1.2.0']]];
+    const c: NpmIndexEntry = ['GHSA-cccc-1111-cccc', 'high', [['pkg', '>= 1.1.0, < 1.3.0', '1.3.0']]];
+    const [r] = matchPackages([{ name: 'pkg', version: '1.0.0' }], data([a, c]), null);
+    expect(r.advisories.map(x => x.id)).toEqual(['GHSA-aaaa-1111-aaaa']);
+    expect(r.minSafeVersion).toBe('1.3.0');
+    // No clear fix: unfixed later range, or an unreadable range
+    const open: NpmIndexEntry = ['GHSA-dddd-1111-dddd', 'low', [['pkg', '>= 1.1.0']]];
+    expect(matchPackages([{ name: 'pkg', version: '1.0.0' }], data([a, open]), null)[0].minSafeVersion).toBeUndefined();
+    const bad: NpmIndexEntry = ['GHSA-eeee-1111-eeee', 'low', [['pkg', '~1.2']]];
+    expect(matchPackages([{ name: 'pkg', version: '1.0.0' }], data([a, bad]), null)[0].minSafeVersion).toBeUndefined();
+  });
+
   it('orders malware first, then by severity, then by name', () => {
     const d = data([
       ['GHSA-1111-1111-1111', 'low', [['a-low', '< 2.0.0', '2.0.0']]],
@@ -155,6 +179,7 @@ describe('matchPackages', () => {
       const [r] = matchPackages([{ name: 'lodash', version: '4.17.21' }], data([LODASH]), null, found);
       expect(r).toMatchObject({ status: 'affected', malware: true, osv: 'checked', highestSeverity: 'critical' });
       expect(r.advisories.map(a => [a.id, a.source])).toEqual([['MAL-2025-1', 'osv'], ['OSV-NODETAIL', 'osv']]);
+      expect(r.advisories[1].vulnerable).toBe(OSV_ONLY_RANGE);
     });
 
     it('does not repeat an advisory already matched, by id or alias, and never revives a withdrawn one', () => {

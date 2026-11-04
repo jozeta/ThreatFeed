@@ -50,7 +50,29 @@ function highestVersion(versions: (string | undefined)[]): string | undefined {
   return best?.text;
 }
 
+/** The range shown for an OSV vulnerability whose details weren't fetched: OSV reported it, without ranges */
+export const OSV_ONLY_RANGE = 'per OSV';
+
 const joined = (ranges: Range[]) => ranges.map(r => r.vulnerable).join(' || ');
+
+/**
+ * The first of the package's fixed versions, from `from` up, that no range of the package covers or might
+ * cover (an unreadable range): a fix for one advisory can still sit inside another. Undefined when none is clear.
+ */
+function safeVersion(from: string | undefined, candidates: Candidate[], pick: (ranges: Range[], v: Version) => Range | 'unparsed' | null): string | undefined {
+  const start = from ? parseVersion(from) : null;
+  if (!start) return undefined;
+  const fixes = new Map<string, Version>();
+  for (const c of candidates) {
+    for (const r of c.ranges) {
+      const v = r.patched ? parseVersion(r.patched) : null;
+      if (r.patched && v && compareVersions(v, start) >= 0) fixes.set(r.patched, v);
+    }
+  }
+  fixes.set(from!, start);
+  const ranges = candidates.flatMap(c => c.ranges);
+  return [...fixes].sort((a, b) => compareVersions(a[1], b[1])).find(([, v]) => pick(ranges, v) === null)?.[0];
+}
 
 /** The ids of our own data, which the OSV lookup doesn't need details for */
 export function knownAdvisoryIds(data: NpmAdvisoryData, malware: NpmMalwareData | null): Set<string> {
@@ -71,9 +93,11 @@ export function matchPackages(
   const summaries = new Map(data.recent.map(a => [a.id, a.summary]));
   const withdrawn = new Set<string>();
   const byPackage = new Map<string, Map<string, Candidate>>();
+  // npm names are lowercase, but some advisories spell them otherwise ("Electron"): match case-insensitively
   const add = (pkg: string, c: Omit<Candidate, 'ranges'>, range: Range) => {
-    let forPkg = byPackage.get(pkg);
-    if (!forPkg) byPackage.set(pkg, (forPkg = new Map()));
+    const name = pkg.toLowerCase();
+    let forPkg = byPackage.get(name);
+    if (!forPkg) byPackage.set(name, (forPkg = new Map()));
     const existing = forPkg.get(c.id);
     if (existing) existing.ranges.push(range);
     else forPkg.set(c.id, { ...c, ranges: [range] });
@@ -105,7 +129,8 @@ export function matchPackages(
     return unreadable ? 'unparsed' : null;
   };
   const matched = (c: Candidate, source: MatchedAdvisory['source'], range: Range | null, unparsed = false): MatchedAdvisory => {
-    const a: MatchedAdvisory = { id: c.id, severity: c.severity, vulnerable: range ? range.vulnerable : joined(c.ranges), source };
+    const vulnerable = range ? range.vulnerable : c.ranges.length ? joined(c.ranges) : OSV_ONLY_RANGE;
+    const a: MatchedAdvisory = { id: c.id, severity: c.severity, vulnerable, source };
     const patched = range ? range.patched : highestVersion(c.ranges.map(r => r.patched));
     if (c.summary) a.summary = c.summary;
     if (patched) a.patched = patched;
@@ -123,7 +148,7 @@ export function matchPackages(
 
     // No version, or one we can't read: every advisory on the package is listed
     const version = entry.version ? parseVersion(entry.version) : null;
-    const candidates = [...(byPackage.get(entry.name)?.values() ?? [])];
+    const candidates = [...(byPackage.get(entry.name.toLowerCase())?.values() ?? [])];
     const advisories: MatchedAdvisory[] = [];
     let affected = false;
     for (const c of candidates) {
@@ -133,6 +158,7 @@ export function matchPackages(
       else if (hit) { advisories.push(matched(c, 'ghsa', hit)); affected = true; }
     }
 
+    const osvOnly: Candidate[] = [];
     let osvState: PackageResult['osv'] = 'off';
     if (osv !== undefined) {
       const found = osv?.get(key);
@@ -148,6 +174,7 @@ export function matchPackages(
         }
         const ours = candidates.find(c => ids.includes(c.id));
         const c: Candidate = ours ?? { id: vuln.id, severity: vuln.severity, summary: vuln.summary, ranges: vuln.ranges, malware: vuln.malware };
+        if (!ours) osvOnly.push(c);
         // With a version OSV only reports what affects it, so it counts even where our ranges disagree
         const hit = version ? pick(c.ranges, version) : null;
         advisories.push(matched(c, 'osv', hit && hit !== 'unparsed' ? hit : null));
@@ -157,9 +184,9 @@ export function matchPackages(
 
     advisories.sort((a, b) => Number(Boolean(b.malware)) - Number(Boolean(a.malware)) || rank(a.severity) - rank(b.severity) || a.id.localeCompare(b.id));
     let status: PackageStatus;
-    if (!advisories.length) status = 'not-affected';
+    if (entry.version && !version) status = 'unknown';
+    else if (!advisories.length) status = 'not-affected';
     else if (!entry.version) status = 'no-version';
-    else if (!version) status = 'unknown';
     else status = affected ? 'affected' : 'unknown';
 
     const result: PackageResult = {
@@ -170,7 +197,7 @@ export function matchPackages(
       malwareCheckedDays: malware ? NPM_MALWARE_DAYS : null,
       osv: osvState,
     };
-    const minSafe = advisories.length ? highestVersion(advisories.map(a => a.patched)) : undefined;
+    const minSafe = advisories.length ? safeVersion(highestVersion(advisories.map(a => a.patched)), [...candidates, ...osvOnly], pick) : undefined;
     if (minSafe) result.minSafeVersion = minSafe;
     if (advisories.length) result.highestSeverity = advisories[0].malware ? 'critical' : advisories.reduce((s, a) => (rank(a.severity) < rank(s) ? a.severity : s), advisories[0].severity);
     results.push(result);
