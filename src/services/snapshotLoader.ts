@@ -40,3 +40,9 @@ export function createSnapshotLoader<T extends { generatedAt?: string }>(o: Snap
     return request;
   };
 }
+
+/**
+ * A data file kept with the generatedAt of the snapshot it was loaded with, for files that carry their own build
+ * time (the npm files are written as they are fetched): the loader then fetches it again only after a newer snapshot
+ */
+export interface LoadedFor<T> { generatedAt: string; data: T }

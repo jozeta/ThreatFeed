@@ -13,16 +13,26 @@ import { OpenSourceTab } from './vulns/OpenSourceTab';
 import { VulnNewsTab } from './vulns/VulnNewsTab';
 import { WatchingTab } from './vulns/WatchingTab';
 import { PatchTuesdayTab } from './vulns/PatchTuesdayTab';
+import { NpmTab } from './vulns/NpmTab';
+import { useNpmAdvisories } from '../hooks/useNpmAdvisories';
+import { useNpmMatches } from '../hooks/useNpmMatches';
 import { articlesByCve } from './vulns/shared';
-import { ShieldAlert, Flame, FilePlus2, Gauge, Package, Newspaper, Star, CalendarCheck } from 'lucide-react';
+import { ShieldAlert, Flame, FilePlus2, Gauge, Package, Newspaper, Star, CalendarCheck, Boxes } from 'lucide-react';
 
-const TABS = ['kev', 'new', 'patch', 'epss', 'oss', 'news', 'watching'] as const;
+const TABS = ['kev', 'new', 'patch', 'epss', 'oss', 'npm', 'news', 'watching'] as const;
 type Tab = (typeof TABS)[number];
 
 /** Loads data/msrc.json only once the Patch Tuesday tab is opened */
 const PatchTuesdayView: React.FC<{ stackKeywords: string[]; onOpenCve: (cve: string) => void; noData: React.ReactNode }> = ({ stackKeywords, onOpenCve, noData }) => {
   const msrc = useMsrc();
   return msrc?.months.length ? <PatchTuesdayTab months={msrc.months} stackKeywords={stackKeywords} onOpenCve={onOpenCve} /> : <>{noData}</>;
+};
+
+/** Loads the npm advisory and malware files only once the npm tab is opened */
+const NpmView: React.FC<{ onOpenCve: (cve: string) => void; noData: React.ReactNode }> = ({ onOpenCve, noData }) => {
+  const { advisories, malware } = useNpmAdvisories();
+  const matches = useNpmMatches(advisories, malware);
+  return advisories ? <NpmTab advisories={advisories} malware={malware} matches={matches} onOpenCve={onOpenCve} /> : <>{noData}</>;
 };
 
 export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) => void }> = ({ onOpenArticle }) => {
@@ -56,6 +66,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
     { id: 'patch', label: 'Patch Tuesday', icon: <CalendarCheck className="w-4 h-4" /> },
     { id: 'epss', label: 'Exploit prediction', icon: <Gauge className="w-4 h-4" /> },
     { id: 'oss', label: 'Open source', icon: <Package className="w-4 h-4" />, count: vulns?.advisories.length },
+    { id: 'npm', label: 'npm packages', icon: <Boxes className="w-4 h-4" /> },
     { id: 'news', label: 'Vulnerability news', icon: <Newspaper className="w-4 h-4" /> },
     { id: 'watching', label: 'Watching', icon: <Star className="w-4 h-4" />, count: watched.length },
   ];
@@ -101,6 +112,7 @@ export const VulnerabilitiesPage: React.FC<{ onOpenArticle: (article: Article) =
       {tab === 'patch' && <PatchTuesdayView stackKeywords={settings.stackKeywords} onOpenCve={openCve} noData={noData('Patch Tuesday data')} />}
       {tab === 'epss' && (vulns?.epssTop.length ? <ExploitTab epssTop={vulns.epssTop} kev={vulns.kev} kevVisible={kev} exploits={vulns.exploits ?? {}} news={news} onOpenCve={openCve} /> : noData('EPSS data'))}
       {tab === 'oss' && (vulns?.advisories.length ? <OpenSourceTab advisories={vulns.advisories} onOpenCve={openCve} /> : noData('GitHub advisory data'))}
+      {tab === 'npm' && <NpmView onOpenCve={openCve} noData={noData('npm advisory data')} />}
       {tab === 'news' && <VulnNewsTab articles={articles} feeds={feeds} kevIds={kevIds} onOpenArticle={onOpenArticle} />}
       {tab === 'watching' && (
         <WatchingTab watched={watched} vulns={vulns} cveIntel={cveIntel} articles={articles} onWatch={watch} onUnwatch={unwatch} onOpenCve={openCve} />

@@ -20,7 +20,7 @@ export const NpmPackagesSettings: React.FC = () => {
   };
 
   return (
-    <section className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
+    <section id="npm-settings" className="bg-theme-surface p-6 rounded-xl border border-theme-border space-y-6">
       <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
         <Package className="w-5 h-5 text-rose-500" />
         <div>

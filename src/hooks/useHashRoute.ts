@@ -69,7 +69,7 @@ export function setHashParams(changes: Record<string, string>, push = false, sta
 }
 
 // The detail panels' parameters, which App opens over any page
-export const PANEL_PARAMS = ['actor', 'malware', 'group', 'vendor', 'cve', 'tag'] as const;
+export const PANEL_PARAMS = ['actor', 'malware', 'group', 'vendor', 'cve', 'tag', 'advisory'] as const;
 export type PanelParam = (typeof PANEL_PARAMS)[number];
 
 /**
@@ -93,11 +93,16 @@ export function withPanelOnTop(params: URLSearchParams, key: string, value: stri
 
 /**
  * A panel's parameter as its host should get it, or '' to show no panel: trimmed, at most 200 characters, and
- * for ?cve= an upper-cased CVE id (so a mistyped link can't put junk on the watchlist)
+ * for ?cve= an upper-cased CVE id (so a mistyped link can't put junk on the watchlist), for ?advisory= a GHSA id
+ * as GitHub writes it (GHSA-xxxx-xxxx-xxxx)
  */
 export function panelParam(key: PanelParam, raw: string | null): string {
   const value = raw?.trim() ?? '';
   if (!value || value.length > 200) return '';
+  if (key === 'advisory') {
+    const id = `GHSA${value.slice(4).toLowerCase()}`;
+    return /^ghsa-/i.test(value) && /^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(id) ? id : '';
+  }
   if (key !== 'cve') return value;
   const id = value.toUpperCase();
   return /^CVE-\d{4}-\d{4,}$/.test(id) ? id : '';
