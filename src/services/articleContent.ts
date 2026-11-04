@@ -25,6 +25,8 @@ function parseShard(data: unknown): ShardContent | null {
 // One load per day file, shared by concurrent calls. A failed load (network, malformed JSON) is dropped so the
 // next call tries again; a missing file (404) is kept as null.
 const shards = new Map<string, Promise<ShardContent | null>>();
+// Day files already read again for an article they lacked: at most once per file and page session
+const reread = new Set<string>();
 
 function readShard(day: string, fetchJson: (url: string) => Promise<unknown>): Promise<ShardContent | null> {
   const load: Promise<ShardContent | null> = fetchJson(`${import.meta.env.BASE_URL}data/content/${day}.json`).then(parseShard, () => {
@@ -52,8 +54,9 @@ export async function loadArticleContent(
   if (!day) return null;
   const cached = shards.get(day);
   const found = entry(await (cached ?? readShard(day, fetchJson)), article.id);
-  if (found !== null || !cached) return found;
-  // The copy in memory may predate the latest snapshot run (the files are rebuilt every run): read it again once
+  if (found !== null || !cached || reread.has(day)) return found;
+  // The copy in memory may predate the latest snapshot run (the files are rebuilt every run): read it again, once
+  reread.add(day);
   const current = shards.get(day);
   return entry(await (current && current !== cached ? current : readShard(day, fetchJson)), article.id);
 }
@@ -61,4 +64,5 @@ export async function loadArticleContent(
 /** Forgets the loaded day files (tests). */
 export function clearArticleContentCache(): void {
   shards.clear();
+  reread.clear();
 }

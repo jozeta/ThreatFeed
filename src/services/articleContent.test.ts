@@ -58,12 +58,17 @@ describe('loadArticleContent', () => {
     expect(await loadArticleContent(a, fetchJson)).toBe('<p>A</p>');
   });
 
-  it('re-reads a cached day file once for an id it lacks (the shard is rebuilt every run)', async () => {
+  it('re-reads a cached day file for an id it lacks (the shard is rebuilt every run), once per file', async () => {
     const fetchJson = vi.fn()
       .mockResolvedValueOnce(shard('2026-11-04', { a: '<p>A</p>' }))
-      .mockResolvedValueOnce(shard('2026-11-04', { a: '<p>A</p>', b: '<p>B</p>' }));
+      .mockResolvedValueOnce(shard('2026-11-04', { a: '<p>A</p>', b: '<p>B</p>' }))
+      .mockResolvedValue(shard('2026-11-04', { a: '<p>A</p>', b: '<p>B</p>', c: '<p>C</p>' }));
     expect(await loadArticleContent({ id: 'a', publishedAt: '2026-11-04T09:00:00Z' }, fetchJson)).toBe('<p>A</p>');
     expect(await loadArticleContent({ id: 'b', publishedAt: '2026-11-04T10:00:00Z' }, fetchJson)).toBe('<p>B</p>');
+    expect(fetchJson).toHaveBeenCalledTimes(2);
+    // Already re-read this session: a later miss in the same file doesn't fetch it a third time
+    expect(await loadArticleContent({ id: 'c', publishedAt: '2026-11-04T11:00:00Z' }, fetchJson)).toBeNull();
+    expect(await loadArticleContent({ id: 'x', publishedAt: '2026-11-04T12:00:00Z' }, fetchJson)).toBeNull();
     expect(fetchJson).toHaveBeenCalledTimes(2);
   });
 });

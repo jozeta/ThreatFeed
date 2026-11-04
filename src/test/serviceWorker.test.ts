@@ -13,6 +13,8 @@ function loadWorker(network: Network) {
     open: async () => ({
       put: async (req: Request, res: Response) => void store.set(req.url, res),
       addAll: async () => undefined,
+      keys: async () => [...store.keys()].map(url => new Request(url)),
+      delete: async (req: Request) => store.delete(req.url),
     }),
     match: async (req: Request | string) => {
       const url = typeof req === 'string' ? new URL(req, `${ORIGIN}/ThreatFeed/`).href : req.url;
@@ -27,15 +29,17 @@ function loadWorker(network: Network) {
   // A sandboxed context holding only the worker's globals (no eval or new Function)
   runInNewContext(source, { self, caches, fetch: fetchSpy, location: new URL(ORIGIN), URL, setTimeout, clearTimeout, console });
 
+  const waits: Promise<unknown>[] = [];
   const request = (path: string, navigate = false, init?: RequestInit) => {
     let responded: Promise<Response | undefined> | undefined;
     const req = new Request(`${ORIGIN}${path}`, init);
     Object.defineProperty(req, 'mode', { value: navigate ? 'navigate' : 'cors' });
-    listeners.fetch({ request: req, respondWith: (p: Promise<Response>) => (responded = p) });
+    listeners.fetch({ request: req, respondWith: (p: Promise<Response>) => (responded = p), waitUntil: (p: Promise<unknown>) => waits.push(p) });
     return responded!;
   };
+  const settled = () => Promise.all(waits);
   const seed = (path: string, body: string) => store.set(`${ORIGIN}${path}`, new Response(body));
-  return { request, seed, fetchSpy, store };
+  return { request, seed, fetchSpy, store, settled };
 }
 
 const ok = (body: string) => async () => new Response(body);
@@ -77,6 +81,21 @@ describe('service worker caching', () => {
     const sw = loadWorker(ok('fresh snapshot'));
     sw.seed('/ThreatFeed/data/snapshot.json', 'stale snapshot');
     expect(await (await sw.request('/ThreatFeed/data/snapshot.json'))!.text()).toBe('fresh snapshot');
+  });
+
+  it('drops cached content shards older than 31 days when a shard is fetched', async () => {
+    const day = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const sw = loadWorker(ok('{"version":1}'));
+    sw.seed(`/ThreatFeed/data/content/${day(40)}.json`, 'old');
+    sw.seed(`/ThreatFeed/data/content/${day(32)}.json`, 'old');
+    sw.seed(`/ThreatFeed/data/content/${day(30)}.json`, 'kept');
+    sw.seed('/ThreatFeed/data/snapshot.json', 'not a shard');
+    await sw.request(`/ThreatFeed/data/content/${day(0)}.json`);
+    await sw.settled();
+    await new Promise(r => setTimeout(r, 0)); // the fresh shard's cache put
+    expect([...sw.store.keys()].map(u => u.replace(`${ORIGIN}/ThreatFeed/data/`, '')).sort()).toEqual(
+      [`content/${day(0)}.json`, `content/${day(30)}.json`, 'snapshot.json'].sort()
+    );
   });
 
   it('passes the TV version check (index.html?v=…) straight to the network, never caching it', async () => {

@@ -52,7 +52,8 @@ jobs:
       - run: npm run snapshot
         continue-on-error: true
         env:
-          # Carries ransomware victim history over between runs (the API only returns the latest ~100)
+          # Carries ransomware victim history over between runs (the API only returns the latest ~100), and the
+          # article text (data/content/<day>.json) of the last 30 days
           PREVIOUS_SNAPSHOT_URL: https://jozeta.github.io/ThreatFeed/data/snapshot.json
           # Lets the next run ask NVD only for CVEs changed since this one, instead of ~40 MB every time
           PREVIOUS_NVD_CACHE_URL: https://jozeta.github.io/ThreatFeed/data/nvd-cache.json
@@ -132,6 +133,25 @@ jobs:
               rm -f "$f.tmp"; echo "::warning::$name.json is missing and the published copy couldn't be fetched"
             fi
           done || true
+      # The article text (content shards, one file per publish day) is carried over from the published site by the
+      # snapshot. If a failed snapshot left none, deploy the published last 30 days rather than a site whose reader
+      # shows only descriptions. Best effort: missing days (404) are skipped and this step never fails the run.
+      - name: Keep the published content shards
+        continue-on-error: true
+        run: |
+          dir=public/data/content
+          [ -n "$(ls -A "$dir" 2>/dev/null)" ] && exit 0
+          mkdir -p "$dir"
+          kept=0
+          for i in $(seq 0 30); do
+            day=$(date -u -d "-$i day" +%Y-%m-%d)
+            if curl -sfL --max-time 60 -o "$dir/$day.json.tmp" "https://jozeta.github.io/ThreatFeed/data/content/$day.json" && [ -s "$dir/$day.json.tmp" ]; then
+              mv "$dir/$day.json.tmp" "$dir/$day.json"; kept=$((kept + 1))
+            else
+              rm -f "$dir/$day.json.tmp"
+            fi
+          done
+          echo "Restored $kept published content shards"
       # The ledger (feeds/seen.json) exists only in the published site and the cache, and a deploy replaces the
       # whole site; without it the next run would start over and re-date every item. If the snapshot wrote no
       # feeds, put the published (or cached) set of four back, all or none. If neither is there and the site
