@@ -10,11 +10,12 @@ import { useTvChrome } from './useTvChrome';
 import TvWall from './TvWall';
 import VulnDashboard from './VulnDashboard';
 import RansomDashboard from './RansomDashboard';
+import NpmDashboard from './NpmDashboard';
 
 const TV_LEVEL = 30; // above the shortcuts modal: Escape leaves the TV first, global shortcuts wait
 
-/** The full-screen frame for TV mode and Dashboard mode; always dark, whatever the theme */
-export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavTab }) {
+/** The full-screen frame for TV mode and Dashboard mode; always dark, whatever the theme. `sub` is the page's tab (npm on Vulnerabilities) */
+export default function TvShell({ kind, page, sub = '' }: { kind: TvKind; page: ActiveNavTab; sub?: string }) {
   const { idle } = useTvChrome();
   usePanelLayer(true, exitTv, TV_LEVEL);
   const { speed, mix } = useTvSettings();
@@ -62,7 +63,7 @@ export default function TvShell({ kind, page }: { kind: TvKind; page: ActiveNavT
         // A page or mix change remounts the wall, so no tile of the old page stays on screen
         <TvWall key={`${page}|${mix}`} page={page} />
       ) : (
-        page === 'ransomware' ? <RansomDashboard /> : <VulnDashboard />
+        page === 'ransomware' ? <RansomDashboard /> : sub === 'npm' ? <NpmDashboard /> : <VulnDashboard />
       )}
       <button
         type="button"

@@ -898,6 +898,30 @@ button.tag-chip {
 .tv-vbar-track { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
 .tv-vbar-track i { display: block; width: 72%; border-radius: 0.2vw 0.2vw 0 0; }
 .tv-vbar-label { flex: none; font-size: max(0.65rem, 0.9vw); color: #8a95a3; white-space: nowrap; }
+/* Donut: the ring on the left, the legend (every slice, count and share) beside it, or under it in a tall cell (the
+   Large grid's fallback layout); legend type follows the grid size */
+.tv-donut { flex: 1 1 0; min-height: 0; container-type: size; }
+.tv-donut-in { height: 100%; display: flex; align-items: stretch; gap: 1.5vw; }
+.tv-donut-ring { flex: 0 0 42%; min-width: 0; min-height: 0; overflow: hidden; }
+.tv-donut-ring > svg { display: block; }
+.tv-donut-legend { flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 0.25vw; font-size: calc(max(0.7rem, 1.1vw) * var(--s, 1)); line-height: 1.35; }
+.tv-donut-legend li { display: flex; align-items: center; gap: 0.6vw; white-space: nowrap; }
+.tv-donut-legend i { flex: none; width: 0.75em; height: 0.75em; border-radius: 0.15em; }
+.tv-donut-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #e7ebf0; }
+.tv-donut-n { flex: none; color: #aab3bf; font-variant-numeric: tabular-nums; }
+@container (aspect-ratio < 1.3) {
+  .tv-donut-in { flex-direction: column; justify-content: center; }
+  .tv-donut-ring { flex: none; height: min(100cqw, 62cqh); }
+  .tv-donut-legend { flex: 0 1 auto; justify-content: flex-start; }
+}
+/* Stacked bars: segment legend, then the first day, the peak and the last day */
+.tv-stack-legend { display: flex; flex-wrap: wrap; column-gap: 1.2vw; row-gap: 0.2vw; overflow: hidden; max-height: 2.8em; }
+.tv-stack-legend span { display: inline-flex; align-items: center; gap: 0.4vw; white-space: nowrap; }
+.tv-stack-legend svg { width: 0.7em; height: 0.7em; }
+.tv-axis { display: flex; justify-content: space-between; gap: 1vw; white-space: nowrap; }
+/* A number's sparkline */
+.tv-spark { flex: none; height: calc(3.2vw * var(--s, 1)); width: 100%; overflow: hidden; }
+.tv-spark > svg { display: block; }
 
 /* Arrival animations inside a panel (transform and opacity only); --j is the bar/row index, --d the cell's own delay */
 @keyframes tv-grow-x { from { transform: scaleX(0); } to { transform: none; } }
@@ -909,7 +933,8 @@ button.tag-chip {
 .tv-draw { stroke-dasharray: 1 1; animation: tv-draw calc(900ms * var(--k, 1)) ease-out both; animation-delay: var(--d, 0ms); }
 .tv-area-in { animation: tv-fade-in calc(400ms * var(--k, 1)) ease both; animation-delay: calc(var(--d, 0ms) + 800ms * var(--k, 1)); }
 .tv-row-in { animation: tv-row-in calc(400ms * var(--k, 1)) ease-out both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 70ms * var(--k, 1)); }
-.tv-wall[data-transition='reduced'] :is(.tv-grow-x, .tv-grow-y, .tv-draw, .tv-area-in, .tv-row-in, .tv-map-in) { animation: none; }
+.tv-fade { animation: tv-fade-in calc(500ms * var(--k, 1)) ease both; animation-delay: calc(var(--d, 0ms) + var(--j, 0) * 90ms * var(--k, 1)); }
+.tv-wall[data-transition='reduced'] :is(.tv-grow-x, .tv-grow-y, .tv-draw, .tv-area-in, .tv-row-in, .tv-map-in, .tv-fade) { animation: none; }
 
 /* World map panel: the map fills the box, the top 3 sit under it; shaded countries fade in by rank (--j) */
 .tv-map { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 0.6vw; }

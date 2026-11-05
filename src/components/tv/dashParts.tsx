@@ -4,6 +4,9 @@ import { useTvSettings } from './useTvSettings';
 import { useReducedMotion } from '../Common/SidePanel';
 import { monotonePath } from '../charts/MentionsArea';
 import { Figure } from '../../services/tv/dashboard';
+import type { Slice } from '../charts/chartData';
+import type { BarBucket } from '../charts/StackedBars';
+import { DONUT_COLORS, slicesSummary } from '../charts/DonutChart';
 import { CellDelayContext, SPEED_FACTOR } from './wallMotion';
 
 /** Dashboard building blocks: all sizes in vw so the screen scales from 1280 to 3840 wide */
@@ -62,8 +65,10 @@ export function Delta({ delta, versus }: { delta?: number; versus: string }) {
 /** A text value longer than this steps down a size and may wrap to two lines, so whole words show */
 const LONG_TEXT = 14;
 
-export function StatCard({ label, figure, value, color, versus = 'vs last week', note, text }: {
+export function StatCard({ label, figure, value, color, versus = 'vs last week', note, text, spark }: {
   label: string; figure?: Figure; value?: number; color?: string; versus?: string; note?: string; text?: string;
+  /** Daily values, oldest first, drawn as a line under the number */
+  spark?: number[];
 }) {
   const reduced = useReducedMotion();
   const tv = useTvSettings();
@@ -77,6 +82,7 @@ export function StatCard({ label, figure, value, color, versus = 'vs last week',
           ? <div className={`tv-big tv-big-text${text.length > LONG_TEXT ? ' tv-big-text-long' : ''}`} style={{ color }} title={text}>{text}</div>
           : <div className="tv-big" style={{ color }}>{Math.round(n).toLocaleString()}</div>}
         {figure ? <Delta delta={figure.delta} versus={versus} /> : note ? <span className="tv-delta">{note}</span> : null}
+        {spark && <Sparkline label={`${label}: ${spark.join(', ')}`} values={spark} color={color ?? '#e7ebf0'} />}
       </div>
     </section>
   );
@@ -153,15 +159,16 @@ export function VBars({ label, data, color, showValue }: {
  * An SVG drawn in the box's own pixels (measured), so strokes keep their width without `vector-effect` and a
  * `pathLength="1"` line draws evenly with stroke-dashoffset
  */
-function ChartBox({ label, children }: { label: string; children: (w: number, h: number) => ReactNode }) {
+function ChartBox({ label, children, className = 'tv-chart' }: { label?: string; children: (w: number, h: number) => ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<[number, number] | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Layout size, not getBoundingClientRect: a cell arriving with a scale transition would be measured mid-animation
     const measure = () => {
-      const r = el.getBoundingClientRect();
-      setBox(b => (b && Math.round(r.width) === b[0] && Math.round(r.height) === b[1] ? b : [Math.round(r.width), Math.round(r.height)]));
+      const w = el.clientWidth, h = el.clientHeight;
+      setBox(b => (b && w === b[0] && h === b[1] ? b : [w, h]));
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -170,9 +177,9 @@ function ChartBox({ label, children }: { label: string; children: (w: number, h:
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={ref} className="tv-chart">
+    <div ref={ref} className={className}>
       {box && box[0] > 0 && box[1] > 0 && (
-        <svg width={box[0]} height={box[1]} viewBox={`0 0 ${box[0]} ${box[1]}`} role="img" aria-label={label}>
+        <svg width={box[0]} height={box[1]} viewBox={`0 0 ${box[0]} ${box[1]}`} {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}>
           {children(box[0], box[1])}
         </svg>
       )}
@@ -241,6 +248,138 @@ export function DailyArea({ label, daily, color }: {
             );
           }}
         </ChartBox>
+      )}
+    </Panel>
+  );
+}
+
+/** A small line of daily values under a number: it draws from left to right, then the fill fades in */
+function Sparkline({ label, values, color }: { label: string; values: number[]; color: string }) {
+  const max = Math.max(1, ...values);
+  const n = values.length;
+  return (
+    <ChartBox label={label} className="tv-spark">
+      {(W, H) => {
+        const sw = strokeFor(W);
+        const pts = values.map((v, i) => [n > 1 ? (W * i) / (n - 1) : 0, H - sw - (v / max) * (H - 2 * sw)] as [number, number]);
+        const line = monotonePath(pts);
+        return (
+          <>
+            <path className="tv-area-in" d={`${line} L${W},${H} L0,${H} Z`} fill={color} fillOpacity=".2" />
+            <path className="tv-draw" pathLength={1} d={line} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+          </>
+        );
+      }}
+    </ChartBox>
+  );
+}
+
+/** Slice colours: by label from `colors` when given, else the donut palette in rank order; "Other" is always grey */
+const OTHER_COLOR = '#94a3b8';
+const sliceColor = (s: Slice, i: number, colors?: Record<string, string>) =>
+  s.other ? OTHER_COLOR : colors ? colors[s.label] ?? OTHER_COLOR : DONUT_COLORS[i % DONUT_COLORS.length];
+
+/**
+ * A donut of `foldSlices` output with the total in the centre and a legend of every slice with its count and share.
+ * Labels are untrusted and render as text only. The slices fade in one after another.
+ */
+export function DonutPanel({ label, data, colors }: { label: string; data: Slice[]; colors?: Record<string, string> }) {
+  const total = data.reduce((n, s) => n + s.value, 0);
+  return (
+    <Panel label={label}>
+      {data.length === 0 ? <div className="tv-note">Nothing to show yet</div> : (
+        <div className="tv-donut" role="img" aria-label={`${label}: ${slicesSummary(data)}`}>
+          <div className="tv-donut-in">
+            <ChartBox className="tv-donut-ring">
+              {(W, H) => {
+                const size = Math.min(W, H);
+                const stroke = size * 0.2;
+                const r = (size - stroke) / 2;
+                const cx = W / 2, cy = H / 2;
+                let offset = 0;
+                return (
+                  <>
+                    {data.map((s, i) => {
+                      const len = data.length === 1 ? 100 : (s.value / total) * 100;
+                      const gap = data.length === 1 ? 0 : 0.6;
+                      const el = (
+                        <circle
+                          key={`${s.label}-${i}`} className="tv-fade" style={nth(i)} cx={cx} cy={cy} r={r} fill="none" stroke={sliceColor(s, i, colors)} strokeWidth={stroke}
+                          pathLength={100} strokeDasharray={`${Math.max(0, len - gap)} ${100 - Math.max(0, len - gap)}`} strokeDashoffset={-offset}
+                          transform={`rotate(-90 ${cx} ${cy})`}
+                        />
+                      );
+                      offset += len;
+                      return el;
+                    })}
+                    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fill="#e7ebf0" fontWeight={800} fontSize={size * 0.2}>
+                      {total.toLocaleString()}
+                    </text>
+                  </>
+                );
+              }}
+            </ChartBox>
+            <ul className="tv-donut-legend">
+              {data.map((s, i) => (
+                <li key={`${s.label}-${i}`} className="tv-row-in" style={nth(i)}>
+                  <i style={{ background: sliceColor(s, i, colors) }} />
+                  <span className="tv-donut-name" title={s.label}>{s.label}</span>
+                  <span className="tv-donut-n">{s.value.toLocaleString()} {'·'} {s.pct}%</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * Stacked bars, one per day, growing up one after another; a legend of the segments that occur and the day range with
+ * the peak under them. Segment colours are the builders' SVG fill classes.
+ */
+export function StackedPanel({ label, buckets, axis = b => b.short }: {
+  label: string; buckets: BarBucket[]; axis?: (b: BarBucket) => string;
+}) {
+  const totals = buckets.map(b => b.segments.reduce((n, s) => n + s.value, 0));
+  const max = Math.max(1, ...totals);
+  const legend = buckets[0]?.segments.filter(s => buckets.some(b => b.segments.find(x => x.name === s.name)?.value)) ?? [];
+  const summary = `${label}: ${legend.map(s => `${s.name} ${buckets.reduce((n, b) => n + (b.segments.find(x => x.name === s.name)?.value ?? 0), 0)}`).join(', ')}; peak ${max} a day`;
+  return (
+    <Panel label={label}>
+      {!chartReady(totals.map(t => [t])) ? <div className="tv-note">{HISTORY_NOTE}</div> : (
+        <>
+          <ChartBox label={summary}>
+            {(W, H) => {
+              const slot = W / buckets.length;
+              return buckets.map((b, i) => {
+                let y = H;
+                return (
+                  <g key={b.label} className="tv-grow-y" style={nth(i)}>
+                    {b.segments.map(s => {
+                      const h = (s.value / max) * (H - 2);
+                      y -= h;
+                      return s.value > 0 ? <rect key={s.name} className={s.className} x={slot * i + slot * 0.12} y={y} width={slot * 0.76} height={Math.max(h, 1)} /> : null;
+                    })}
+                  </g>
+                );
+              });
+            }}
+          </ChartBox>
+          {legend.length > 1 && (
+            <div className="tv-legend tv-stack-legend">
+              {legend.map(s => (
+                <span key={s.name}><svg viewBox="0 0 10 10" aria-hidden="true"><rect width="10" height="10" rx="2" className={s.className} /></svg>{s.name}</span>
+              ))}
+            </div>
+          )}
+          <div className="tv-legend tv-axis">
+            <span>{axis(buckets[0])}</span>
+            <span>peak {max}</span>
+            <span>{axis(buckets[buckets.length - 1])}</span>
+          </div>
+        </>
       )}
     </Panel>
   );

@@ -307,7 +307,7 @@ export const App: React.FC = () => {
     {tvKind && (
       <TvErrorBoundary>
         <Suspense fallback={<div className="tv-root fixed inset-0 z-[90]" />}>
-          <TvShell kind={tvKind} page={activeTab} />
+          <TvShell kind={tvKind} page={activeTab} sub={route.sub} />
         </Suspense>
       </TvErrorBoundary>
     )}

@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useMsrc, useStats, useVulns } from '../../hooks/useVulns';
+import { useNpmAdvisories } from '../../hooks/useNpmAdvisories';
 import DashboardWall from './DashboardWall';
 import { VulnCtx, vulnPanels } from './dashPanels';
 
@@ -11,11 +12,12 @@ export default function VulnDashboard() {
   const vulns = useVulns();
   const msrc = useMsrc();
   const stats = useStats();
+  const { advisories: npm } = useNpmAdvisories(); // for the npm panels in the pool
   const { settings } = useSettings();
   // The wall builds and its panels mount on their own schedule; both read the latest data through this ref
   const ref = useRef<Omit<VulnCtx, 'now'>>(null!);
-  ref.current = { vulns, msrc, stats, stackKeywords: settings.stackKeywords ?? NONE, watchedCves: settings.watchedCves ?? NONE };
+  ref.current = { vulns, msrc, stats, stackKeywords: settings.stackKeywords ?? NONE, watchedCves: settings.watchedCves ?? NONE, npm };
   const fresh = (): VulnCtx => ({ ...ref.current, now: Date.now() });
 
-  return <DashboardWall build={() => vulnPanels(fresh(), fresh)} signature={`${vulns ? 'v' : '-'}|${msrc ? 'm' : '-'}|${stats ? 's' : '-'}`} />;
+  return <DashboardWall build={() => vulnPanels(fresh(), fresh)} signature={`${vulns ? 'v' : '-'}|${msrc ? 'm' : '-'}|${stats ? 's' : '-'}|${npm ? 'n' : '-'}`} />;
 }
