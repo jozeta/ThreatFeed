@@ -215,13 +215,13 @@ function malwareDays(malware: NpmMalwareData | null, now: number, days: number):
   return countByDay(entries);
 }
 
-/** Per day: vulnerability advisories and malware advisories, stacked */
-export function npmVulnVsMalware(data: NpmAdvisoryData, malware: NpmMalwareData | null, now: number, days = 7): BarBucket[] {
-  const vulns = countByDay(liveAdvisories(data, now, days).map(({ day }) => ({ day, name: 'Vulnerabilities' })));
-  const mal = malwareDays(malware, now, days);
-  const merged = new Map<string, Map<string, number>>();
-  for (const key of dayKeys(now, days)) merged.set(key, new Map([['Vulnerabilities', vulns.get(key)?.get('Vulnerabilities') ?? 0], ['Malware', mal.get(key)?.get('Malware') ?? 0]]));
-  return stackByDay(now, days, [{ name: 'Vulnerabilities', className: SEVERITY_DOT.high }, { name: 'Malware', className: SEVERITY_DOT.critical }], merged);
+/** Reviewed advisories (published or updated in the window, withdrawn left out) vs. distinct malware advisories */
+export function npmVulnVsMalware(data: NpmAdvisoryData, malware: NpmMalwareData | null, now: number, days = 7): Slice[] {
+  const keys = new Set(dayKeys(now, days));
+  const inRange = (iso: string) => { const d = dayOf(iso); return !!d && keys.has(d); };
+  const vulns = data.recent.filter((a) => !a.withdrawn && (inRange(a.published) || inRange(a.updated))).length;
+  const mal = [...malwareDays(malware, now, days).values()].reduce((n, d) => n + (d.get('Malware') ?? 0), 0);
+  return foldSlices([{ label: 'Vulnerabilities', value: vulns }, { label: 'Malware', value: mal }]);
 }
 
 /** Packages with the most advisories */

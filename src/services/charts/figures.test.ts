@@ -202,14 +202,15 @@ describe('npm', () => {
     ]);
     expect(npmSeverityShare(data, NOW, 31).find((s) => s.label === 'Critical')?.value).toBe(2);
   });
-  it('npmVulnVsMalware counts distinct malware advisories per day', () => {
-    const mal = malware([['M1', 'x', '>= 0', iso(11, 5)], ['M1', 'y', '>= 0', iso(11, 5)], ['M2', 'z', '>= 0', iso(11, 4)], ['M3', 'w', '>= 0', iso(10, 1)]]);
-    const days = npmVulnVsMalware(data, mal, NOW, 2);
-    expect(days.map((d) => d.segments.map((s) => [s.name, s.value]))).toEqual([
-      [['Vulnerabilities', 1], ['Malware', 1]],
-      [['Vulnerabilities', 1], ['Malware', 1]],
+  it('npmVulnVsMalware compares advisories (published or updated in the window) with distinct malware ids', () => {
+    const d = npm([
+      adv('V1', 'high', iso(11, 5)), adv('V2', 'low', iso(10, 1), { updated: iso(11, 4) }),
+      adv('V3', 'low', iso(11, 5), { withdrawn: iso(11, 5) }), adv('V4', 'low', iso(10, 1)),
     ]);
-    expect(npmVulnVsMalware(data, null, NOW, 1)[0].segments[1].value).toBe(0);
+    const mal = malware([['M1', 'x', '>= 0', iso(11, 5)], ['M1', 'y', '>= 0', iso(11, 5)], ['M2', 'z', '>= 0', iso(11, 4)], ['M3', 'w', '>= 0', iso(10, 1)]]);
+    expect(npmVulnVsMalware(d, mal, NOW, 2)).toEqual([{ label: 'Vulnerabilities', value: 2, pct: 50 }, { label: 'Malware', value: 2, pct: 50 }]);
+    expect(npmVulnVsMalware(d, null, NOW, 2)).toEqual([{ label: 'Vulnerabilities', value: 2, pct: 100 }]);
+    expect(npmVulnVsMalware(npm([]), null, NOW)).toEqual([]);
   });
   it('npmTopPackages counts each advisory once per package', () => {
     expect(npmTopPackages(data, NOW)).toEqual([{ label: 'a', value: 3 }, { label: 'b', value: 1 }]);
