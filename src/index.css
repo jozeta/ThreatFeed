@@ -765,6 +765,15 @@ button.tag-chip {
   line-height: 1.2;
   vertical-align: baseline;
 }
+.tv-sev-chip {
+  display: inline-block;
+  margin-right: 0.6em;
+  padding: 0.1em 0.55em;
+  border-radius: 0.3em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
 .tv-tile-headline {
   margin: 0;
   font-weight: 700;
@@ -779,6 +788,18 @@ button.tag-chip {
   overflow: hidden;
 }
 .tv-tile-summary-box { flex: 1 1 0; min-height: 0; overflow: hidden; }
+/* An npm advisory's lines at the foot of its tile (TvTileCard pads them clear of the QR code) */
+.tv-tile-npm {
+  flex: none;
+  margin-top: auto;
+  font-size: clamp(calc(0.95rem * var(--s)), calc(1.35vw * var(--s)), calc(3.6rem * var(--s)));
+  line-height: 1.3;
+  color: #aab3bf;
+}
+.tv-tile-npm > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-tile-npm-pkg { color: #f2f5f8; font-weight: 700; }
+.tv-tile-npm-yours { color: #fca5a5; font-weight: 700; }
+.tv-tile-npm-ids { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 0.85em; color: #8b95a3; }
 /* The QR code scales with the tile so a phone reads it from 2–3 m: 40% of a wide tile's height, 35% of the hero's, never
    under 88px. A percentage height on an absolutely placed box is of the tile's height. TvTileCard keeps the headline
    above it and pads the summary clear of it (by its measured width) */

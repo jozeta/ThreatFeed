@@ -65,7 +65,7 @@ export const ViewControls: React.FC<ViewControlsProps> = ({ className, labelled 
     </div>
 
     {/* Full-screen modes, where the page offers them */}
-    {(['tv', 'dash'] as const).filter((kind) => tvAvailable(route.page).includes(kind)).map((kind) => (
+    {(['tv', 'dash'] as const).filter((kind) => tvAvailable(route.page, route.sub).includes(kind)).map((kind) => (
       <button
         key={kind}
         onClick={() => enterTv(kind)}

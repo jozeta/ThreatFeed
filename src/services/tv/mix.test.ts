@@ -26,4 +26,8 @@ describe('mixItems', () => {
     const s = stories(5);
     expect(mixItems(s, [])).toEqual(s);
   });
+  it('takes a spacing: every 6th position keeps an extra kind to at most 1 in 6', () => {
+    const out = mixItems(stories(12), numbers(5), 6);
+    expect(out.map(i => i.id)).toEqual(['s0', 's1', 's2', 's3', 's4', 'num:n0', 's5', 's6', 's7', 's8', 's9', 'num:n1', 's10', 's11']);
+  });
 });

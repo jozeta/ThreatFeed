@@ -60,8 +60,8 @@ export default function TvShell({ kind, page, sub = '' }: { kind: TvKind; page: 
       style={{ cursor: idle ? 'none' : undefined }}
     >
       {kind === 'tv' ? (
-        // A page or mix change remounts the wall, so no tile of the old page stays on screen
-        <TvWall key={`${page}|${mix}`} page={page} />
+        // A page, tab or mix change remounts the wall, so no tile of the old page stays on screen
+        <TvWall key={`${page}|${sub}|${mix}`} page={page} sub={sub} />
       ) : (
         page === 'ransomware' ? <RansomDashboard /> : sub === 'npm' ? <NpmDashboard /> : <VulnDashboard />
       )}
