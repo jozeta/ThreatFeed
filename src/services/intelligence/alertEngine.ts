@@ -1,6 +1,9 @@
 import { AlertRule, AlertRuleKind, Article, ConditionGroup, CveIntel, NewsCondition, UserSettings, VulnCondition, VulnData } from '../../types';
 import { buildVulnItems, builtInTerms, matchesNews, matchesVuln, resolveRoot, EvalContext, VulnItem } from './alertRules';
 import { buildWatchState, diffCveWatch, CveWatchState } from './cveWatch';
+import type { NpmAdvisoryData, NpmMalwareData } from '../npm/advisories';
+import { matchPackages } from '../npm/match';
+import { formatPackageEntry, parsePackageEntry, type PackageEntry } from '../npm/semver';
 
 export interface AlertMatch {
   ruleId: string;
@@ -31,7 +34,9 @@ export interface AlertStore {
   watch: Record<string, CveWatchState>; // last seen state per watched CVE, the baseline for its events
   pending: AlertMatch[]; // notifiable matches held back by the gap
   lastNotifiedAt?: string;
-  seen: { news?: string; vulns?: string }; // "Mark all seen" per My Feed sub-tab
+  seen: { news?: string; vulns?: string; npm?: string }; // "Mark all seen" per My Feed sub-tab; npm: the Vulns npm tab last opened
+  npmSeen: string[]; // affecting keys (`advisoryId|package[@version]`) already alerted or baselined, oldest first
+  npmKnownEntries: string[]; // watched package entries already baselined on this device
 }
 
 type RuleLists = Pick<UserSettings, 'watchlistKeywords' | 'stackKeywords' | 'watchedCves'>;
@@ -46,6 +51,14 @@ export interface CheckInput {
   feedCategory: (sourceId: string) => string | undefined;
   now: Date;
   permissionGranted: boolean;
+  /** The watched packages and the npm data; missing leaves the npm state as it is */
+  npm?: NpmInput;
+}
+
+export interface NpmInput {
+  packages: string[]; // settings.npmPackages
+  advisories: NpmAdvisoryData | null; // null while not loaded: removed packages are still dropped, nothing new is matched
+  malware: NpmMalwareData | null;
 }
 
 export interface CheckResult {
@@ -56,6 +69,8 @@ export interface CheckResult {
 export const ALERT_STORE_KEY = 'alertEngine';
 export const PENDING_CAP = 200;
 export const HANDLED_TTL_DAYS = 45;
+export const NPM_SEEN_CAP = 5_000;
+export const NPM_RULE_ID = 'npm-packages';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -64,7 +79,7 @@ const NEWS_MAX_AGE_MS = DAY_MS; // older articles are recorded but never notify,
 /** `seen` starts at creation time, so whatever is baselined on day one isn't NEW */
 export function emptyAlertStore(now: Date = new Date()): AlertStore {
   const stamp = now.toISOString();
-  return { rules: {}, watch: {}, pending: [], seen: { news: stamp, vulns: stamp } };
+  return { rules: {}, watch: {}, pending: [], seen: { news: stamp, vulns: stamp, npm: stamp }, npmSeen: [], npmKnownEntries: [] };
 }
 
 // isNew runs once per My Feed row; a Set per quiet list keeps that from scanning thousands of baseline IDs each time
@@ -192,6 +207,91 @@ function watchEvents(input: CheckInput, vulns: VulnData, before: Record<string, 
   return { events, next };
 }
 
+/** The package entry of an npm key (`advisoryId|package[@version]`) */
+const keyEntry = (key: string) => key.slice(key.indexOf('|') + 1);
+const keyId = (key: string) => key.slice(0, key.indexOf('|'));
+
+/** The distinct, readable entries of the watched-packages list, formatted */
+function watchedEntries(packages: string[]): string[] {
+  return [...new Set(packages.map(parsePackageEntry).filter((e): e is PackageEntry => e !== null).map(formatPackageEntry))];
+}
+
+/** "lodash@4.17.15: Prototype pollution (GHSA-…)", the id alone when there is no summary; malware says so */
+export function npmAlertTitle(id: string, entry: string, summary?: string, malware?: boolean): string {
+  if (malware) return `Malicious release: ${entry} (${id})`;
+  return summary ? `${entry}: ${summary} (${id})` : `${entry}: ${id}`;
+}
+
+/**
+ * The npm side of a check. Every key affecting a watched package is recorded in `npmSeen`; one not in it yet
+ * becomes an alert, except for a package not seen before on this device (just added, or the first check with
+ * this rule), whose advisories are recorded silently. Removed packages drop their keys. Switched off, the rule
+ * forgets its known packages, so switching it back on baselines again instead of alerting what came out meanwhile.
+ */
+function npmCheck(input: CheckInput, store: AlertStore): { state?: RuleState; fresh: AlertMatch[]; seen: string[]; known: string[] } {
+  const rule = input.rules.find(r => r.builtIn === NPM_RULE_ID);
+  const prev = store.rules[NPM_RULE_ID];
+  const before = { seen: store.npmSeen ?? [], known: store.npmKnownEntries ?? [] };
+  if (!rule) return { fresh: [], ...before };
+  if (!rule.enabled) return { state: prev && { ...prev, enabled: false }, fresh: [], seen: before.seen, known: [] };
+  if (!input.npm) return { state: prev, fresh: [], ...before };
+
+  const { now } = input;
+  const stamp = now.toISOString();
+  const { advisories } = input.npm;
+  const entries = watchedEntries(input.npm.packages);
+  const watched = new Set(entries);
+  const known = new Set(before.known.filter(e => watched.has(e)));
+  const seen = new Set(before.seen.filter(k => watched.has(keyEntry(k))));
+  const handled = { ...prev?.handled };
+  if (!advisories) {
+    for (const key of Object.keys(handled)) if (!watched.has(keyEntry(key))) delete handled[key];
+    return { state: prev && { ...prev, handled, enabled: true }, fresh: [], seen: [...seen], known: [...known] };
+  }
+  const summaries = new Map(advisories.recent.map(a => [a.id, a.summary]));
+  const results = matchPackages(entries.map(e => parsePackageEntry(e)!), advisories, input.npm.malware);
+
+  const fresh: AlertMatch[] = [];
+  const current = new Set<string>();
+  for (const r of results) {
+    const entry = formatPackageEntry(r.entry);
+    for (const a of r.advisories) {
+      const key = `${a.id}|${entry}`;
+      current.add(key);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!known.has(entry)) continue;
+      handled[key] = stamp;
+      if (!rule.notify) continue;
+      fresh.push({
+        ruleId: rule.id, ruleName: rule.name, kind: rule.kind, itemId: key, ref: a.id,
+        title: npmAlertTitle(a.id, entry, summaries.get(a.id), a.malware), firstMatchedAt: stamp, notifiable: true,
+      });
+    }
+  }
+  // Alerts of removed packages go at once; ones no longer affecting after the usual time
+  for (const [key, at] of Object.entries(handled)) {
+    if (!watched.has(keyEntry(key)) || (!current.has(key) && now.getTime() - Date.parse(at) > HANDLED_TTL_DAYS * DAY_MS)) delete handled[key];
+  }
+  // Every key still affecting a package stays (dropping one would alert it again); the cap trims the rest, oldest first
+  const allowance = Math.max(0, NPM_SEEN_CAP - current.size);
+  const stale = allowance === 0 ? [] : [...seen].filter(k => !current.has(k)).slice(-allowance);
+  return {
+    state: { version: NPM_RULE_ID, terms: [], handled, enabled: true },
+    fresh,
+    seen: [...stale, ...[...seen].filter(k => current.has(k))],
+    known: entries,
+  };
+}
+
+/** Alerts of the npm rule for packages still watched that came after the npm tab was last opened */
+export function npmUnseenCount(store: AlertStore, packages: string[]): number {
+  const watched = new Set(watchedEntries(packages));
+  const since = store.seen?.npm;
+  return Object.entries(store.rules[NPM_RULE_ID]?.handled ?? {})
+    .filter(([key, at]) => watched.has(keyEntry(key)) && (!since || at > since)).length;
+}
+
 export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult {
   const { now, settings: lists, vulns } = input;
   const stamp = now.toISOString();
@@ -217,7 +317,8 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
   const prior = new Set<string>();
   const rules: Record<string, RuleState> = {};
   const fresh: AlertMatch[] = [];
-  const ordered = [...input.rules.filter(r => r.kind === 'vulns'), ...input.rules.filter(r => r.kind === 'news')];
+  const conditionRules = input.rules.filter(r => r.builtIn !== NPM_RULE_ID);
+  const ordered = [...conditionRules.filter(r => r.kind === 'vulns'), ...conditionRules.filter(r => r.kind === 'news')];
 
   for (const rule of ordered) {
     const prev = store.rules[rule.id];
@@ -266,6 +367,10 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
     rules[rule.id] = { version, terms: [...terms], handled, enabled: rule.enabled, ...(quiet.size ? { quiet: [...quiet] } : {}) };
   }
 
+  const npm = npmCheck(input, store);
+  if (npm.state) rules[NPM_RULE_ID] = npm.state;
+  fresh.push(...npm.fresh);
+
   // Held matches of rules since switched off, muted or deleted are dropped; duplicates keep the newest
   const live = new Set(input.rules.filter(r => r.enabled && r.notify).map(r => r.id));
   const queue = new Map<string, AlertMatch>();
@@ -294,7 +399,9 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
       watch: watch?.next ?? store.watch,
       pending,
       ...(lastNotifiedAt ? { lastNotifiedAt } : {}),
-      seen: { news: store.seen?.news ?? stamp, vulns: store.seen?.vulns ?? stamp },
+      seen: { news: store.seen?.news ?? stamp, vulns: store.seen?.vulns ?? stamp, npm: store.seen?.npm ?? stamp },
+      npmSeen: npm.seen,
+      npmKnownEntries: npm.known,
     },
     notify,
   };
@@ -320,11 +427,14 @@ function eventText(itemId: string, articles: Article[]): string {
  * anything not yet recorded appears after the next check). Rules containing `watched` list their recorded events
  * for CVEs still watched, since events only exist at the check that saw them.
  */
-export function feedMatches(input: Omit<CheckInput, 'now' | 'permissionGranted' | 'epss'>, store: AlertStore): AlertMatch[] {
+export function feedMatches(
+  input: Omit<CheckInput, 'now' | 'permissionGranted' | 'epss' | 'npm'> & { npm?: { packages: string[]; advisories: NpmAdvisoryData | null; malware: NpmMalwareData | null } },
+  store: AlertStore,
+): AlertMatch[] {
   const lists = input.settings;
   const items = input.vulns ? buildVulnItems(input.vulns, input.cveIntel) : null;
   const data: MatchData = { articles: input.articles, items, events: new Map(), now: new Date(), feedCategory: input.feedCategory };
-  const enabled = input.rules.filter(r => r.enabled && (r.kind === 'news' || items));
+  const enabled = input.rules.filter(r => r.enabled && r.builtIn !== NPM_RULE_ID && (r.kind === 'news' || items));
   const vulnRules = enabled.filter(r => r.kind === 'vulns');
   const newsRules = enabled.filter(r => r.kind === 'news');
 
@@ -346,6 +456,23 @@ export function feedMatches(input: Omit<CheckInput, 'now' | 'permissionGranted' 
     for (const [itemId, hit] of ruleHits(rule, lists, data, current)) {
       if (rule.kind === 'vulns') current.add(hit.ref);
       if (handled[itemId]) out.push(row(itemId, hit.ref, hit.title));
+    }
+  }
+
+  // npm alerts are recorded with their key; the title is rebuilt from the npm data when it is loaded
+  const npmRule = input.rules.find(r => r.builtIn === NPM_RULE_ID && r.enabled);
+  if (npmRule && input.npm) {
+    const watchedPackages = new Set(watchedEntries(input.npm.packages));
+    const summaries = new Map(input.npm.advisories?.recent.map(a => [a.id, a.summary]));
+    const malware = new Set(input.npm.malware?.entries.map(m => m[0]));
+    for (const [itemId, at] of Object.entries(store.rules[NPM_RULE_ID]?.handled ?? {})) {
+      const entry = keyEntry(itemId);
+      if (!watchedPackages.has(entry)) continue;
+      const id = keyId(itemId);
+      out.push({
+        ruleId: npmRule.id, ruleName: npmRule.name, kind: npmRule.kind, itemId, ref: id,
+        title: npmAlertTitle(id, entry, summaries.get(id), malware.has(id)), firstMatchedAt: at, notifiable: false,
+      });
     }
   }
   return out.sort((a, b) => b.firstMatchedAt.localeCompare(a.firstMatchedAt));

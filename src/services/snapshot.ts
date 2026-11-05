@@ -5,6 +5,7 @@ import { decodeActors } from './intelligence/actors';
 import { decodeStats } from './intelligence/stats';
 import { decodeTrends } from './intelligence/trends';
 import { decodeEntities } from './intelligence/entities';
+import { decodeNpmData, decodeNpmMalware, type NpmAdvisoryData, type NpmMalwareData } from './npm/advisories';
 
 export interface FeedSnapshot {
   generatedAt: string;
@@ -76,6 +77,28 @@ export async function loadMsrc(): Promise<MsrcData | null> {
     // Malformed months and CVE entries are dropped, so the tab can't throw on them
     const data = decodeMsrc(await res.json());
     return data && { generatedAt: data.generatedAt, months: data.months };
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/npm-advisories.json (90 days of npm advisories in detail, and the matching index) */
+export async function loadNpmAdvisories(): Promise<NpmAdvisoryData | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/npm-advisories.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    return decodeNpmData(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+/** Loads data/npm-malware.json (30 days of malicious npm releases) */
+export async function loadNpmMalware(): Promise<NpmMalwareData | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/npm-malware.json`, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    return decodeNpmMalware(await res.json());
   } catch {
     return null;
   }

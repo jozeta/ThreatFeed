@@ -4,6 +4,7 @@ import { getSettingsFromDB, saveSettingsToDB } from '../services/storage/indexed
 import { ALERT_GAP_OPTIONS, createBuiltInRules, migrateAlertRules } from '../services/intelligence/alertRules';
 import { migrateTvInterval, parseTvAnimationSpeed, parseTvTileSize } from '../services/tv/tvSettings';
 import { DEFAULT_WATCHLIST_KEYWORDS, WATCHLIST_DEFAULTS_VERSION, upgradeWatchlistKeywords } from '../services/intelligence/watchlist';
+import { cleanPackageList } from '../services/npm/packageList';
 import { cleanSyncLog, recordListChanges } from '../services/sync/syncLog';
 
 export const DEFAULT_BOOKMARK_FOLDERS: string[] = [
@@ -99,6 +100,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   frontPageHiddenCategories: [],
   savedSearches: [],
   hiddenVulnVendors: [],
+  npmPackages: [],
+  npmOsvLookup: false,
   watchedCves: [],
   newspaperSections: DEFAULT_NEWSPAPER_SECTIONS,
   bookmarkFolders: DEFAULT_BOOKMARK_FOLDERS,
@@ -155,6 +158,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           clusteringEnabled: typeof saved.clusteringEnabled === 'boolean' ? saved.clusteringEnabled : true,
           sectionsEnabled: typeof saved.sectionsEnabled === 'boolean' ? saved.sectionsEnabled : true,
           hiddenVulnVendors: Array.isArray(saved.hiddenVulnVendors) ? saved.hiddenVulnVendors.filter((v: unknown) => typeof v === 'string') : [],
+          npmPackages: cleanPackageList(saved.npmPackages),
+          npmOsvLookup: saved.npmOsvLookup === true,
           watchedCves: Array.isArray(saved.watchedCves) ? saved.watchedCves.filter((v: unknown) => typeof v === 'string') : [],
           alertRules: migrateAlertRules(saved, new Date()),
           alertGapHours: (ALERT_GAP_OPTIONS as readonly number[]).includes(saved.alertGapHours as number) ? saved.alertGapHours : 1,

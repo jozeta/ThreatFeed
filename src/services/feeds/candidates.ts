@@ -1,10 +1,10 @@
-import type { Article, KevEntry, LeakSiteVictim, MsrcData, VulnData } from '../../types';
+import type { Article, KevEntry, LeakSiteVictim, MsrcData, NpmAdvisoryData, VulnData } from '../../types';
 import { clusterArticles } from '../articles/clustering';
 import { plainText } from './rss';
-import { cveLink, patchLink, storyLink, victimLink } from './links';
+import { cveLink, npmAdvisoryLink, patchLink, storyLink, victimLink } from './links';
 
-export type FeedName = 'news' | 'vulns' | 'ransomware';
-export type ItemKind = 'news' | 'kev' | 'critical-cve' | 'exploit' | 'patch-tuesday' | 'victim';
+export type FeedName = 'news' | 'vulns' | 'ransomware' | 'npm';
+export type ItemKind = 'news' | 'kev' | 'critical-cve' | 'exploit' | 'patch-tuesday' | 'victim' | 'npm';
 
 export interface FeedCandidate {
   feed: FeedName;
@@ -208,6 +208,34 @@ export function vulnCandidates(vulns: VulnData | null, msrc: MsrcData | null, no
       categories: ['patch-tuesday'],
       keys: [`p:${m.id}`],
       rank: 3,
+    });
+  }
+  return out;
+}
+
+const NPM_RANGES_SHOWN = 3;
+
+/** Reviewed npm advisories published in the window; withdrawn ones are skipped (malware is not in this data). */
+export function npmCandidates(data: NpmAdvisoryData | null, now: number, site: string): FeedCandidate[] {
+  const out: FeedCandidate[] = [];
+  for (const a of data?.recent ?? []) {
+    if (a.withdrawn || !inWindow(a.published, now)) continue;
+    const packages = [...new Set(a.ranges.map((r) => r.package))];
+    const shown = a.ranges.slice(0, NPM_RANGES_SHOWN).map((r) =>
+      `${r.package} ${r.vulnerable || 'unknown range'}${r.patched ? `, patched in ${r.patched}` : ', no patched version'}`);
+    const more = a.ranges.length > shown.length ? ` (+${a.ranges.length - shown.length} more)` : '';
+    const extra = `${shown.length ? ` Affected: ${shown.join('; ')}${more}.` : ''}${a.cves.length ? ` ${a.cves.join(', ')}.` : ''}`;
+    out.push({
+      feed: 'npm',
+      guid: `npm:${a.id}`,
+      kind: 'npm',
+      title: `npm ${a.severity}: ${packages[0] ?? 'unknown package'} — ${a.summary}`,
+      description: describe(undefined, 0, extra, `GitHub Advisory Database ${a.url}`),
+      link: npmAdvisoryLink(site, a.id),
+      sourceTime: a.published,
+      categories: ['npm', a.severity, ...a.cves, ...packages],
+      keys: [`n:${a.id}`],
+      rank: 30,
     });
   }
   return out;

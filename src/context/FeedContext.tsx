@@ -17,10 +17,12 @@ import {
   getStoredValue,
   saveStoredValue
 } from '../services/storage/indexeddb';
-import { loadActors, loadEntities, loadMsrc, loadRansomwareIntel, loadSnapshot, loadStats, loadTrends, loadVulnData } from '../services/snapshot';
+import { loadActors, loadEntities, loadMsrc, loadNpmAdvisories, loadNpmMalware, loadRansomwareIntel, loadSnapshot, loadStats, loadTrends, loadVulnData } from '../services/snapshot';
+import { decodeNpmData, decodeNpmMalware, type NpmAdvisoryData, type NpmMalwareData } from '../services/npm/advisories';
 import { buildEntityMatcher } from '../services/intelligence/entityLinks';
+import { NPM_RULE_ID } from '../services/intelligence/alertEngine';
 import { EntityMatcherContext } from '../hooks/useEntityMatcher';
-import { createSnapshotLoader } from '../services/snapshotLoader';
+import { createSnapshotLoader, type LoadedFor } from '../services/snapshotLoader';
 import { loadArticleContent } from '../services/articleContent';
 import { safeHttpUrl, sanitizeStoredArticle } from '../services/rss/sanitizer';
 import { fetchAllFeeds, fetchFeed, resolveCanonicalFeedUrl } from '../services/rss/fetcher';
@@ -75,6 +77,10 @@ interface FeedContextType {
   stats: StatsData | null; // daily counts for the dashboards, up to 400 days
   ensureStats: () => Promise<StatsData | null>; // like ensureTrends, for data/stats.json; use the useStats hook
   ensureTrends: () => Promise<TrendsData | null>; // like ensureMsrc, for data/trends.json; use the useTrends hook
+  npmAdvisories: NpmAdvisoryData | null; // 90 days of npm advisories in detail plus the index of all reviewed ones
+  ensureNpmAdvisories: () => Promise<unknown>; // like ensureMsrc, for data/npm-advisories.json; use the useNpmAdvisories hook
+  npmMalware: NpmMalwareData | null; // 30 days of malicious npm releases
+  ensureNpmMalware: () => Promise<unknown>; // like ensureMsrc, for data/npm-malware.json; use the useNpmAdvisories hook
   articles: Article[];
   feedHealth: Record<string, FeedHealth>;
   isRefreshing: boolean;
@@ -127,6 +133,8 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [trends, setTrends] = useState<TrendsData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [entities, setEntities] = useState<EntitiesData | null>(null);
+  const [npmAdvisories, setNpmAdvisories] = useState<LoadedFor<NpmAdvisoryData> | null>(null);
+  const [npmMalware, setNpmMalware] = useState<LoadedFor<NpmMalwareData> | null>(null);
 
   // Latest values for async work started from older renders (init timer, auto-refresh interval)
   const settingsRef = useRef(settings);
@@ -515,7 +523,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Background tabs don't refresh (unless they can send alert notifications); the visibilitychange
       // handler catches up when the tab returns
       const notificationPermission = 'Notification' in window ? Notification.permission : undefined;
-      if (!navigator.onLine || shouldPauseWhenHidden(document.hidden, notificationPermission, settingsRef.current.alertRules ?? [])) return;
+      // My npm packages can't alert without packages to watch, so then it doesn't keep a hidden tab refreshing
+      const alertRules = (settingsRef.current.alertRules ?? []).filter(r => r.builtIn !== NPM_RULE_ID || settingsRef.current.npmPackages?.length);
+      if (!navigator.onLine || shouldPauseWhenHidden(document.hidden, notificationPermission, alertRules)) return;
       // Snapshot mode: reload the (regularly rebuilt) snapshot; only feeds it lacks are fetched live
       if (settingsRef.current.dataSource !== 'live') {
         refreshFeedsInternal(feedsRef.current, undefined, { useSnapshot: true, skipBackedOff: true });
@@ -798,6 +808,34 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     read: () => getStoredValue<StatsData>('stats'), save: (data) => saveStoredValue('stats', data),
   }));
 
+  // The npm files carry their own build time, so they are kept with the snapshot's (LoadedFor); the offline
+  // copy is decoded again like the network one
+  const npmAdvisoriesRef = useRef<LoadedFor<NpmAdvisoryData> | null>(null);
+  npmAdvisoriesRef.current = npmAdvisories;
+  const npmMalwareRef = useRef<LoadedFor<NpmMalwareData> | null>(null);
+  npmMalwareRef.current = npmMalware;
+  function loadedFor<T>(load: () => Promise<T | null>) {
+    return async (): Promise<LoadedFor<T> | null> => {
+      const data = await load();
+      return data && { generatedAt: snapshotAt() ?? '', data };
+    };
+  }
+  function readLoadedFor<T>(key: string, decode: (raw: unknown) => T | null) {
+    return async (): Promise<LoadedFor<T> | null> => {
+      const stored = await getStoredValue<LoadedFor<unknown>>(key);
+      const data = stored ? decode(stored.data) : null;
+      return data && { generatedAt: typeof stored?.generatedAt === 'string' ? stored.generatedAt : '', data };
+    };
+  }
+  const [ensureNpmAdvisories] = useState(() => createSnapshotLoader<LoadedFor<NpmAdvisoryData>>({
+    ref: npmAdvisoriesRef, snapshotAt, load: loadedFor(loadNpmAdvisories), setState: setNpmAdvisories,
+    read: readLoadedFor('npmAdvisories', decodeNpmData), save: (data) => saveStoredValue('npmAdvisories', data),
+  }));
+  const [ensureNpmMalware] = useState(() => createSnapshotLoader<LoadedFor<NpmMalwareData>>({
+    ref: npmMalwareRef, snapshotAt, load: loadedFor(loadNpmMalware), setState: setNpmMalware,
+    read: readLoadedFor('npmMalware', decodeNpmMalware), save: (data) => saveStoredValue('npmMalware', data),
+  }));
+
   // The names text links to their panels (data/entities.json, about 80 KB): requested once the first paint is
   // done, and again for each newer snapshot. Until then only CVE ids link
   const entitiesRef = useRef<EntitiesData | null>(null);
@@ -844,6 +882,10 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ensureTrends,
     stats,
     ensureStats,
+    npmAdvisories: npmAdvisories?.data ?? null,
+    ensureNpmAdvisories,
+    npmMalware: npmMalware?.data ?? null,
+    ensureNpmMalware,
     articles: visibleArticles,
     feedHealth,
     isRefreshing,
@@ -870,7 +912,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     visitBaseline,
     addCustomTagToArticle,
   }), [
-    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, visibleArticles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
+    feeds, cveIntel, snapshotGeneratedAt, incidents, vulns, ensureVulns, dataSources, ransomwareIntel, ensureRansomwareIntel, msrc, ensureMsrc, actors, ensureActors, trends, ensureTrends, stats, ensureStats, npmAdvisories, ensureNpmAdvisories, npmMalware, ensureNpmMalware, visibleArticles, feedHealth, isRefreshing, initialSyncDone, refreshProgress, lastUpdated, isOffline, activeArticle,
     refreshFeeds, refreshFailedFeeds, toggleFeedEnabled, addCustomFeed, addCustomFeeds, updateFeed, removeFeed,
     resetFeedsToDefault, toggleBookmark, setBookmarkFolder, setBookmarkNotes, toggleRead, markViewed,
     markAllAsRead, visitBaseline, addCustomTagToArticle,

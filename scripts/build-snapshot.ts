@@ -11,6 +11,7 @@
  */
 import { JSDOM } from 'jsdom';
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,6 +36,7 @@ const { plainText } = await import('../src/services/feeds/rss');
 const { shardWindow, groupContentByDay, readPreviousShards, planContentShards } = await import('../src/services/contentShards');
 const { countStatsByDay, mergeStats, decodeStats } = await import('../src/services/intelligence/stats');
 const { countEntitiesByDay, mergeTrends, pickPreviousTrends, trendsVocab, decodeTrends, TREND_RECOUNT_DAYS } = await import('../src/services/intelligence/trends');
+const { normalizeGhsaNpm, normalizeGhsaMalware, mergeNpmData, mergeNpmMalware, decodeNpmData, decodeNpmMalware, NPM_RECENT_DAYS, NPM_MALWARE_DAYS } = await import('../src/services/npm/advisories');
 type Feed = import('../src/types').Feed;
 type FeedHealth = import('../src/types').FeedHealth;
 type Article = import('../src/types').Article;
@@ -55,6 +57,10 @@ type MsrcData = import('../src/types').MsrcData;
 type ActorsData = import('../src/types').ActorsData;
 type TrendsData = import('../src/types').TrendsData;
 type StatsData = import('../src/types').StatsData;
+type NpmAdvisory = import('../src/types').NpmAdvisory;
+type NpmAdvisoryData = import('../src/types').NpmAdvisoryData;
+type NpmMalwareData = import('../src/types').NpmMalwareData;
+type NpmMalwareTuple = import('../src/types').NpmMalwareTuple;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'public/data/snapshot.json');
@@ -66,6 +72,8 @@ const ACTORS_OUT = resolve(root, 'public/data/actors.json'); // threat actor and
 const ENTITIES_OUT = resolve(root, 'public/data/entities.json'); // the names text links to their panels, loaded after first paint
 const STATS_OUT = resolve(root, 'public/data/stats.json'); // daily counts of CVEs, KEV additions, exploits and victims, 400 days: the dashboards
 const TRENDS_OUT = resolve(root, 'public/data/trends.json'); // mention counts per entity (daily, then weekly), two years: the detail panels' mention history
+const NPM_OUT = resolve(root, 'public/data/npm-advisories.json'); // npm advisories (90 days) and the matching index of all reviewed ones: the npm views and package matching
+const NPM_MALWARE_OUT = resolve(root, 'public/data/npm-malware.json'); // npm malware advisories (30 days): package matching
 const CONTENT_DIR = resolve(root, 'public/data/content'); // article text per publish day (content/<YYYY-MM-DD>.json): the reader and bookmarks, on demand
 const FEEDS_DIR = resolve(root, 'public/data/feeds'); // the RSS feeds and their published-items ledger (seen.json), read by feed readers and the next run
 const FEED_SITE_URL = (process.env.FEED_SITE_URL || 'https://jozeta.github.io/ThreatFeed/').replace(/\/?$/, '/');
@@ -290,6 +298,158 @@ async function loadEpssTop(): Promise<VulnData['epssTop']> {
   }
 }
 
+// ---------- npm advisories (GitHub Advisory Database, carried over between runs) ----------
+
+// Full passes: every reviewed npm advisory (about 8,100, 81 pages, in Nov 2026) and 30 days of malware (about 9,000)
+const NPM_REVIEWED_MAX_PAGES = 120;
+const NPM_MALWARE_MAX_PAGES = 120;
+const NPM_OVERLAP_MS = 15 * 60 * 1000; // advisories updated while the last run was fetching aren't missed
+const NPM_LABEL = 'GitHub npm advisories';
+const NPM_MALWARE_LABEL = 'GitHub npm malware advisories';
+
+/**
+ * A previously published file. A 404 means there is none yet (a full backfill); `error` is set when it couldn't
+ * be read, so the run doesn't write a file without the history it couldn't see.
+ */
+async function loadPreviousNpmFile<T>(url: string | undefined, decode: (raw: unknown) => T | null): Promise<{ data: T | null; error?: string }> {
+  if (!url) return { data: null };
+  try {
+    const data = decode(await getJson(url, 60000));
+    return data ? { data } : { data: null, error: 'malformed file' };
+  } catch (err) {
+    const error = errorText(err);
+    return error === 'HTTP 404' ? { data: null } : { data: null, error };
+  }
+}
+
+/**
+ * Pages of GET /advisories?ecosystem=npm&<query>, most recently updated first, until an advisory updated
+ * before `stopBefore` (ISO; '' reads to the end) or `maxPages`. `complete` is false when the page cap ended it.
+ */
+async function npmAdvisoryPages(query: string, stopBefore: string, maxPages: number, take: (raw: any) => void): Promise<{ requests: number; complete: boolean }> {
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' };
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  let url: string | null = `https://api.github.com/advisories?ecosystem=npm&${query}&per_page=100&sort=updated&direction=desc`;
+  let requests = 0;
+  while (url) {
+    if (requests === maxPages) return { requests, complete: false };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    const res: Response = await fetch(url, { headers, signal: controller.signal }).finally(() => clearTimeout(timer));
+    requests++;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const page = await res.json();
+    if (!Array.isArray(page)) throw new Error('unexpected response');
+    for (const raw of page) {
+      if (stopBefore && typeof raw?.updated_at === 'string' && raw.updated_at < stopBefore) return { requests, complete: true };
+      take(raw);
+    }
+    url = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null;
+  }
+  return { requests, complete: true };
+}
+
+/** Where an incremental run stops: the previous file's updatedAt less the overlap, or '' for a full pass */
+const npmSince = (previous: { updatedAt: string } | null) =>
+  previous && Date.parse(previous.updatedAt) > 0 ? new Date(Date.parse(previous.updatedAt) - NPM_OVERLAP_MS).toISOString() : '';
+
+interface NpmFetch {
+  previous: NpmAdvisoryData | null;
+  reviewed: NpmAdvisory[];
+  updatedAt: string; // what the written file's updatedAt will be
+  requests: number;
+  detail: string;
+  error?: string;
+}
+
+/**
+ * Reviewed npm advisories updated since the previous npm-advisories.json (PREVIOUS_NPM_URL), all of them
+ * without one (a full backfill). Null when the previous file couldn't be read, or a backfill didn't finish:
+ * nothing is written then, and the workflow keeps the published copy. A failed incremental run keeps the
+ * previous updatedAt, so the next run asks for the same window again; one that hit the page cap resets it, so
+ * the next run makes a full pass.
+ */
+async function fetchNpmAdvisories(): Promise<NpmFetch | null> {
+  const prev = await loadPreviousNpmFile(process.env.PREVIOUS_NPM_URL || (PREVIOUS_BASE && `${PREVIOUS_BASE}npm-advisories.json`), decodeNpmData);
+  if (prev.error) {
+    report({ id: 'npm-advisories', label: NPM_LABEL, status: 'failed', detail: `previous file unreadable (${prev.error}), not written` });
+    return null;
+  }
+  const previous = prev.data;
+  const out: NpmFetch = { previous, reviewed: [], updatedAt: new Date().toISOString(), requests: 0, detail: '' };
+  try {
+    const r = await npmAdvisoryPages('type=reviewed', npmSince(previous), NPM_REVIEWED_MAX_PAGES, raw => {
+      const a = normalizeGhsaNpm(raw, CWE_NAMES);
+      if (a) out.reviewed.push(a);
+    });
+    out.requests = r.requests;
+    const fetched = `${out.reviewed.length} advisories in ${out.requests} requests`;
+    if (!r.complete && !previous) {
+      report({ id: 'npm-advisories', label: NPM_LABEL, status: 'failed', detail: `backfill stopped at the ${NPM_REVIEWED_MAX_PAGES}-page cap (${fetched}), not written` });
+      return null;
+    }
+    if (!r.complete) out.updatedAt = new Date(0).toISOString();
+    out.detail = `${previous ? 'incremental' : 'full backfill'}: ${fetched}${r.complete ? '' : '; page cap reached, the next run makes a full pass'}`;
+  } catch (err) {
+    out.error = errorText(err);
+    if (!previous) {
+      report({ id: 'npm-advisories', label: NPM_LABEL, status: 'failed', detail: `backfill failed (${out.error}), not written` });
+      return null;
+    }
+    out.updatedAt = previous.updatedAt;
+    out.detail = `${out.error}; kept the data from ${previous.updatedAt}`;
+  }
+  return out;
+}
+
+/**
+ * Malware advisories of the last NPM_MALWARE_DAYS days, merged into the previous npm-malware.json
+ * (PREVIOUS_NPM_MALWARE_URL), which is read and handled like npm-advisories.json. A backfill that hit the page
+ * cap before reaching NPM_MALWARE_DAYS back writes nothing.
+ */
+async function fetchNpmMalware(): Promise<{ data: NpmMalwareData; requests: number } | null> {
+  const prev = await loadPreviousNpmFile(process.env.PREVIOUS_NPM_MALWARE_URL || (PREVIOUS_BASE && `${PREVIOUS_BASE}npm-malware.json`), decodeNpmMalware);
+  if (prev.error) {
+    report({ id: 'npm-malware', label: NPM_MALWARE_LABEL, status: 'failed', detail: `previous file unreadable (${prev.error}), not written` });
+    return null;
+  }
+  const previous = prev.data;
+  const startedAt = new Date().toISOString();
+  const windowFrom = new Date(Date.now() - NPM_MALWARE_DAYS * DAY_MS).toISOString();
+  const since = npmSince(previous);
+  const fetched: NpmMalwareTuple[] = [];
+  const withdrawn: string[] = [];
+  let requests = 0;
+  try {
+    const m = await npmAdvisoryPages('type=malware', since > windowFrom ? since : windowFrom, NPM_MALWARE_MAX_PAGES, raw => {
+      if (raw?.withdrawn_at && typeof raw.ghsa_id === 'string') withdrawn.push(raw.ghsa_id);
+      else fetched.push(...normalizeGhsaMalware(raw));
+    });
+    requests = m.requests;
+    const what = `${new Set(fetched.map(x => x[0])).size} advisories in ${requests} requests`;
+    if (!m.complete && !previous) {
+      report({ id: 'npm-malware', label: NPM_MALWARE_LABEL, status: 'failed', detail: `backfill stopped at the ${NPM_MALWARE_MAX_PAGES}-page cap before ${NPM_MALWARE_DAYS} days back (${what}), not written` });
+      return null;
+    }
+    const data = mergeNpmMalware(previous, fetched, withdrawn, Date.now());
+    data.updatedAt = m.complete ? startedAt : new Date(0).toISOString();
+    report({
+      id: 'npm-malware', label: NPM_MALWARE_LABEL, status: 'ok', count: data.entries.length,
+      detail: `${previous ? 'incremental' : 'full backfill'}: ${what}${m.complete ? '' : '; page cap reached, the next run makes a full pass'}; ${data.entries.length} packages (${NPM_MALWARE_DAYS}d)`,
+    });
+    return { data, requests };
+  } catch (err) {
+    if (!previous) {
+      report({ id: 'npm-malware', label: NPM_MALWARE_LABEL, status: 'failed', detail: `backfill failed (${errorText(err)}), not written` });
+      return null;
+    }
+    // Whatever was fetched is kept; the previous updatedAt makes the next run ask for the same window again
+    const data = mergeNpmMalware(previous, fetched, withdrawn, Date.now());
+    data.updatedAt = previous.updatedAt;
+    report({ id: 'npm-malware', label: NPM_MALWARE_LABEL, status: 'cached', count: data.entries.length, detail: `${errorText(err)}; kept the data from ${previous.updatedAt}` });
+    return { data, requests };
+  }
+}
 
 // ---------- Generic helpers for optional JSON sources ----------
 
@@ -596,6 +756,8 @@ const dailyPromise = Promise.all([rlPromise, previousActorsPromise])
   .then(([rl, previousActors]) => loadDailySources(previousIntel, rl.updates, !previousActors?.actors.length));
 const kevEntries = await loadKev();
 const vulnSourcesPromise = Promise.all([loadNvdData(new Set(kevEntries.map(k => k.cve))), loadAdvisories(), loadEpssTop()]);
+const npmPromise = fetchNpmAdvisories();
+const npmMalwarePromise = fetchNpmMalware();
 const { feeds, results } = await fetchFeeds();
 const articles = results.flatMap(r => r.articles);
 const feedHealth = Object.fromEntries(results.map(r => [r.health.feedId, r.health]));
@@ -608,13 +770,39 @@ const notable = (nvd?.cache.records ?? []).filter(r => (r.score ?? 0) >= 9).sort
 
 const watchable = (nvd?.cache.records ?? []).filter(r => (r.score ?? 0) >= 7 && (r.score ?? 0) < 9).sort((a, b) => b.published.localeCompare(a.published));
 
-// EPSS for every CVE the app shows: in articles, the KEV catalog and critical NVD records
+// The npm advisories' CVEs get fresh EPSS scores at most daily (epssAt); between refreshes they keep theirs
+const [npm, npmMalware] = await Promise.all([npmPromise, npmMalwarePromise]);
+const npmRecentFrom = new Date(Date.now() - NPM_RECENT_DAYS * DAY_MS).toISOString();
+const npmEpssCves = npm && hoursSince(npm.previous?.epssAt) >= 24
+  ? [...npm.reviewed, ...(npm.previous?.recent ?? [])].filter(a => a.published >= npmRecentFrom || a.updated >= npmRecentFrom).flatMap(a => a.cves)
+  : [];
+
+// EPSS for every CVE the app shows: in articles, the KEV catalog, critical NVD records and npm advisories
 const cves = Array.from(new Set([
   ...articles.flatMap(a => a.cves || []),
   ...kevEntries.map(k => k.cve),
   ...notable.map(r => r.id),
+  ...npmEpssCves,
 ]));
 const epss = await loadEpss(cves);
+
+let npmData: NpmAdvisoryData | null = null;
+if (npm) {
+  const npmScores = new Map(npmEpssCves.flatMap(c => {
+    const s = epss.get(c);
+    return s ? [[c, { score: s.epss, percentile: s.percentile }] as const] : [];
+  }));
+  npmData = mergeNpmData(npm.previous, npm.reviewed, new Set(kevEntries.map(k => k.cve)), npmScores, Date.now());
+  npmData.updatedAt = npm.updatedAt;
+  if (npmScores.size) npmData.epssAt = new Date().toISOString();
+  report({
+    id: 'npm-advisories',
+    label: NPM_LABEL,
+    status: npm.error ? 'cached' : 'ok',
+    count: npmData.index.length,
+    detail: `${npm.detail}; ${npmData.recent.length} detailed (${NPM_RECENT_DAYS}d)${npmScores.size ? `, EPSS refreshed for ${npmScores.size} CVEs` : ''}`,
+  });
+}
 const kevById = new Map(kevEntries.map(k => [k.cve, k]));
 const cveIntel: Record<string, CveIntel> = {};
 for (const cve of new Set(articles.flatMap(a => a.cves || []))) {
@@ -853,11 +1041,12 @@ let feedCounts: Record<string, number> = {};
 let feedsError = previousLedger.ok ? '' : `previous ledger unreadable (${previousLedger.error})`;
 if (previousLedger.ok) {
   try {
-    const built = buildFeeds({ articles, victims, vulns, msrc }, previousLedger.ledger, Date.now(), FEED_SITE_URL);
+    const built = buildFeeds({ articles, victims, vulns, msrc, npm: npmData }, previousLedger.ledger, Date.now(), FEED_SITE_URL);
     feedFiles = [
       { name: 'news.xml', text: built.files.news, budget: 300 * 1024 },
       { name: 'vulns.xml', text: built.files.vulns, budget: 300 * 1024 },
       { name: 'ransomware.xml', text: built.files.ransomware, budget: 500 * 1024 },
+      { name: 'npm.xml', text: built.files.npm, budget: 300 * 1024 },
       { name: 'seen.json', text: JSON.stringify(built.ledger), budget: 2 * 1024 * 1024 },
     ];
     feedCounts = built.counts;
@@ -872,7 +1061,7 @@ report({
   id: 'feeds',
   label: 'Published RSS feeds',
   status: feedsError ? 'failed' : 'ok',
-  count: feedsError ? 0 : (feedCounts.news ?? 0) + (feedCounts.vulns ?? 0) + (feedCounts.ransomware ?? 0),
+  count: feedsError ? 0 : (feedCounts.news ?? 0) + (feedCounts.vulns ?? 0) + (feedCounts.ransomware ?? 0) + (feedCounts.npm ?? 0),
   detail: feedsError ? `${feedsError}, not written`
     : previousLedger.ok && !previousLedger.ledger ? 'no previous ledger, started'
     : previousLedger.ok && previousLedger.source === 'cache' ? 'previous ledger from the Action cache' : undefined,
@@ -882,6 +1071,10 @@ if (trendsBase.write) writeFileSync(TRENDS_OUT, trendsJson);
 const statsJson = statsBase.write ? JSON.stringify({ version: 1, generatedAt, days: statsDays }) : '';
 if (statsBase.write) writeFileSync(STATS_OUT, statsJson);
 if (nvd) writeFileSync(NVD_CACHE_OUT, JSON.stringify(encodeNvdCache(nvd.cache)));
+const npmJson = npmData ? JSON.stringify(npmData) : '';
+if (npmData) writeFileSync(NPM_OUT, npmJson);
+const npmMalwareJson = npmMalware ? JSON.stringify(npmMalware.data) : '';
+if (npmMalware) writeFileSync(NPM_MALWARE_OUT, npmMalwareJson);
 
 const healthy = results.filter(r => r.health.status === 'healthy').length;
 const mb = (s: string) => `${(s.length / 1e6).toFixed(2)} MB`;
@@ -903,5 +1096,13 @@ console.log(trendsBase.write
 console.log(statsBase.write
   ? `Stats: ${statsDayKeys.length} days since ${statsDayKeys[0]}, ${(statsJson.length / 1024).toFixed(0)} KB${statsJson.length > 1.5e6 ? ' (over the 1.5 MB budget)' : ''}`
   : `Stats: not written, the previous history couldn't be read (${publishedStats.error})`);
+// Pages serves these gzipped; their budgets are on the gzipped size
+const gzKb = (text: string) => gzipSync(text).length / 1024;
+console.log(npmData
+  ? `npm advisories: ${npmData.index.length} reviewed in the index (${npmData.index.filter(e => e[3]).length} withdrawn), ${npmData.recent.length} detailed (${NPM_RECENT_DAYS}d), ${npm?.requests ?? 0} GitHub requests, ${(npmJson.length / 1024).toFixed(0)} KB, ${gzKb(npmJson).toFixed(0)} KB gzipped${gzKb(npmJson) > 800 ? ' (over the 800 KB gzipped budget)' : ''}`
+  : `npm advisories: not written (${sources.find(x => x.id === 'npm-advisories')?.detail ?? 'no data'})`);
+console.log(npmMalware
+  ? `npm malware: ${npmMalware.data.entries.length} packages (${new Set(npmMalware.data.entries.map(m => m[0])).size} advisories, ${NPM_MALWARE_DAYS}d), ${npmMalware.requests} GitHub requests, ${(npmMalwareJson.length / 1024).toFixed(0)} KB, ${gzKb(npmMalwareJson).toFixed(0)} KB gzipped${gzKb(npmMalwareJson) > 600 ? ' (over the 600 KB gzipped budget)' : ''}`
+  : `npm malware: not written (${sources.find(x => x.id === 'npm-malware')?.detail ?? 'no data'})`);
 console.log(`Sources: ${sources.map(x => `${x.id}=${x.status}`).join(' ')}`);
 for (const r of results.filter(r => r.health.status !== 'healthy')) console.log(`  ✗ ${r.health.feedId}: ${r.health.status} ${r.health.errorMessage ?? ''}`);

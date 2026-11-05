@@ -16,6 +16,10 @@ export function patchLink(site: string, monthId: string): string {
   return `${site}#/vulns/patch?month=${enc(monthId)}`;
 }
 
+export function npmAdvisoryLink(site: string, id: string): string {
+  return `${site}#/vulns/npm?advisory=${enc(id)}`;
+}
+
 export function victimLink(site: string, v: Pick<LeakSiteVictim, 'id' | 'group'>): string {
   return `${site}#/ransomware?victim=${enc(v.id)}&group=${enc(v.group.toLowerCase())}`;
 }

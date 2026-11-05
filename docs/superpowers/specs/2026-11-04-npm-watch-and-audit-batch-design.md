@@ -289,6 +289,13 @@ exist. What remains is Copy as rich text and Download HTML.
 - **Charts:** `StackedBars` lives in `src/pages/vulns/StackedBars.tsx`. It moves to
   `src/components/charts/` and is generalised there; the existing page keeps using it.
 
+- **npm volumes, measured on 4 Nov:**
+  - There are 8,083 reviewed npm advisories all time, and malware advisories run at about 500 a day, so the original budget can't hold everything.
+  - `npm-advisories.json` therefore holds the 90-day detailed list (descriptions capped at 800 characters) plus a compact tuple index of every reviewed advisory.
+  - Malware moves to its own file, `npm-malware.json`, as compact tuples for the **last 30 days** (not 90). The UI says "malware: last 30 days checked".
+  - Size budgets are on gzipped size: 800 KB for advisories and 600 KB for malware.
+  - The OSV opt-in covers older malicious releases.
+
 ## Non-goals
 - No package.json or lockfile import (the owner chose typed names). This can come later.
 - No other ecosystems (PyPI and others) in this round. The data model keeps an `ecosystem` field so

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { AlertMatch, AlertStore, feedMatches, isNew } from '../services/intelligence/alertEngine';
-import { ALERT_STORE_EVENT, loadAlertStore, saveAlertStore } from '../services/intelligence/alertStore';
+import { ALERT_STORE_EVENT, loadAlertStore, saveAlertSeen } from '../services/intelligence/alertStore';
 import { AlertRuleKind } from '../types';
 
 /** One My Feed row: an item and every rule that matched it */
@@ -40,7 +40,8 @@ export function groupMatches(matches: AlertMatch[], store: AlertStore): { news: 
 
 /** What the alert rules have matched, for My Feed and the nav badge; reloads whenever the alert store changes */
 export function useAlertFeed(): AlertFeed {
-  const { feeds, articles, vulns, cveIntel } = useFeeds();
+  // The npm files are only read here, never loaded: with them in (AlertMonitor loads them for the npm rule) npm rows get their summaries
+  const { feeds, articles, vulns, cveIntel, npmAdvisories, npmMalware } = useFeeds();
   const { settings } = useSettings();
   const [store, setStore] = useState<AlertStore | null>(null);
 
@@ -62,13 +63,13 @@ export function useAlertFeed(): AlertFeed {
       vulns,
       cveIntel,
       feedCategory: id => categories.get(id),
+      npm: { packages: settings.npmPackages, advisories: npmAdvisories, malware: npmMalware },
     }, store);
     return groupMatches(matches, store);
-  }, [store, feeds, articles, vulns, cveIntel, settings]);
+  }, [store, feeds, articles, vulns, cveIntel, npmAdvisories, npmMalware, settings]);
 
   const markSeen = useCallback(async (kind: AlertRuleKind) => {
-    const current = await loadAlertStore();
-    await saveAlertStore({ ...current, seen: { ...current.seen, [kind]: new Date().toISOString() } });
+    await saveAlertSeen(kind, new Date().toISOString());
   }, []);
 
   return {

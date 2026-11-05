@@ -6,6 +6,11 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- npm vulnerability watch: Settings → My npm packages (`name` or `name@version`, synced and in backups) matched on your device against all reviewed GitHub npm advisories, with statuses (affected, not affected, no version, unknown) and a minimum safe version
+- Vulnerabilities → npm packages tab: stats, per-day chart, filters, highlighted rows, My packages view, malware section (malicious and hijacked releases, 30 days) and a linkable advisory panel
+- Optional "Also check full history with OSV.dev" for your npm packages (off by default, per device; sends package names and versions to Google's OSV service)
+- Built-in "My npm packages" alert rule: one notification per new advisory affecting your packages or malicious release, plus a count badge on the npm tab
+- Fourth RSS feed, data/feeds/npm.xml (reviewed npm advisories, last 7 days)
 - Briefing: "Copy rich text" (HTML for pasting into mail or docs, with a Markdown fallback) and "Download .html"; the Markdown buttons stay
 - Alert Rules: "Add from template: my stack" adds two disabled Vulns rules, "critical CVEs" (CVSS 9+) and "exploited" (KEV or EPSS 50%+), for the products in My Stack
 - Watchlist badges: your own terms get a strong badge and the default terms a subtle one; Settings shows how many stories each term matched in 7 days

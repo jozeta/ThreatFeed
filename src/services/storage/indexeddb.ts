@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Article, Feed, FeedHealth, UserSettings } from '../../types';
 import { isValidFeedUrl, sanitizeStoredArticle } from '../rss/sanitizer';
 import { cleanSyncLog, syncLogForImport } from '../sync/syncLog';
+import { cleanPackageList } from '../npm/packageList';
 import { keepBookmarkText } from '../articles/merge';
 
 interface ThreatFeedDB extends DBSchema {
@@ -303,6 +304,15 @@ export async function saveStoredValue(key: string, value: unknown): Promise<void
   await db.put('settings', { key, value });
 }
 
+/** Read-modify-write of one stored value in a single transaction, so a concurrent write in between isn't lost */
+export async function updateStoredValue<T>(key: string, update: (current: T | null) => T): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('settings', 'readwrite');
+  const entry = await tx.store.get(key);
+  await tx.store.put({ key, value: update(entry ? (entry.value as T) : null) });
+  await tx.done;
+}
+
 export async function getSettingsFromDB(): Promise<UserSettings | null> {
   try {
     const db = await getDB();
@@ -340,6 +350,19 @@ export async function exportAllThreatFeedData() {
     articleStates,
     bookmarkedArticles,
     settings: settingsEntry?.value || null,
+  };
+}
+
+/**
+ * Validates the npm fields of imported settings. Malformed package entries are dropped. The OSV lookup sends package
+ * names to a third party, so a backup restore (the user's own file) may carry it but synced data never changes it:
+ * a fromSync import keeps this device's current value (off when there is none).
+ */
+export function cleanImportedSettings(imported: any, current: Partial<UserSettings> | undefined, fromSync: boolean) {
+  return {
+    ...imported,
+    npmPackages: cleanPackageList(imported.npmPackages),
+    npmOsvLookup: fromSync ? current?.npmOsvLookup === true : imported.npmOsvLookup === true,
   };
 }
 
@@ -405,9 +428,11 @@ export async function importThreatFeedData(data: any, { fromSync = false }: { fr
   if (data.settings && typeof data.settings === 'object') {
     const settingsStore = tx.objectStore('settings');
     const now = new Date();
-    const current = fromSync ? undefined : await settingsStore.get(SETTINGS_KEY);
-    const syncLog = fromSync ? cleanSyncLog(data.settings.syncLog, now) : syncLogForImport(current?.value?.syncLog, data.settings, now);
-    await settingsStore.put({ key: SETTINGS_KEY, value: { ...data.settings, syncLog } });
+    const current = await settingsStore.get(SETTINGS_KEY);
+    const settings = cleanImportedSettings(data.settings, current?.value, fromSync);
+    const syncLog = fromSync ? cleanSyncLog(data.settings.syncLog, now) : syncLogForImport(current?.value?.syncLog, settings, now);
+    // Entries that aren't a valid npm name or name@version are dropped; syncLogForImport above only sees the cleaned list
+    await settingsStore.put({ key: SETTINGS_KEY, value: { ...settings, syncLog } });
   }
 
   await tx.done;

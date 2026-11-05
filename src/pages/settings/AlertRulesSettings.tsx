@@ -22,6 +22,7 @@ const SOURCE_LABEL: Record<BuiltInRule, { text: string; anchor?: string }> = {
   'stack-news': { text: 'your stack', anchor: 'stack-settings' },
   'stack-vulns': { text: 'your stack', anchor: 'stack-settings' },
   'watched-cves': { text: 'your watched CVEs' },
+  'npm-packages': { text: 'your npm packages', anchor: 'npm-settings' },
 };
 
 export const AlertRulesSettings: React.FC = () => {
@@ -116,9 +117,11 @@ export const AlertRulesSettings: React.FC = () => {
       <div className="space-y-2">
         {rules.map(rule => {
           const isEditing = editing?.rule.id === rule.id;
-          const eventDriven = containsField(resolveRoot(rule, lists), 'watched');
+          // My npm packages alerts on new advisories for the packages, not on conditions: nothing to duplicate
+          const npm = rule.builtIn === 'npm-packages';
+          const eventDriven = npm || containsField(resolveRoot(rule, lists), 'watched');
           const source = rule.builtIn ? SOURCE_LABEL[rule.builtIn] : undefined;
-          const terms = rule.builtIn ? builtInTerms(rule, lists).length : 0;
+          const terms = npm ? settings.npmPackages.length : rule.builtIn ? builtInTerms(rule, lists).length : 0;
           return (
             <div key={rule.id} className="space-y-2">
               <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-theme-border bg-theme-card">
@@ -128,7 +131,7 @@ export const AlertRulesSettings: React.FC = () => {
                   </div>
                   {source && (
                     <div className="text-xs font-serif text-theme-text-muted">
-                      Uses {source.text}: {terms} {rule.builtIn === 'watched-cves' ? 'CVEs' : 'keywords'}
+                      Uses {source.text}: {terms} {rule.builtIn === 'watched-cves' ? 'CVEs' : npm ? 'packages' : 'keywords'}
                       {source.anchor && (
                         <> · <a href={`#${source.anchor}`} className="text-theme-accent hover:underline" onClick={e => { e.preventDefault(); document.getElementById(source.anchor!)?.scrollIntoView({ behavior: 'smooth' }); }}>edit</a></>
                       )}
@@ -151,7 +154,7 @@ export const AlertRulesSettings: React.FC = () => {
                   🔔
                 </button>
                 <button className={smallButton} onClick={() => setEditing(isEditing ? null : { rule, isNew: false })}>{rule.builtIn ? 'View' : 'Edit'}</button>
-                {rule.builtIn ? (
+                {npm ? null : rule.builtIn ? (
                   <button className={smallButton} onClick={() => duplicate(rule)}>Duplicate as custom rule</button>
                 ) : confirmId === rule.id ? (
                   <button className={`${smallButton} !text-rose-500 !border-rose-500/50`} onClick={() => remove(rule.id)} onBlur={() => setConfirmId(null)} autoFocus>Confirm delete</button>

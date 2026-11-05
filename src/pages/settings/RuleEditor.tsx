@@ -28,17 +28,26 @@ const primaryClass = 'px-3 py-1.5 rounded border text-xs font-mono font-bold bg-
 
 const BuiltInView: React.FC<{ rule: AlertRule; lists: RuleLists; onCancel: () => void; onDuplicate: (r: AlertRule) => void }> = ({ rule, lists, onCancel, onDuplicate }) => {
   const root = resolveRoot(rule, lists);
+  const npm = rule.builtIn === 'npm-packages';
   return (
     <div className="space-y-3 p-4 rounded-lg border border-theme-border bg-theme-card">
       <h3 className="font-serif font-bold text-theme-text">{rule.name} <span className="text-xs font-mono text-theme-text-muted">(built-in, read-only)</span></h3>
-      <p className="text-xs font-mono text-theme-text-muted">Match {root.op} of:</p>
-      <ul className="list-disc pl-5 text-xs font-serif text-theme-text space-y-1">
-        {(root.items as unknown[]).map((c, i) => (
-          <li key={i}>{describeCondition(rule.kind, c as Parameters<typeof describeCondition>[1])}</li>
-        ))}
-      </ul>
+      {npm ? (
+        <p className="text-xs font-serif text-theme-text">
+          Alerts once for each new advisory or malware report affecting your npm packages. Advisories that already existed when a package was added are not alerted.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs font-mono text-theme-text-muted">Match {root.op} of:</p>
+          <ul className="list-disc pl-5 text-xs font-serif text-theme-text space-y-1">
+            {(root.items as unknown[]).map((c, i) => (
+              <li key={i}>{describeCondition(rule.kind, c as Parameters<typeof describeCondition>[1])}</li>
+            ))}
+          </ul>
+        </>
+      )}
       <div className="flex gap-2">
-        <button type="button" className={buttonClass} onClick={() => onDuplicate(rule)}>Duplicate as custom rule</button>
+        {!npm && <button type="button" className={buttonClass} onClick={() => onDuplicate(rule)}>Duplicate as custom rule</button>}
         <button type="button" className={buttonClass} onClick={onCancel}>Close</button>
       </div>
     </div>

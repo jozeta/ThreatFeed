@@ -15,7 +15,7 @@ export interface FeedLedger {
   feeds: Record<FeedName, Record<string, LedgerEntry>>;
 }
 
-export const FEED_NAMES: FeedName[] = ['news', 'vulns', 'ransomware'];
+export const FEED_NAMES: FeedName[] = ['news', 'vulns', 'ransomware', 'npm'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -24,7 +24,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isTime = (value: unknown): value is string => typeof value === 'string' && !isNaN(Date.parse(value));
 
 export function emptyLedger(): FeedLedger {
-  return { version: 1, feeds: { news: {}, vulns: {}, ransomware: {} } };
+  return { version: 1, feeds: { news: {}, vulns: {}, ransomware: {}, npm: {} } };
 }
 
 function decodeEntry(raw: unknown): LedgerEntry | null {

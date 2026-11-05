@@ -45,6 +45,7 @@ class TvErrorBoundary extends React.Component<{ children: React.ReactNode }, { f
 // Detail panels over any page, each from its hash parameter
 const VendorPanelHost = lazy(() => import('./components/VendorPanel'));
 const CvePanelHost = lazy(() => import('./pages/vulns/CvePanelHost').then((m) => ({ default: m.CvePanelHost })));
+const NpmAdvisoryPanelHost = lazy(() => import('./pages/vulns/NpmAdvisoryPanel').then((m) => ({ default: m.NpmAdvisoryPanelHost })));
 const ActorPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.ActorPanelHost })));
 const MalwarePanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.MalwarePanelHost })));
 const GroupPanelHost = lazy(() => import('./components/EntityPanelHosts').then((m) => ({ default: m.GroupPanelHost })));
@@ -66,9 +67,9 @@ export const App: React.FC = () => {
   const setActiveTab = useCallback((tab: ActiveNavTab) => navigate(tab), [navigate]);
   // Old links to removed pages (#/trends, #/actors?actor=G0007) become the newspaper's, keeping their panel
   useEffect(redirectRemovedPage);
-  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…, ?tag=…) open over any page;
-  // a blank, overlong or (for ?cve=) malformed value opens none
-  const { actor, malware, group, vendor, cve, tag } = Object.fromEntries(PANEL_PARAMS.map((key) => [key, panelParam(key, route.params.get(key))]));
+  // Detail panels (?vendor=Fortinet, ?cve=…, ?actor=G0007, ?malware=…, ?group=…, ?tag=…, ?advisory=GHSA-…) open over
+  // any page; a blank, overlong or (for ?cve= and ?advisory=) malformed value opens none
+  const { actor, malware, group, vendor, cve, tag, advisory } = Object.fromEntries(PANEL_PARAMS.map((key) => [key, panelParam(key, route.params.get(key))]));
   // Links from the RSS feeds: ?article= opens the reader, ?victim= is highlighted by the victims table
   const deepLink = useFeedDeepLinks();
   const levels = usePanelLevels(route.params, Boolean(activeArticle));
@@ -280,6 +281,7 @@ export const App: React.FC = () => {
             />
           </PanelLevel.Provider>
         )}
+        {advisory && <PanelLevel.Provider value={levels.advisory ?? 0}><NpmAdvisoryPanelHost key={advisory} id={advisory} onOpenArticle={openArticleFromPanel} /></PanelLevel.Provider>}
       </Suspense>
 
       {/* Reader Modal (Distraction-free article reader) */}

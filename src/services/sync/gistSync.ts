@@ -54,7 +54,8 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
   const articles = new Map(local.bookmarkedArticles.map(a => [a.id, a]));
   for (const a of remote.bookmarkedArticles || []) if (!articles.has(a.id)) articles.set(a.id, a);
 
-  let settings = local.settings || remote.settings || null;
+  // The OSV lookup sends package names to a third party: it is a per-device opt-in and never arrives through sync
+  let settings = local.settings || (remote.settings ? { ...remote.settings, npmOsvLookup: false } : null);
   if (local.settings && remote.settings) {
     const now = new Date();
     const syncLog = mergeSyncLogs(cleanSyncLog(local.settings.syncLog, now), cleanSyncLog(remote.settings.syncLog, now), now);
@@ -67,6 +68,7 @@ export function mergeSyncData(local: SyncData, remote: Partial<SyncData>): SyncD
       mutedKeywords: list('mutedKeywords'),
       savedSearches: list('savedSearches'),
       bookmarkFolders: list('bookmarkFolders'),
+      npmPackages: list('npmPackages'),
       alertRules: mergeAlertRules(local.settings.alertRules, remote.settings.alertRules, syncLog),
       alertGapHours: local.settings.alertGapHours,
       syncLog,

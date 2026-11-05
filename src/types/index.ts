@@ -452,6 +452,8 @@ export interface UserSettings {
   frontPageHiddenCategories: string[]; // categories left off the newspaper front page
   savedSearches: string[];
   hiddenVulnVendors: string[]; // KEV vendors left off the Vulnerabilities page
+  npmPackages: string[]; // npm packages to watch for advisories: `name` (any version) or `name@exact.version`
+  npmOsvLookup: boolean; // also query OSV.dev for the full history of the watched packages (sends names and versions to Google)
   watchedCves: string[]; // CVEs the user follows: alerts on KEV listing, EPSS jumps and new coverage
   newspaperSections: NewspaperSectionConfig[];
   bookmarkFolders: string[];
@@ -462,7 +464,7 @@ export interface UserSettings {
   syncLog?: SyncLog; // when list items were last added/removed, so Gist sync can propagate deletions
 }
 
-export type SyncCollection = 'watchlistKeywords' | 'stackKeywords' | 'mutedKeywords' | 'savedSearches' | 'bookmarkFolders' | 'alertRules';
+export type SyncCollection = 'watchlistKeywords' | 'stackKeywords' | 'mutedKeywords' | 'savedSearches' | 'bookmarkFolders' | 'npmPackages' | 'alertRules';
 export interface SyncEvent { removed: boolean; at: string } // at: ISO time
 /** Latest add/remove event per item: list items keyed by lowercased term, alert rules by id (removals only) */
 export type SyncLog = Partial<Record<SyncCollection, Record<string, SyncEvent>>>;
@@ -488,7 +490,7 @@ export type TvTileSize = 'large' | 'medium' | 'small' | 'xsmall';
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 
 export type AlertRuleKind = 'news' | 'vulns';
-export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves';
+export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves' | 'npm-packages';
 export type NewsCondition =
   | { field: 'keyword'; values: string[] } // checkWatchlistMatch semantics
   | { field: 'vendor'; values: string[] } // containsTerm on title + description
@@ -509,3 +511,6 @@ export interface AlertRule {
   root: ConditionGroup<NewsCondition> | ConditionGroup<VulnCondition>;
   builtIn?: BuiltInRule; createdAt: string; updatedAt: string;
 }
+
+// npm vulnerability watch: the published npm-advisories.json and npm-malware.json
+export type { NpmRange, NpmAdvisory, NpmIndexRange, NpmIndexEntry, NpmAdvisoryData, NpmMalwareTuple, NpmMalwareData } from '../services/npm/advisories';

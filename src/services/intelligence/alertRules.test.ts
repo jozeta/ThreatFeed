@@ -170,12 +170,13 @@ describe('built-in rules', () => {
 
   it('migrates the old watchlist toggle onto Watchlist and Watched CVEs only', () => {
     const on = migrateAlertRules({ watchlistNotifications: true }, now);
-    expect(on).toHaveLength(4);
+    expect(on).toHaveLength(5);
     expect(on.map(r => [r.id, r.notify])).toEqual([
-      ['watchlist', true], ['stack-news', false], ['stack-vulns', false], ['watched-cves', true],
+      ['watchlist', true], ['stack-news', false], ['stack-vulns', false], ['watched-cves', true], ['npm-packages', true],
     ]);
     expect(on.every(r => r.enabled)).toBe(true);
-    expect(migrateAlertRules({ watchlistNotifications: false }, now).every(r => !r.notify)).toBe(true);
+    // My npm packages notifies regardless of the old toggle
+    expect(migrateAlertRules({ watchlistNotifications: false }, now).filter(r => r.notify).map(r => r.id)).toEqual(['npm-packages']);
   });
 
   it('keeps saved custom rules and re-adds missing built-ins', () => {
@@ -184,9 +185,9 @@ describe('built-in rules', () => {
       root: { op: 'all', items: [{ field: 'kev' }] }, createdAt: 'x', updatedAt: 'x',
     };
     const out = migrateAlertRules({ alertRules: [custom, { bogus: true } as unknown as AlertRule] }, now);
-    expect(out).toHaveLength(5);
+    expect(out).toHaveLength(6);
     expect(out).toContainEqual(custom);
-    expect(out.filter(r => r.builtIn)).toHaveLength(4);
+    expect(out.filter(r => r.builtIn)).toHaveLength(5);
   });
 
   it('resolves built-in roots from the live lists', () => {
@@ -245,7 +246,7 @@ describe('sanitizeRule condition shapes', () => {
     expect(sanitizeRule(custom('vulns', { field: 'bogus' }))).toBeNull();
     expect(sanitizeRule(custom('news', { field: 'kev' }))).toBeNull();
     expect(sanitizeRule(custom('vulns', { field: 'keyword', values: ['x'] }))).toBeNull();
-    expect(migrateAlertRules({ alertRules: [custom('vulns', { field: 'vendor' })] as unknown as AlertRule[] }, new Date())).toHaveLength(4);
+    expect(migrateAlertRules({ alertRules: [custom('vulns', { field: 'vendor' })] as unknown as AlertRule[] }, new Date())).toHaveLength(5);
   });
 
   it('evaluating a malformed condition does not throw', () => {
@@ -289,7 +290,7 @@ describe('matchedVulnCves', () => {
 describe('alertSettingsFrom', () => {
   const now = new Date('2026-10-30T12:00:00Z');
   const memory = {
-    alertRules: createBuiltInRules(false, now), watchlistKeywords: ['a'], stackKeywords: ['b'], watchedCves: ['CVE-1'], alertGapHours: 1,
+    alertRules: createBuiltInRules(false, now), watchlistKeywords: ['a'], stackKeywords: ['b'], watchedCves: ['CVE-1'], alertGapHours: 1, npmPackages: ['lodash@4.17.15'],
   };
 
   it('prefers what another tab saved, so the alert tab runs current rules and lists', () => {
@@ -297,11 +298,11 @@ describe('alertSettingsFrom', () => {
       id: 'c1', name: 'New', kind: 'vulns', enabled: true, notify: true, root: { op: 'all', items: [{ field: 'kev' }] }, createdAt: 't', updatedAt: 't',
     };
     const out = alertSettingsFrom(memory, {
-      alertRules: [custom], watchlistKeywords: ['x'], stackKeywords: [], watchedCves: ['CVE-2'], alertGapHours: 6,
+      alertRules: [custom], watchlistKeywords: ['x'], stackKeywords: [], watchedCves: ['CVE-2'], alertGapHours: 6, npmPackages: ['react'],
     }, now);
     expect(out.alertRules.map(r => r.id)).toContain('c1');
-    expect(out.alertRules.filter(r => r.builtIn)).toHaveLength(4);
-    expect(out).toMatchObject({ watchlistKeywords: ['x'], stackKeywords: [], watchedCves: ['CVE-2'], alertGapHours: 6 });
+    expect(out.alertRules.filter(r => r.builtIn)).toHaveLength(5);
+    expect(out).toMatchObject({ watchlistKeywords: ['x'], stackKeywords: [], watchedCves: ['CVE-2'], alertGapHours: 6, npmPackages: ['react'] });
   });
 
   it('falls back to memory for anything missing or malformed', () => {

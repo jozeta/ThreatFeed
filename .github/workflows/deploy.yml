@@ -61,6 +61,11 @@ jobs:
           PREVIOUS_MSRC_URL: https://jozeta.github.io/ThreatFeed/data/msrc.json
           # Carries actor and malware profiles over between the daily ATT&CK and Malpedia refreshes
           PREVIOUS_ACTORS_URL: https://jozeta.github.io/ThreatFeed/data/actors.json
+          # Carry the npm advisories and the last 30 days of npm malware over, so each run asks GitHub only for
+          # advisories updated since the last one (a handful of requests). A missing file means a one-time full
+          # backfill: about 85 requests for every reviewed npm advisory and 10 to 100 for 30 days of malware (it comes in waves)
+          PREVIOUS_NPM_URL: https://jozeta.github.io/ThreatFeed/data/npm-advisories.json
+          PREVIOUS_NPM_MALWARE_URL: https://jozeta.github.io/ThreatFeed/data/npm-malware.json
           # The RSS feeds link to the site and read their published-items ledger (feeds/seen.json) back
           FEED_SITE_URL: https://jozeta.github.io/ThreatFeed/
           # The cached copy of the ledger: used when the published one can't be read, or is older
@@ -118,13 +123,13 @@ jobs:
           if [ "$code" = 404 ]; then echo "No stats.json published yet"; exit 0; fi
           echo "::error::stats.json is missing and the published copy couldn't be fetched (HTTP $code); not deploying, so the history isn't lost"
           exit 1
-      # If a failed snapshot left msrc.json, actors.json or entities.json missing or empty, deploy the published
-      # copies rather than a site without Patch Tuesday, actor data or entity links. Best effort: this step never fails the run.
-      - name: Keep the published Patch Tuesday, actor and entity data
+      # If a failed snapshot left msrc.json, actors.json, entities.json, npm-advisories.json or npm-malware.json missing
+      # or empty, deploy the published copies rather than a site without Patch Tuesday, actor data, entity links or npm data. Best effort: this step never fails the run.
+      - name: Keep the published Patch Tuesday, actor, entity and npm advisory data
         continue-on-error: true
         run: |
           mkdir -p public/data
-          for name in msrc actors entities; do
+          for name in msrc actors entities npm-advisories npm-malware; do
             f=public/data/$name.json
             [ -s "$f" ] && continue
             if curl -sS -fL --retry 3 --retry-delay 15 --max-time 120 -o "$f.tmp" "https://jozeta.github.io/ThreatFeed/data/$name.json" && [ -s "$f.tmp" ]; then
@@ -155,15 +160,19 @@ jobs:
           echo "Restored $kept published content shards"
       # The ledger (feeds/seen.json) exists only in the published site and the cache, and a deploy replaces the
       # whole site; without it the next run would start over and re-date every item. If the snapshot wrote no
-      # feeds, put the published (or cached) set of four back, all or none. If neither is there and the site
+      # feeds, put the published (or cached) set back, all or none (npm.xml is optional: sets published before it
+      # existed are complete without it). If neither is there and the site
       # isn't simply without feeds yet (404), stop before deploying so the old site keeps serving.
       - name: Keep the published RSS feeds
         run: |
           dir=public/data/feeds
           names="seen.json news.xml vulns.xml ransomware.xml"
+          optional="npm.xml"
           valid() { [ -s "$1" ] && node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(!d||d.version!==1||typeof d.feeds!=='object')process.exit(1)" "$1" 2>/dev/null; }
           complete() { for n in $names; do [ -s "$1/$n" ] || return 1; done; valid "$1/seen.json"; }
           complete "$dir" && exit 0
+          # npm.xml is optional: restored when present, and a 404 for it alone is not a failure
+          fetch_optional() { c=$(curl -sS -L -o "$1/$optional" -w '%{http_code}' --max-time 120 "https://jozeta.github.io/ThreatFeed/data/feeds/$optional?t=$(date +%s)") || c=000; [ "$c" = 200 ] && [ -s "$1/$optional" ] || rm -f "$1/$optional"; }
           mkdir -p "$dir"
           tmp=$(mktemp -d)
           code=000
@@ -175,13 +184,13 @@ jobs:
               [ "$n" = seen.json ] && code=$c
               if [ "$c" != 200 ]; then fetched=0; break; fi
             done
-            if [ "$fetched" = 1 ] && complete "$tmp"; then for n in $names; do mv "$tmp/$n" "$dir/$n"; done; echo "Restored the published feeds"; exit 0; fi
+            if [ "$fetched" = 1 ] && complete "$tmp"; then fetch_optional "$tmp"; for n in $names $optional; do [ -f "$tmp/$n" ] && mv "$tmp/$n" "$dir/$n"; done; echo "Restored the published feeds"; exit 0; fi
             [ "$code" = 404 ] && break
             sleep 15
           done
-          if complete .cache/feeds; then for n in $names; do cp ".cache/feeds/$n" "$dir/$n"; done; echo "Restored the feeds from the Action cache"; exit 0; fi
+          if complete .cache/feeds; then for n in $names $optional; do [ -f ".cache/feeds/$n" ] && cp ".cache/feeds/$n" "$dir/$n"; done; echo "Restored the feeds from the Action cache"; exit 0; fi
           # Never deploy part of a set: feeds without their ledger would be re-dated by the next run
-          for n in $names; do rm -f "$dir/$n"; done
+          for n in $names $optional; do rm -f "$dir/$n"; done
           if [ "$code" = 404 ]; then echo "No feeds published yet"; exit 0; fi
           echo "::error::feeds/seen.json is missing and the published feeds couldn't be fetched (seen.json: HTTP $code) or restored from the cache; not deploying, so the ledger isn't lost"
           exit 1

@@ -75,6 +75,14 @@ describe('panel parameters', () => {
     expect(panelParam('cve', 'CVE-2026-1234<x>')).toBe('');
     expect(panelParam('cve', 'junk')).toBe('');
   });
+
+  it('writes a GHSA id the way GitHub does and drops anything that is not one', () => {
+    expect(panelParam('advisory', 'ghsa-JF85-CPCP-J695')).toBe('GHSA-jf85-cpcp-j695');
+    expect(panelParam('advisory', ' GHSA-jf85-cpcp-j695 ')).toBe('GHSA-jf85-cpcp-j695');
+    expect(panelParam('advisory', 'GHSA-jf85-cpcp')).toBe('');
+    expect(panelParam('advisory', 'GHSA-jf85-cpcp-j695<x>')).toBe('');
+    expect(panelParam('advisory', 'CVE-2026-21643')).toBe('');
+  });
 });
 
 describe('opening and closing panels', () => {
