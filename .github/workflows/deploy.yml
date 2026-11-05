@@ -160,12 +160,12 @@ jobs:
           echo "Restored $kept published content shards"
       # The ledger (feeds/seen.json) exists only in the published site and the cache, and a deploy replaces the
       # whole site; without it the next run would start over and re-date every item. If the snapshot wrote no
-      # feeds, put the published (or cached) set of four back, all or none. If neither is there and the site
+      # feeds, put the published (or cached) set of five back, all or none. If neither is there and the site
       # isn't simply without feeds yet (404), stop before deploying so the old site keeps serving.
       - name: Keep the published RSS feeds
         run: |
           dir=public/data/feeds
-          names="seen.json news.xml vulns.xml ransomware.xml"
+          names="seen.json news.xml vulns.xml ransomware.xml npm.xml"
           valid() { [ -s "$1" ] && node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(!d||d.version!==1||typeof d.feeds!=='object')process.exit(1)" "$1" 2>/dev/null; }
           complete() { for n in $names; do [ -s "$1/$n" ] || return 1; done; valid "$1/seen.json"; }
           complete "$dir" && exit 0

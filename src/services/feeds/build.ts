@@ -1,5 +1,5 @@
-import type { Article, LeakSiteVictim, MsrcData, VulnData } from '../../types';
-import { newsCandidates, ransomwareCandidates, vulnCandidates, type FeedCandidate, type FeedName } from './candidates';
+import type { Article, LeakSiteVictim, MsrcData, NpmAdvisoryData, VulnData } from '../../types';
+import { newsCandidates, npmCandidates, ransomwareCandidates, vulnCandidates, type FeedCandidate, type FeedName } from './candidates';
 import { emptyLedger, FEED_NAMES, pickPubDate, pruneLedger, type FeedLedger, type LedgerEntry } from './ledger';
 import { renderRss, type RssItem } from './rss';
 
@@ -8,6 +8,7 @@ export interface FeedInput {
   victims: LeakSiteVictim[];
   vulns: VulnData | null;
   msrc: MsrcData | null;
+  npm?: NpmAdvisoryData | null;
 }
 
 export interface FeedBuild {
@@ -16,7 +17,7 @@ export interface FeedBuild {
   counts: Record<FeedName, number>; // items per feed
 }
 
-export const FEED_CAPS: Record<FeedName, number> = { news: 100, vulns: 300, ransomware: 400 };
+export const FEED_CAPS: Record<FeedName, number> = { news: 100, vulns: 300, ransomware: 400, npm: 100 };
 
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -35,6 +36,10 @@ export const CHANNELS: Record<FeedName, { title: string; description: string }> 
   ransomware: {
     title: 'ThreatFeed — Ransomware',
     description: 'Ransomware leak-site victims and ransomware news, from ThreatFeed.',
+  },
+  npm: {
+    title: 'ThreatFeed — npm advisories',
+    description: 'Reviewed npm security advisories from the GitHub Advisory Database, via ThreatFeed.',
   },
 };
 
@@ -112,7 +117,7 @@ function assemble(
 }
 
 /**
- * Builds the three RSS feeds and the updated ledger. `previous === null` means the first run.
+ * Builds the four RSS feeds and the updated ledger. `previous === null` means the first run.
  * Baseline candidates are recorded unpublished until the feed has its first baseline-kind entry.
  */
 export function buildFeeds(input: FeedInput, previous: FeedLedger | null, now: number, site: string): FeedBuild {
@@ -120,6 +125,7 @@ export function buildFeeds(input: FeedInput, previous: FeedLedger | null, now: n
     news: newsCandidates(input.articles, now, site),
     vulns: vulnCandidates(input.vulns, input.msrc, now, site),
     ransomware: ransomwareCandidates(input.articles, input.victims, now, site),
+    npm: npmCandidates(input.npm ?? null, now, site),
   };
   const base = previous ?? emptyLedger();
   const ledger = emptyLedger();
@@ -130,7 +136,7 @@ export function buildFeeds(input: FeedInput, previous: FeedLedger | null, now: n
 
   for (const feed of FEED_NAMES) {
     // Copies, so the previous ledger is never mutated
-    const entries = new Map(Object.entries(base.feeds[feed]).map(([guid, e]) => [guid, { ...e, keys: [...e.keys] }]));
+    const entries = new Map(Object.entries(base.feeds[feed] ?? {}).map(([guid, e]) => [guid, { ...e, keys: [...e.keys] }]));
     const items = assemble(candidates[feed], entries, baselineOpen(entries), now)
       .filter((item) => Date.parse(item.pubDate) >= cutoff)
       // Newest first; on a first run every pubDate is equal, so rank keeps KEV ahead of the many critical CVEs

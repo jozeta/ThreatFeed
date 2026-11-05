@@ -21,6 +21,11 @@ describe('feed ledger', () => {
     expect(decoded!.feeds.news).toEqual({});
   });
 
+  it('decodeLedger accepts a published ledger that has no npm feed', () => {
+    const decoded = decodeLedger({ version: 1, feeds: { news: {}, vulns: {}, ransomware: {} } });
+    expect(decoded!.feeds.npm).toEqual({});
+  });
+
   it('decodeLedger keeps pubDate when valid and drops it when malformed', () => {
     const base = { firstSeen: iso(now), lastSeen: iso(now), published: true, keys: [] };
     const decoded = decodeLedger({

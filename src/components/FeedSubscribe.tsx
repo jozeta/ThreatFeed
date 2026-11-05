@@ -7,11 +7,12 @@ const ROWS: { name: FeedName; label: string }[] = [
   { name: 'news', label: 'News' },
   { name: 'vulns', label: 'Vulnerabilities' },
   { name: 'ransomware', label: 'Ransomware' },
+  { name: 'npm', label: 'npm advisories' },
 ];
 
 const feedUrl = (name: FeedName) => `${window.location.origin}${import.meta.env.BASE_URL}data/feeds/${name}.xml`;
 
-/** The three RSS feeds the snapshot job publishes, with a copy button for each URL. */
+/** The RSS feeds the snapshot job publishes, with a copy button for each URL. */
 export const FeedSubscribe: React.FC = () => {
   const [copied, setCopied] = useState<FeedName | null>(null);
 

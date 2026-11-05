@@ -1041,11 +1041,12 @@ let feedCounts: Record<string, number> = {};
 let feedsError = previousLedger.ok ? '' : `previous ledger unreadable (${previousLedger.error})`;
 if (previousLedger.ok) {
   try {
-    const built = buildFeeds({ articles, victims, vulns, msrc }, previousLedger.ledger, Date.now(), FEED_SITE_URL);
+    const built = buildFeeds({ articles, victims, vulns, msrc, npm: npmData }, previousLedger.ledger, Date.now(), FEED_SITE_URL);
     feedFiles = [
       { name: 'news.xml', text: built.files.news, budget: 300 * 1024 },
       { name: 'vulns.xml', text: built.files.vulns, budget: 300 * 1024 },
       { name: 'ransomware.xml', text: built.files.ransomware, budget: 500 * 1024 },
+      { name: 'npm.xml', text: built.files.npm, budget: 300 * 1024 },
       { name: 'seen.json', text: JSON.stringify(built.ledger), budget: 2 * 1024 * 1024 },
     ];
     feedCounts = built.counts;
@@ -1060,7 +1061,7 @@ report({
   id: 'feeds',
   label: 'Published RSS feeds',
   status: feedsError ? 'failed' : 'ok',
-  count: feedsError ? 0 : (feedCounts.news ?? 0) + (feedCounts.vulns ?? 0) + (feedCounts.ransomware ?? 0),
+  count: feedsError ? 0 : (feedCounts.news ?? 0) + (feedCounts.vulns ?? 0) + (feedCounts.ransomware ?? 0) + (feedCounts.npm ?? 0),
   detail: feedsError ? `${feedsError}, not written`
     : previousLedger.ok && !previousLedger.ledger ? 'no previous ledger, started'
     : previousLedger.ok && previousLedger.source === 'cache' ? 'previous ledger from the Action cache' : undefined,

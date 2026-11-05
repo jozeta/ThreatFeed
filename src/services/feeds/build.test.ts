@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Article, KevEntry, LeakSiteVictim, VulnData } from '../../types';
+import type { Article, KevEntry, LeakSiteVictim, NpmAdvisory, VulnData } from '../../types';
 import { buildFeeds, FEED_CAPS, type FeedInput } from './build';
 import type { FeedLedger } from './ledger';
 
@@ -36,6 +36,13 @@ const kev = (cve: string): KevEntry => ({
   cve, vendor: 'Fortinet', product: 'FortiOS', name: 'FortiOS RCE', dateAdded: iso(now - day).slice(0, 10),
   dueDate: '2026-11-20', ransomware: false, cwes: [], cvss: 9.8,
 });
+
+const npmAdvisory = (n: number, over: Partial<NpmAdvisory> = {}): NpmAdvisory => ({
+  id: `GHSA-${String(n).padStart(4, '0')}-aaaa-bbbb`, cves: [], summary: `Flaw ${n}`, description: '', severity: 'high', cvss: [], cwes: [],
+  ranges: [{ package: `pkg-${n}`, vulnerable: '< 2.0.0', patched: '2.0.0' }], published: iso(now - 2 * day), updated: iso(now - 2 * day),
+  references: [], credits: [], url: `https://github.com/advisories/GHSA-${n}`, ...over,
+});
+const npmData = (recent: NpmAdvisory[]) => ({ version: 1 as const, generatedAt: iso(now), updatedAt: iso(now), recent, index: [] });
 
 const vulnData = (over: Partial<VulnData> = {}): VulnData => ({
   updatedAt: iso(now), kev: [], nvd: null, notable: [], advisories: [], epssTop: [], exploits: {}, ...over,
@@ -80,7 +87,7 @@ describe('buildFeeds', () => {
     const previous: FeedLedger = {
       version: 1,
       feeds: {
-        news: {}, ransomware: {},
+        news: {}, ransomware: {}, npm: {},
         vulns: { [`kev:${cve}`]: { firstSeen: iso(now - day), lastSeen: iso(now - day), published: true, keys: [`c:${cve}`] } },
       },
     };
@@ -119,7 +126,7 @@ describe('buildFeeds', () => {
     const v = victim('W', now - 2 * hour);
     const previous: FeedLedger = {
       version: 1,
-      feeds: { news: {}, vulns: {}, ransomware: { 'victim:W': { firstSeen: iso(now - hour), lastSeen: iso(now - hour), published: true, keys: [] } } },
+      feeds: { news: {}, vulns: {}, npm: {}, ransomware: { 'victim:W': { firstSeen: iso(now - hour), lastSeen: iso(now - hour), published: true, keys: [] } } },
     };
     const run = buildFeeds(input({ victims: [v] }), previous, now, site);
     expect(items(run.files.ransomware)[0].pubDate).toBe(new Date(now - 2 * hour).toUTCString());
@@ -159,7 +166,7 @@ describe('buildFeeds', () => {
     const previous: FeedLedger = {
       version: 1,
       feeds: {
-        news: {}, vulns: {},
+        news: {}, vulns: {}, npm: {},
         ransomware: { 'victim:late': { firstSeen: iso(now - 8 * day), lastSeen: iso(now - day), published: true, keys: [] } },
       },
     };
@@ -192,10 +199,41 @@ describe('buildFeeds', () => {
     expect(run.counts.vulns).toBe(300);
   });
 
+  it('npm feed: publishes the window on a first run against a ledger without an npm feed, then never re-announces', () => {
+    const previous = { version: 1, feeds: { news: {}, vulns: {}, ransomware: {} } } as unknown as FeedLedger;
+    const advisories = [npmAdvisory(1), npmAdvisory(2, { withdrawn: iso(now) }), npmAdvisory(3)];
+    const run1 = buildFeeds(input({ npm: npmData(advisories) }), previous, now, site);
+    expect(guids(run1.files.npm).sort()).toEqual(['npm:GHSA-0001-aaaa-bbbb', 'npm:GHSA-0003-aaaa-bbbb']);
+    expect(Object.values(run1.ledger.feeds.npm).every((e) => e.published)).toBe(true);
+
+    const run2 = buildFeeds(input({ npm: npmData(advisories) }), run1.ledger, now + hour, site);
+    expect(items(run2.files.npm).map((i) => i.pubDate)).toEqual(items(run1.files.npm).map((i) => i.pubDate));
+    expect(Object.keys(run2.ledger.feeds.npm)).toEqual(Object.keys(run1.ledger.feeds.npm));
+
+    // a new advisory is added; the old ones keep their dates
+    const run3 = buildFeeds(input({ npm: npmData([...advisories, npmAdvisory(4, { published: iso(now + 2 * hour) })]) }), run2.ledger, now + 2 * hour, site);
+    expect(guids(run3.files.npm)).toHaveLength(3);
+    expect(guids(run3.files.npm)[0]).toBe('npm:GHSA-0004-aaaa-bbbb');
+  });
+
+  it('npm feed: a malformed ledger from before the npm feed does not break pruning', () => {
+    const previous = { version: 1, feeds: { news: {}, vulns: {}, ransomware: {} } } as unknown as FeedLedger;
+    expect(() => buildFeeds(input(), previous, now, site)).not.toThrow();
+  });
+
+  it('caps the npm feed at 100', () => {
+    const many = Array.from({ length: 120 }, (_, i) => npmAdvisory(i + 1));
+    const run = buildFeeds(input({ npm: npmData(many) }), null, now, site);
+    expect(FEED_CAPS.npm).toBe(100);
+    expect(guids(run.files.npm)).toHaveLength(100);
+    expect(run.counts.npm).toBe(100);
+    expect(Object.keys(run.ledger.feeds.npm)).toHaveLength(120);
+  });
+
   it('files are valid XML', () => {
     const run = buildFeeds(input({ victims: [victim('x', now - hour)], vulns: vulnData({ kev: [kev('CVE-2026-9')] }) }), null, now, site);
-    const titles = { news: 'ThreatFeed — News', vulns: 'ThreatFeed — Vulnerabilities', ransomware: 'ThreatFeed — Ransomware' };
-    for (const feed of ['news', 'vulns', 'ransomware'] as const) {
+    const titles = { news: 'ThreatFeed — News', vulns: 'ThreatFeed — Vulnerabilities', ransomware: 'ThreatFeed — Ransomware', npm: 'ThreatFeed — npm advisories' };
+    for (const feed of ['news', 'vulns', 'ransomware', 'npm'] as const) {
       const doc = new DOMParser().parseFromString(run.files[feed], 'application/xml');
       expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
       const self = doc.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'link')[0];

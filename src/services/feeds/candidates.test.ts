@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Article, KevEntry, LeakSiteVictim, MsrcData, VulnData } from '../../types';
-import { newsCandidates, normalizeUrl, ransomwareCandidates, vulnCandidates } from './candidates';
+import type { Article, KevEntry, LeakSiteVictim, MsrcData, NpmAdvisory, NpmAdvisoryData, VulnData } from '../../types';
+import { newsCandidates, normalizeUrl, npmCandidates, ransomwareCandidates, vulnCandidates } from './candidates';
 
 const now = Date.parse('2026-11-03T12:00:00Z');
 const site = 'https://jozeta.github.io/ThreatFeed/';
@@ -130,6 +130,46 @@ describe('feed candidates', () => {
       expect(c.description).toContain('Source: ');
     }
     expect(longKev.description).toContain('Source: CISA KEV https://www.cisa.gov');
+  });
+
+  describe('npm advisories', () => {
+    const advisory = (id: string, over: Partial<NpmAdvisory> = {}): NpmAdvisory => ({
+      id, cves: ['CVE-2026-77'], summary: 'Prototype pollution in lodash-ish', description: 'long text', severity: 'high', cvss: [],
+      cwes: [], ranges: [{ package: 'lodash-ish', vulnerable: '< 4.2.0', patched: '4.2.0' }, { package: 'lodash-ish-cli', vulnerable: '< 1.0.0' }],
+      published: ago(1), updated: ago(1), references: [], credits: [], url: `https://github.com/advisories/${id}`, ...over,
+    });
+    const data = (recent: NpmAdvisory[]): NpmAdvisoryData => ({ version: 1, generatedAt: ago(0), updatedAt: ago(0), recent, index: [] });
+
+    it('builds one candidate per reviewed advisory in the window', () => {
+      const out = npmCandidates(data([
+        advisory('GHSA-aaaa-bbbb-cccc'),
+        advisory('GHSA-dddd-eeee-ffff', { withdrawn: ago(0) }),
+        advisory('GHSA-gggg-hhhh-iiii', { published: ago(30) }),
+      ]), now, site);
+      expect(out).toHaveLength(1);
+      const c = out[0];
+      expect(c).toMatchObject({
+        feed: 'npm', kind: 'npm', guid: 'npm:GHSA-aaaa-bbbb-cccc', title: 'npm high: lodash-ish — Prototype pollution in lodash-ish',
+        link: `${site}#/vulns/npm?advisory=GHSA-aaaa-bbbb-cccc`, sourceTime: ago(1), keys: ['n:GHSA-aaaa-bbbb-cccc'],
+        categories: ['npm', 'high', 'CVE-2026-77', 'lodash-ish', 'lodash-ish-cli'],
+      });
+      expect(c.description).toContain('lodash-ish < 4.2.0, patched in 4.2.0');
+      expect(c.description).toContain('lodash-ish-cli < 1.0.0, no patched version');
+      expect(c.description).toContain('CVE-2026-77');
+      expect(c.description.length).toBeLessThanOrEqual(400);
+      expect(c.description).toMatch(/Source: GitHub Advisory Database https:\/\/github\.com\/advisories\/GHSA-aaaa-bbbb-cccc$/);
+    });
+
+    it('is empty without data', () => {
+      expect(npmCandidates(null, now, site)).toEqual([]);
+    });
+
+    it('keeps a long range list within 400 characters', () => {
+      const ranges = Array.from({ length: 30 }, (_, i) => ({ package: `pkg-${i}-${'x'.repeat(40)}`, vulnerable: '< 1.0.0', patched: '1.0.0' }));
+      const [c] = npmCandidates(data([advisory('GHSA-aaaa-bbbb-cccc', { ranges })]), now, site);
+      expect(c.description.length).toBeLessThanOrEqual(400);
+      expect(c.description).toMatch(/Source: GitHub Advisory Database /);
+    });
   });
 
   it('normalizes urls', () => {
