@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { bucketize, foldSlices, sliceTotal } from './chartData';
 
 describe('foldSlices', () => {
+  it('merges an input "Other" into the folded slice, once and last', () => {
+    const items = [
+      { label: ' other ', value: 9 }, { label: 'OTHER', value: 1 },
+      ...Array.from({ length: 7 }, (_, i) => ({ label: `L${i}`, value: 20 - i })),
+    ];
+    const out = foldSlices(items);
+    expect(out.filter((s) => /^other$/i.test(s.label.trim()))).toHaveLength(1);
+    expect(out[out.length - 1]).toEqual({ label: 'Other', value: 9 + 1 + 14, pct: expect.any(Number), other: true });
+    expect(out.reduce((n, s) => n + s.pct, 0)).toBe(100);
+    // Nothing to fold: the given "Other" still comes last and is flagged
+    expect(foldSlices([{ label: 'Other', value: 50 }, { label: 'a', value: 10 }])).toEqual([
+      { label: 'a', value: 10, pct: 17 }, { label: 'Other', value: 50, pct: 83, other: true },
+    ]);
+  });
+
   it('slices fold to Other and percentages sum to 100', () => {
     const items = Array.from({ length: 9 }, (_, i) => ({ label: `L${i}`, value: 10 + i * 3 }));
     const out = foldSlices(items);
