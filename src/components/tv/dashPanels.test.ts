@@ -274,3 +274,37 @@ describe('ransomPanels · charts', () => {
     expect(ids(ransomPanels({ victims: [vic('a', H), vic('b', 26 * H)], stats: null, now }))).not.toContain('sectorShare');
   });
 });
+
+/** Legend entries (label → swatch colour) of a donut or stacked panel */
+const legendColors = (html: string) =>
+  Object.fromEntries([...html.matchAll(/<i style="background:(#[0-9a-f]{6})"><\/i>(?:<span[^>]*>)?([^<]+)/g)].map(m => [m[2], m[1]]));
+
+describe('TV chart colours', () => {
+  it('the severity donut and the per-day stacked bars agree per severity, in hex (no theme classes)', () => {
+    const data = npmData([
+      npmAdv('GHSA-1111-1111-1111', 'critical', '2026-10-29T08:00:00Z'), npmAdv('GHSA-2222-2222-2222', 'high', '2026-10-28T08:00:00Z'),
+      npmAdv('GHSA-3333-3333-3333', 'medium', '2026-10-28T09:00:00Z'), npmAdv('GHSA-4444-4444-4444', 'low', '2026-10-27T08:00:00Z'),
+      npmAdv('GHSA-5555-5555-5555', 'unknown', '2026-10-27T09:00:00Z'),
+    ]);
+    const p = npmPanels(npmCtx({ data }));
+    const donut = legendColors(render(p.find(x => x.id === 'npmSeverity')!));
+    const stacked = legendColors(render(p.find(x => x.id === 'npmDaily')!));
+    expect(Object.keys(donut).sort()).toEqual(['Critical', 'High', 'Low', 'Medium', 'Unknown']);
+    expect(stacked).toEqual(donut);
+    expect(donut.Unknown).toBe('#94a3b8');
+    expect(render(p.find(x => x.id === 'npmDaily')!)).not.toMatch(/dark:|fill-/);
+  });
+  it('"Unknown" and "Other" are grey, and rank colours go to real categories only', () => {
+    const vic = (id: string, sector?: string): LeakSiteVictim => ({ id, victim: id, group: 'lockbit', discoveredAt: new Date(now - H).toISOString(), sector });
+    const victims = [vic('a'), vic('b'), vic('c'), vic('d', 'Health'), vic('e', 'Health'), vic('f', 'Tech')];
+    const colors = legendColors(render(ransomPanels({ victims, stats: null, now }).find(x => x.id === 'sectorShare')!));
+    expect(colors).toEqual({ Unknown: '#94a3b8', Health: '#e11d48', Tech: '#f97316' });
+    const mine = legendColors(render(npmPanels(npmCtx({ results: [result('affected'), result('unknown')] })).find(x => x.id === 'npmMine')!));
+    expect(mine).toEqual({ Affected: '#e11d48', Unknown: '#94a3b8' });
+  });
+  it('names the advisory slice of the malware donut for what it counts (published or updated)', () => {
+    const html = render(npmPanels(npmCtx()).find(x => x.id === 'npmKinds')!);
+    expect(html).toContain('New or updated advisories');
+    expect(html).not.toContain('>Vulnerabilities<');
+  });
+});

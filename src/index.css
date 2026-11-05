@@ -917,7 +917,7 @@ button.tag-chip {
 /* Stacked bars: segment legend, then the first day, the peak and the last day */
 .tv-stack-legend { display: flex; flex-wrap: wrap; column-gap: 1.2vw; row-gap: 0.2vw; overflow: hidden; max-height: 2.8em; }
 .tv-stack-legend span { display: inline-flex; align-items: center; gap: 0.4vw; white-space: nowrap; }
-.tv-stack-legend svg { width: 0.7em; height: 0.7em; }
+.tv-stack-legend i { flex: none; width: 0.7em; height: 0.7em; border-radius: 0.15em; }
 .tv-axis { display: flex; justify-content: space-between; gap: 1vw; white-space: nowrap; }
 /* A number's sparkline */
 .tv-spark { flex: none; height: calc(3.2vw * var(--s, 1)); width: 100%; overflow: hidden; }

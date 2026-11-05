@@ -274,10 +274,28 @@ function Sparkline({ label, values, color }: { label: string; values: number[]; 
   );
 }
 
-/** Slice colours: by label from `colors` when given, else the donut palette in rank order; "Other" is always grey */
-const OTHER_COLOR = '#94a3b8';
-const sliceColor = (s: Slice, i: number, colors?: Record<string, string>) =>
-  s.other ? OTHER_COLOR : colors ? colors[s.label] ?? OTHER_COLOR : DONUT_COLORS[i % DONUT_COLORS.length];
+/**
+ * Severity colours on the TV, for donuts and stacked bars alike. Hex, never theme classes: the wall is always dark,
+ * and a `dark:` variant would follow the app's theme instead.
+ */
+export const TV_SEVERITY: Record<string, string> = { Critical: '#e11d48', High: '#f97316', Medium: '#f59e0b', Low: '#10b981' };
+export const NEUTRAL_COLOR = '#94a3b8';
+/** Labels that aren't a category; they are grey and take no rank colour */
+const NEUTRAL_LABELS = new Set(['Other', 'Unknown', 'No CWE']);
+
+/**
+ * One colour per series (donut slice or stacked segment), in order: neutral labels grey; by label from `colors` when
+ * given (grey when missing); else the donut palette in rank order, counting coloured series only, so the first real
+ * category always gets the first colour.
+ */
+export function seriesColors(series: { label: string; other?: boolean }[], colors?: Record<string, string>): string[] {
+  let rank = 0;
+  return series.map(s => {
+    if (s.other || NEUTRAL_LABELS.has(s.label)) return NEUTRAL_COLOR;
+    if (colors) return colors[s.label] ?? NEUTRAL_COLOR;
+    return DONUT_COLORS[rank++ % DONUT_COLORS.length];
+  });
+}
 
 /**
  * A donut of `foldSlices` output with the total in the centre and a legend of every slice with its count and share.
@@ -285,6 +303,7 @@ const sliceColor = (s: Slice, i: number, colors?: Record<string, string>) =>
  */
 export function DonutPanel({ label, data, colors }: { label: string; data: Slice[]; colors?: Record<string, string> }) {
   const total = data.reduce((n, s) => n + s.value, 0);
+  const color = seriesColors(data, colors);
   return (
     <Panel label={label}>
       {data.length === 0 ? <div className="tv-note">Nothing to show yet</div> : (
@@ -304,7 +323,7 @@ export function DonutPanel({ label, data, colors }: { label: string; data: Slice
                       const gap = data.length === 1 ? 0 : 0.6;
                       const el = (
                         <circle
-                          key={`${s.label}-${i}`} className="tv-fade" style={nth(i)} cx={cx} cy={cy} r={r} fill="none" stroke={sliceColor(s, i, colors)} strokeWidth={stroke}
+                          key={`${s.label}-${i}`} className="tv-fade" style={nth(i)} cx={cx} cy={cy} r={r} fill="none" stroke={color[i]} strokeWidth={stroke}
                           pathLength={100} strokeDasharray={`${Math.max(0, len - gap)} ${100 - Math.max(0, len - gap)}`} strokeDashoffset={-offset}
                           transform={`rotate(-90 ${cx} ${cy})`}
                         />
@@ -322,7 +341,7 @@ export function DonutPanel({ label, data, colors }: { label: string; data: Slice
             <ul className="tv-donut-legend">
               {data.map((s, i) => (
                 <li key={`${s.label}-${i}`} className="tv-row-in" style={nth(i)}>
-                  <i style={{ background: sliceColor(s, i, colors) }} />
+                  <i style={{ background: color[i] }} />
                   <span className="tv-donut-name" title={s.label}>{s.label}</span>
                   <span className="tv-donut-n">{s.value.toLocaleString()} {'·'} {s.pct}%</span>
                 </li>
@@ -337,13 +356,15 @@ export function DonutPanel({ label, data, colors }: { label: string; data: Slice
 
 /**
  * Stacked bars, one per day, growing up one after another; a legend of the segments that occur and the day range with
- * the peak under them. Segment colours are the builders' SVG fill classes.
+ * the peak under them. Segment colours follow `seriesColors` (as the donuts do), not the builders' theme classes.
  */
-export function StackedPanel({ label, buckets, axis = b => b.short }: {
-  label: string; buckets: BarBucket[]; axis?: (b: BarBucket) => string;
+export function StackedPanel({ label, buckets, axis = b => b.short, colors }: {
+  label: string; buckets: BarBucket[]; axis?: (b: BarBucket) => string; colors?: Record<string, string>;
 }) {
   const totals = buckets.map(b => b.segments.reduce((n, s) => n + s.value, 0));
   const max = Math.max(1, ...totals);
+  const names = buckets[0]?.segments.map(s => s.name) ?? [];
+  const colorOf = new Map(seriesColors(names.map(label => ({ label })), colors).map((c, i) => [names[i], c]));
   const legend = buckets[0]?.segments.filter(s => buckets.some(b => b.segments.find(x => x.name === s.name)?.value)) ?? [];
   const summary = `${label}: ${legend.map(s => `${s.name} ${buckets.reduce((n, b) => n + (b.segments.find(x => x.name === s.name)?.value ?? 0), 0)}`).join(', ')}; peak ${max} a day`;
   return (
@@ -360,7 +381,7 @@ export function StackedPanel({ label, buckets, axis = b => b.short }: {
                     {b.segments.map(s => {
                       const h = (s.value / max) * (H - 2);
                       y -= h;
-                      return s.value > 0 ? <rect key={s.name} className={s.className} x={slot * i + slot * 0.12} y={y} width={slot * 0.76} height={Math.max(h, 1)} /> : null;
+                      return s.value > 0 ? <rect key={s.name} fill={colorOf.get(s.name)} x={slot * i + slot * 0.12} y={y} width={slot * 0.76} height={Math.max(h, 1)} /> : null;
                     })}
                   </g>
                 );
@@ -370,7 +391,7 @@ export function StackedPanel({ label, buckets, axis = b => b.short }: {
           {legend.length > 1 && (
             <div className="tv-legend tv-stack-legend">
               {legend.map(s => (
-                <span key={s.name}><svg viewBox="0 0 10 10" aria-hidden="true"><rect width="10" height="10" rx="2" className={s.className} /></svg>{s.name}</span>
+                <span key={s.name}><i style={{ background: colorOf.get(s.name) }} />{s.name}</span>
               ))}
             </div>
           )}
