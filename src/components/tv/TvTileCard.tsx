@@ -26,8 +26,9 @@ function NpmLines({ npm, innerRef }: { npm: NpmTileInfo; innerRef: Ref<HTMLDivEl
       <div>
         <span className="tv-tile-npm-pkg">{first}</span>
         {rest.length > 0 && ` +${rest.length}`}
-        {npm.vulnerable && ` ${npm.vulnerable}`}
-        {npm.patched ? ` → fixed in ${npm.patched}` : ' · no fix yet'}
+        {/* The fix comes before the range: on a narrow tile the ellipsis cuts the range, not the actionable part */}
+        {npm.patched ? ` → fixed in ${npm.patched}` : ' → no fix yet'}
+        {npm.vulnerable && ` · ${npm.vulnerable}`}
       </div>
       {npm.yours.length > 0 && <div className="tv-tile-npm-yours">Yours: {npm.yours.join(', ')}</div>}
       <div className="tv-tile-npm-ids">{npm.ids.join(' · ')}</div>

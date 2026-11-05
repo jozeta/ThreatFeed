@@ -1,17 +1,19 @@
 import React from 'react';
 import { ChartEmpty } from './ChartEmpty';
 
-/** Vertical bars for `bucketize` output, with the bucket edges under the axis and a tooltip per bucket */
+/** Vertical bars for `bucketize` output, with every bucket's range labelled under its bar (the buckets may differ in width) and a tooltip per bucket */
 export const Histogram: React.FC<{
   title: string; buckets: { from: number; to: number; count: number }[]; color?: string; animate?: boolean; ariaSummary?: string;
-}> = ({ title, buckets, color = 'fill-theme-accent', animate = true, ariaSummary }) => {
+  /** Formats a bucket edge for the labels, tooltips and spoken summary */
+  formatEdge?: (n: number) => string;
+}> = ({ title, buckets, color = 'fill-theme-accent', animate = true, ariaSummary, formatEdge = String }) => {
   const total = buckets.reduce((n, b) => n + b.count, 0);
   if (buckets.length === 0 || total === 0) return <ChartEmpty />;
   const width = 300;
   const height = 64;
   const max = Math.max(1, ...buckets.map((b) => b.count));
   const slot = width / buckets.length;
-  const range = (b: { from: number; to: number }) => `${b.from}–${b.to}`;
+  const range = (b: { from: number; to: number }) => `${formatEdge(b.from)}–${formatEdge(b.to)}`;
   const summary = ariaSummary ?? `${title}: ${buckets.map((b) => `${range(b)} ${b.count}`).join(', ')}`;
 
   return (
@@ -29,10 +31,11 @@ export const Histogram: React.FC<{
           );
         })}
       </svg>
-      <figcaption className="flex justify-between gap-2 text-[10px] font-mono text-theme-text-muted mt-1">
-        <span>{buckets[0].from}</span>
-        <span>peak {max}</span>
-        <span>{buckets[buckets.length - 1].to}</span>
+      <figcaption className="text-[10px] font-mono text-theme-text-muted mt-1">
+        <div className="grid text-center" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0, 1fr))` }}>
+          {buckets.map((b, i) => <span key={i} className="truncate" data-bucket-label>{range(b)}</span>)}
+        </div>
+        <div className="text-right">peak {max}</div>
       </figcaption>
     </figure>
   );

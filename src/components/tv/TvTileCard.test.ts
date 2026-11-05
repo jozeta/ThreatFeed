@@ -42,7 +42,7 @@ describe('TvTileCard (npm)', () => {
   it('shows the severity, the range to the fix and the ids, and the "Yours" line only when affecting', () => {
     render(npmTile({ npm: { severity: 'high', packages: ['left-pad'], vulnerable: '< 1.3.0', patched: '1.3.0', ids: ['GHSA-2222-2222-2222', 'CVE-2026-1'], yours: [] } }));
     expect(host.querySelector('.tv-sev-chip')!.textContent).toBe('High');
-    expect(host.querySelector('.tv-tile-npm')!.textContent).toContain('left-pad < 1.3.0 → fixed in 1.3.0');
+    expect(host.querySelector('.tv-tile-npm')!.textContent).toContain('left-pad → fixed in 1.3.0 · < 1.3.0');
     expect(host.querySelector('.tv-tile-npm')!.textContent).toContain('GHSA-2222-2222-2222 · CVE-2026-1');
     expect(host.querySelector('.tv-tile-npm-yours')).toBeNull();
   });

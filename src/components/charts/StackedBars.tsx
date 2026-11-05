@@ -28,7 +28,7 @@ export const StackedBars: React.FC<{
   const width = 600;
   const height = 110;
   const bar = width / Math.max(1, buckets.length);
-  if (buckets.length === 0) return <ChartEmpty />;
+  if (buckets.length === 0 || totals.every((t) => t === 0)) return <ChartEmpty />;
   const legend = buckets[0]?.segments.filter((s) => buckets.some((b) => b.segments.find((x) => x.name === s.name)?.value)) ?? [];
 
   return (

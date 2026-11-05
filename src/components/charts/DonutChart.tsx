@@ -2,9 +2,9 @@ import React from 'react';
 import { ChartEmpty } from './ChartEmpty';
 import type { Slice } from './chartData';
 
-/** Distinguishable on light and dark cards; "Other" is always the neutral grey */
-export const DONUT_COLORS = ['#e11d48', '#f97316', '#f59e0b', '#10b981', '#0ea5e9', '#8b5cf6'];
-const OTHER_COLOR = '#94a3b8';
+import { DONUT_COLORS, NEUTRAL_COLOR, seriesColors } from './colors';
+
+export { DONUT_COLORS };
 
 export const slicesSummary = (data: Slice[]) => data.map((s) => `${s.label} ${s.value} (${s.pct}%)`).join(', ');
 
@@ -14,13 +14,15 @@ export const slicesSummary = (data: Slice[]) => data.map((s) => `${s.label} ${s.
  */
 export const DonutChart: React.FC<{
   title: string; data: Slice[]; colors?: string[]; centerLabel?: string; size?: number; animate?: boolean; ariaSummary?: string;
-}> = ({ title, data, colors = DONUT_COLORS, centerLabel, size = 120, animate = true, ariaSummary }) => {
+}> = ({ title, data, colors, centerLabel, size = 120, animate = true, ariaSummary }) => {
   if (data.length === 0) return <ChartEmpty />;
   const total = data.reduce((n, s) => n + s.value, 0);
   const stroke = size * 0.2;
   const r = (size - stroke) / 2;
   const c = size / 2;
-  const colorOf = (s: Slice, i: number) => (s.other ? OTHER_COLOR : colors[i % colors.length]);
+  // Without explicit colours: rank colours, with "Other", "Unknown" and "No CWE" grey
+  const palette = colors ?? seriesColors(data);
+  const colorOf = (s: Slice, i: number) => (s.other ? NEUTRAL_COLOR : palette[i % palette.length]);
   let offset = 0;
   const summary = ariaSummary ?? `${title}: ${slicesSummary(data)}`;
 

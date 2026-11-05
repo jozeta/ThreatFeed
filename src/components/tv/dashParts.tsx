@@ -6,7 +6,8 @@ import { monotonePath } from '../charts/MentionsArea';
 import { Figure } from '../../services/tv/dashboard';
 import type { Slice } from '../charts/chartData';
 import type { BarBucket } from '../charts/StackedBars';
-import { DONUT_COLORS, slicesSummary } from '../charts/DonutChart';
+import { slicesSummary } from '../charts/DonutChart';
+import { NEUTRAL_COLOR, SEVERITY_HEX, seriesColors } from '../charts/colors';
 import { CellDelayContext, SPEED_FACTOR } from './wallMotion';
 
 /** Dashboard building blocks: all sizes in vw so the screen scales from 1280 to 3840 wide */
@@ -274,28 +275,9 @@ function Sparkline({ label, values, color }: { label: string; values: number[]; 
   );
 }
 
-/**
- * Severity colours on the TV, for donuts and stacked bars alike. Hex, never theme classes: the wall is always dark,
- * and a `dark:` variant would follow the app's theme instead.
- */
-export const TV_SEVERITY: Record<string, string> = { Critical: '#e11d48', High: '#f97316', Medium: '#f59e0b', Low: '#10b981' };
-export const NEUTRAL_COLOR = '#94a3b8';
-/** Labels that aren't a category; they are grey and take no rank colour */
-const NEUTRAL_LABELS = new Set(['Other', 'Unknown', 'No CWE']);
-
-/**
- * One colour per series (donut slice or stacked segment), in order: neutral labels grey; by label from `colors` when
- * given (grey when missing); else the donut palette in rank order, counting coloured series only, so the first real
- * category always gets the first colour.
- */
-export function seriesColors(series: { label: string; other?: boolean }[], colors?: Record<string, string>): string[] {
-  let rank = 0;
-  return series.map(s => {
-    if (s.other || NEUTRAL_LABELS.has(s.label)) return NEUTRAL_COLOR;
-    if (colors) return colors[s.label] ?? NEUTRAL_COLOR;
-    return DONUT_COLORS[rank++ % DONUT_COLORS.length];
-  });
-}
+/** Severity colours on the TV, for donuts and stacked bars alike: the shared table (see charts/colors.ts) */
+export const TV_SEVERITY = SEVERITY_HEX;
+export { NEUTRAL_COLOR, seriesColors };
 
 /**
  * A donut of `foldSlices` output with the total in the centre and a legend of every slice with its count and share.

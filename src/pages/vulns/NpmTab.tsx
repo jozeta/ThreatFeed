@@ -12,6 +12,7 @@ import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, ChartCard, chipClass, SectionTitle } from '../incidents/shared';
 import { StackedBars } from '../../components/charts/StackedBars';
 import { DonutChart } from '../../components/charts/DonutChart';
+import { NEUTRAL_COLOR, SEVERITY_HEX as SEVERITY_COLORS } from '../../components/charts/colors';
 import { RankedBars } from '../../components/charts/RankedBars';
 import { sliceTotal } from '../../components/charts/chartData';
 import { myPackagesStatus, npmFixShare, npmSeverityShare, npmTopCwes, npmVulnVsMalware } from '../../services/charts/figures';
@@ -41,8 +42,8 @@ const STATUS: Record<PackageStatus, { label: string; className: string; title: s
 };
 // Donut colours by slice label (slices come largest first): severities as in the per-day chart (SEVERITY_FILL),
 // package statuses as their badges
-const SEVERITY_HEX: Record<string, string> = { Critical: '#e11d48', High: '#f97316', Medium: '#fbbf24', Low: '#0ea5e9', Unknown: '#94a3b8' };
-const STATUS_HEX: Record<string, string> = { Affected: '#e11d48', Unknown: '#f59e0b', 'No version': '#f97316', Clean: '#10b981' };
+const SEVERITY_HEX: Record<string, string> = { ...SEVERITY_COLORS, Unknown: NEUTRAL_COLOR };
+const STATUS_HEX: Record<string, string> = { Affected: '#e11d48', 'Check manually': '#f59e0b', 'No version': '#f97316', 'Not affected': '#10b981' };
 const KIND_HEX: Record<string, string> = { Vulnerabilities: '#f59e0b', Malware: '#e11d48', 'Fix available': '#10b981', 'No fix': '#e11d48' };
 const colorsBy = (map: Record<string, string>, slices: { label: string }[]) => slices.map((s) => map[s.label] ?? '#94a3b8');
 const notAffectedTitle = (r: PackageResult) => (r.status === 'not-affected' && r.malwareCheckedDays !== null

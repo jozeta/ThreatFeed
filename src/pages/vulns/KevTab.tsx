@@ -220,8 +220,8 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
         <ChartCard title="Added by vendor (90 days)">
           <DonutChart title="KEV additions by vendor, last 90 days" data={byVendor} centerLabel={sliceTotal(byVendor)} />
         </ChartCard>
-        <ChartCard title={`EPSS scores (${days ? rangeLabel : 'whole catalog'})`} note="Probability of exploitation in the next 30 days, for the entries FIRST has scored">
-          <Histogram title={`EPSS scores of the KEV entries ${days ? `added in the last ${rangeLabel}` : 'in the catalog'}`} buckets={epss} color="fill-violet-500" />
+        <ChartCard title={`EPSS scores (${days ? rangeLabel : 'whole catalog'})`} note="Probability of exploitation in the next 30 days (%), for the entries FIRST has scored">
+          <Histogram title={`EPSS scores of the KEV entries ${days ? `added in the last ${rangeLabel}` : 'in the catalog'}`} buckets={epss} color="fill-violet-500" formatEdge={(v) => String(Math.round(v * 100))} />
         </ChartCard>
         <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
           <SectionTitle>Time from disclosure to KEV</SectionTitle>

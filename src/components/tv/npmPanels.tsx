@@ -46,8 +46,8 @@ const npmData = memoLast((c: NpmCtx) => {
 // "npm advisories · 7 days" number on the same wall counts publications only
 const NEW_OR_UPDATED = 'New or updated advisories';
 const NPM_KIND_HEX: Record<string, string> = { [NEW_OR_UPDATED]: '#f59e0b', Malware: '#e11d48', 'Fix available': '#10b981', 'No fix': '#e11d48' };
-// Package statuses as their badges; "Unknown" is grey like every not-a-category slice
-const NPM_STATUS_HEX: Record<string, string> = { Affected: '#e11d48', 'No version': '#f97316', Clean: '#10b981' };
+// Package statuses as their badges; "Check manually" is grey like every not-a-category slice
+const NPM_STATUS_HEX: Record<string, string> = { Affected: '#e11d48', 'No version': '#f97316', 'Not affected': '#10b981' };
 export const NpmWeekCard = ({ figure }: { figure: Figure }) => <StatCard label="npm advisories · 7 days" figure={figure} color="#f59e0b" />;
 export const NpmSeverityDonut = ({ data }: { data: Slice[] }) => <DonutPanel label="npm advisories by severity · 30 days" data={data} colors={TV_SEVERITY} />;
 

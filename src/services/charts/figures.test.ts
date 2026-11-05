@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Article, CveRecord, Feed, KevEntry, LeakSiteVictim } from '../../types';
 import type { NpmAdvisory, NpmAdvisoryData, NpmMalwareData } from '../npm/advisories';
 import type { PackageResult } from '../npm/match';
 import {
-  criticalPerDayByCweFamily, cvssBands, epssHistogram, kevByVendor, malwarePerDay, myPackagesStatus, newestCriticalNpm,
+  criticalPerDayByCweFamily, epssHistogram, kevByVendor, malwarePerDay, myPackagesStatus, newestCriticalNpm,
   npmFixShare, npmPerDayBySeverity, npmSeverityShare, npmTopCwes, npmTopPackages, npmVulnVsMalware, storiesByCategory,
   storiesPerDayBySeverity, topVendorsThisWeek, victimsBySector, victimsPerDayTopGroups, groupShare,
 } from './figures';
@@ -49,22 +49,6 @@ describe('kevByVendor', () => {
     const copy = structuredClone(list);
     kevByVendor(list, NOW);
     expect(list).toEqual(copy);
-  });
-});
-
-describe('cvssBands', () => {
-  it('buckets by band, leaves unscored out and respects the window edges', () => {
-    const list = [
-      cve('a', iso(11, 5), { score: 9.8 }), cve('b', iso(11, 5), { score: 9 }), cve('c', iso(10, 7), { score: 7.5 }),
-      cve('d', iso(10, 6), { score: 7.5 }), // 30 days back is out (window starts 10-07)
-      cve('e', iso(11, 1), { score: 5 }), cve('f', iso(11, 1), { score: 0.1 }), cve('g', iso(11, 1)), cve('h', iso(11, 1), { score: 0 }),
-    ];
-    expect(cvssBands(list, NOW)).toEqual([
-      { label: '9–10', value: 2 }, { label: '7–8.9', value: 1 }, { label: '4–6.9', value: 1 }, { label: '0.1–3.9', value: 1 },
-    ]);
-  });
-  it('returns zero rows when empty', () => {
-    expect(cvssBands([], NOW).map((r) => r.value)).toEqual([0, 0, 0, 0]);
   });
 });
 
@@ -178,6 +162,15 @@ describe('news', () => {
     ]);
     expect(topVendorsThisWeek([], NOW, ['Cisco'])).toEqual([]);
   });
+  it('leaves leak-site posts out of both charts, as trends and the TV do', () => {
+    const posts = [
+      article('p1', iso(11, 5), { sourceId: 'ransomware-live', title: 'Qilin has just published a new victim : acme.de', severity: 'critical' }),
+      article('p2', iso(11, 5), { sourceId: 'f1', title: '[Akira] - ransomware victim: Contoso' }),
+    ];
+    expect(storiesByCategory([...list, ...posts], feeds, NOW)).toEqual(storiesByCategory(list, feeds, NOW));
+    expect(storiesPerDayBySeverity([...list, ...posts], NOW)).toEqual(storiesPerDayBySeverity(list, NOW));
+    expect(storiesByCategory(posts, feeds, NOW)).toEqual([]);
+  });
 });
 
 describe('npm', () => {
@@ -241,8 +234,37 @@ describe('npm', () => {
   it('myPackagesStatus counts each status', () => {
     const r = (status: PackageResult['status']) => ({ status }) as PackageResult;
     expect(myPackagesStatus([r('affected'), r('not-affected'), r('not-affected'), r('no-version'), r('unknown')])).toEqual([
-      { label: 'Clean', value: 2, pct: 40 }, { label: 'Affected', value: 1, pct: 20 }, { label: 'No version', value: 1, pct: 20 }, { label: 'Unknown', value: 1, pct: 20 },
+      { label: 'Not affected', value: 2, pct: 40 }, { label: 'Affected', value: 1, pct: 20 }, { label: 'Check manually', value: 1, pct: 20 }, { label: 'No version', value: 1, pct: 20 },
     ]);
     expect(myPackagesStatus([])).toEqual([]);
+  });
+});
+
+describe('local day boundary', () => {
+  // Node re-reads process.env.TZ when it is assigned (as in utils/date.test.ts), so each case pins the zone itself
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('buckets an item at 00:30 local on its local day when UTC is still the day before (Auckland, UTC+13)', () => {
+    vi.stubEnv('TZ', 'Pacific/Auckland');
+    const t = new Date(2026, 10, 5, 0, 30);
+    expect(t.toISOString().slice(0, 10)).toBe('2026-11-04'); // UTC says the 4th
+    const now = new Date(2026, 10, 5, 12).getTime();
+    // inWindow path: a one-day window ending on the 5th holds it
+    const days = npmPerDayBySeverity(npm([adv('G1', 'high', t.toISOString())]), now, 1);
+    expect(days.map((d) => d.label)).toEqual(['2026-11-05']);
+    expect(days[0].segments.find((x) => x.name === 'High')?.value).toBe(1);
+    // npmVulnVsMalware's own range check
+    expect(npmVulnVsMalware(npm([adv('G1', 'high', t.toISOString())]), null, now, 1)).toEqual([{ label: 'Vulnerabilities', value: 1, pct: 100 }]);
+  });
+
+  it('keeps an item at 23:30 local out of the next local day when UTC has already moved on (Los Angeles, UTC-8)', () => {
+    vi.stubEnv('TZ', 'America/Los_Angeles');
+    const t = new Date(2026, 10, 4, 23, 30);
+    expect(t.toISOString().slice(0, 10)).toBe('2026-11-05'); // UTC says the 5th
+    const now = new Date(2026, 10, 5, 12).getTime();
+    const data = npm([adv('G1', 'high', t.toISOString())]);
+    expect(npmPerDayBySeverity(data, now, 1)[0].segments.every((x) => x.value === 0)).toBe(true);
+    expect(npmVulnVsMalware(data, null, now, 1)).toEqual([]);
+    expect(npmPerDayBySeverity(data, now, 2)[0].segments.find((x) => x.name === 'High')?.value).toBe(1);
   });
 });

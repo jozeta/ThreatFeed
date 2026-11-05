@@ -5,6 +5,7 @@ import type { Article, CveRecord, Feed, KevEntry, LeakSiteVictim } from '../../t
 import { groupDisplayName } from '../../utils/countries';
 import { localDayKey } from '../../utils/date';
 import { countEntitiesByDay, trendsVocab } from '../intelligence/trends';
+import { isLeakSitePost } from '../intelligence/incidents';
 import { cvssBand } from '../intelligence/vulns';
 import type { NpmAdvisory, NpmAdvisoryData, NpmMalwareData } from '../npm/advisories';
 import type { PackageResult } from '../npm/match';
@@ -91,19 +92,6 @@ export function kevByVendor(kev: KevEntry[], now: number, days = 90): Slice[] {
   return slices(tally(inWindow(kev, (k) => k.dateAdded, now, days).map(({ item }) => item.vendor.trim() || 'Unknown')));
 }
 
-const CVSS_ROWS = [
-  { id: 'critical', label: '9–10' },
-  { id: 'high', label: '7–8.9' },
-  { id: 'medium', label: '4–6.9' },
-  { id: 'low', label: '0.1–3.9' },
-] as const;
-
-/** New CVEs per CVSS band, highest first; unscored CVEs are left out */
-export function cvssBands(cves: CveRecord[], now: number, days = 30): Row[] {
-  const counts = tally(inWindow(cves, (c) => c.published, now, days).map(({ item }) => cvssBand(item.score)));
-  return CVSS_ROWS.map((r) => ({ label: r.label, value: counts.get(r.id) ?? 0 }));
-}
-
 /** KEV entries by EPSS score (those with one) */
 export function epssHistogram(kev: KevEntry[]) {
   return bucketize(kev.flatMap((k) => (typeof k.epss === 'number' ? [k.epss] : [])), [0, 0.01, 0.05, 0.1, 0.3, 0.5, 0.7, 1]);
@@ -139,9 +127,12 @@ export function victimsPerDayTopGroups(victims: LeakSiteVictim[], now: number, d
 
 // ---- News ----
 
+/** Leak-site posts (one item per victim) are left out of both news charts, as in trends and the TV front wall */
+const stories = (articles: Article[]) => articles.filter((a) => !isLeakSitePost(a));
+
 export function storiesByCategory(articles: Article[], feeds: Feed[], now: number, days = 7): Slice[] {
   const categoryOf = new Map(feeds.map((f) => [f.id, f.category]));
-  return slices(tally(inWindow(articles, (a) => a.publishedAt, now, days).map(({ item }) => categoryOf.get(item.sourceId) || item.categories?.[0] || 'Uncategorized')));
+  return slices(tally(inWindow(stories(articles), (a) => a.publishedAt, now, days).map(({ item }) => categoryOf.get(item.sourceId) || item.categories?.[0] || 'Uncategorized')));
 }
 
 const NEWS_SEVERITIES = [
@@ -158,7 +149,7 @@ const severityName = (s: string | undefined) => {
 };
 
 export function storiesPerDayBySeverity(articles: Article[], now: number, days = 14): BarBucket[] {
-  const entries = inWindow(articles, (a) => a.publishedAt, now, days).map(({ item, day }) => ({ day, name: severityName(item.severity) }));
+  const entries = inWindow(stories(articles), (a) => a.publishedAt, now, days).map(({ item, day }) => ({ day, name: severityName(item.severity) }));
   return stackByDay(now, days, NEWS_SEVERITIES, countByDay(entries));
 }
 
@@ -247,7 +238,7 @@ export function npmFixShare(data: NpmAdvisoryData, now: number, days = 30): Slic
 }
 
 const STATUS_LABEL: Record<PackageResult['status'], string> = {
-  affected: 'Affected', 'not-affected': 'Clean', 'no-version': 'No version', unknown: 'Unknown',
+  affected: 'Affected', 'not-affected': 'Not affected', 'no-version': 'No version', unknown: 'Check manually',
 };
 
 export function myPackagesStatus(results: PackageResult[]): Slice[] {

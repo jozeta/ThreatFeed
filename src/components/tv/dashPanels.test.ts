@@ -292,6 +292,8 @@ describe('TV chart colours', () => {
     expect(Object.keys(donut).sort()).toEqual(['Critical', 'High', 'Low', 'Medium', 'Unknown']);
     expect(stacked).toEqual(donut);
     expect(donut.Unknown).toBe('#94a3b8');
+    // one source for page and TV: the page's NpmTab and per-day bars use the same hex
+    expect(donut).toMatchObject({ Medium: '#fbbf24', Low: '#0ea5e9' });
     expect(render(p.find(x => x.id === 'npmDaily')!)).not.toMatch(/dark:|fill-/);
   });
   it('"Unknown" and "Other" are grey, and rank colours go to real categories only', () => {
@@ -300,7 +302,7 @@ describe('TV chart colours', () => {
     const colors = legendColors(render(ransomPanels({ victims, stats: null, now }).find(x => x.id === 'sectorShare')!));
     expect(colors).toEqual({ Unknown: '#94a3b8', Health: '#e11d48', Tech: '#f97316' });
     const mine = legendColors(render(npmPanels(npmCtx({ results: [result('affected'), result('unknown')] })).find(x => x.id === 'npmMine')!));
-    expect(mine).toEqual({ Affected: '#e11d48', Unknown: '#94a3b8' });
+    expect(mine).toEqual({ Affected: '#e11d48', 'Check manually': '#94a3b8' });
   });
   it('names the advisory slice of the malware donut for what it counts (published or updated)', () => {
     const html = render(npmPanels(npmCtx()).find(x => x.id === 'npmKinds')!);
