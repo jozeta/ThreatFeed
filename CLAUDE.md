@@ -30,14 +30,14 @@ minutes** and on push to `main`: test → snapshot → build → deploy to Pages
 
 - **No backend.** The only server-side work is the scheduled GitHub Action that builds static data
   files (`snapshot.json`, `vulns.json`, `ransomware.json`, `nvd-cache.json`, `msrc.json`,
-  `actors.json`, `entities.json`, the RSS feeds `data/feeds/*.xml` and `data/feeds/seen.json`, the
+  `actors.json`, `entities.json`, `npm-advisories.json`, `npm-malware.json`, the RSS feeds `data/feeds/*.xml` and `data/feeds/seen.json`, the
   published-items ledger). Several read their previous published copy so NVD/MSRC are
   fetched incrementally.
 - In the browser, feeds not covered by the snapshot are fetched by 6 workers through a fetch-mode
   chain (CORSFix → direct → RSS2JSON by default; custom proxy with `%s`). Shared per-proxy pacing:
   a 429 pauses that proxy for every worker (`Retry-After` or exponential backoff with jitter).
 - `src/services/`: `rss/` (fetch, parse), `articles/`, `intelligence/`, `storage/` (IndexedDB),
-  `sync/`, `tv/`, `snapshot.ts` / `snapshotLoader.ts`, notifications.
+  `sync/`, `tv/`, `npm/` (advisory index, package matching, semver, OSV.dev check), `snapshot.ts` / `snapshotLoader.ts`, notifications.
 - `src/context/`: `FeedContext`, `FilterContext`, `SettingsContext`. `src/hooks/` holds the
   routing (`useHashRoute`), keyboard navigation, entity matching, vulns and leak-site hooks.
 - `src/pages/`: My Feed, Briefing, Vulnerabilities, Ransomware, actors, incidents, Bookmarks,
