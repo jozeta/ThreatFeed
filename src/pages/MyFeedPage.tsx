@@ -152,7 +152,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
         </div>
       </div>
 
-      <div className="flex gap-1 mt-6 mb-4 border-b border-theme-border overflow-x-auto relative" role="tablist" ref={ink.listRef}>
+      <div className="flex gap-1 mt-6 mb-4 border-b border-theme-border flex-wrap relative" role="tablist" ref={ink.listRef}>
         {subTabs.map((t) => (
           <button
             key={t.id}
@@ -172,7 +172,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
       </div>
 
       {chips.length > 1 && (
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-3">
+        <div className="flex flex-wrap items-center gap-2 pb-3">
           <button onClick={() => setRuleParam('')} className={chipClass(!ruleParam)}>All</button>
           {chips.map(([id, name]) => (
             <button key={id} onClick={() => setRuleParam(id)} className={chipClass(ruleParam === id)}>{name}</button>
