@@ -23,6 +23,9 @@ export function foldSlices(items: { label: string; value: number }[], max = 6): 
   return rows.map((r, i) => ({ ...r, pct: pct[i] }));
 }
 
+/** The sum of the slices, as the donut's centre label */
+export const sliceTotal = (slices: Slice[]) => slices.reduce((n, s) => n + s.value, 0).toLocaleString();
+
 /** Histogram buckets between consecutive edges: [from, to) except the last, which includes its upper edge */
 export function bucketize(values: number[], edges: number[]): { from: number; to: number; count: number }[] {
   if (edges.length < 2) return [];

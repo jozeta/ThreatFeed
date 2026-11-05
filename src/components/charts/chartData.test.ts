@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketize, foldSlices } from './chartData';
+import { bucketize, foldSlices, sliceTotal } from './chartData';
 
 describe('foldSlices', () => {
   it('slices fold to Other and percentages sum to 100', () => {
@@ -43,5 +43,12 @@ describe('bucketize', () => {
   });
   it('returns [] for fewer than two edges', () => {
     expect(bucketize([1], [0])).toEqual([]);
+  });
+});
+
+describe('sliceTotal', () => {
+  it('sums the slices, Other included', () => {
+    expect(sliceTotal(foldSlices([{ label: 'a', value: 3 }, { label: 'b', value: 4 }], 1))).toBe('7');
+    expect(sliceTotal([])).toBe('0');
   });
 });

@@ -10,8 +10,12 @@ import { containsTerm } from '../../utils/textMatch';
 import { localDayKey } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
-import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
+import { BarList, ChartCard, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
 import { StackedBars } from '../../components/charts/StackedBars';
+import { DonutChart } from '../../components/charts/DonutChart';
+import { Histogram } from '../../components/charts/Histogram';
+import { sliceTotal } from '../../components/charts/chartData';
+import { epssHistogram, kevByVendor } from '../../services/charts/figures';
 import { CveButton, CweChip, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
 import { VendorButton } from '../../components/VendorLink';
 import { EntityLink } from '../../components/EntityText';
@@ -102,6 +106,10 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
   const dueSoon = inRange.filter((k) => k.dueDate && k.dueDate >= today && k.dueDate <= in14Days).length;
 
   const months = useMemo(() => kevPerMonth(filtered, 24), [filtered]);
+  // Like the monthly chart, the vendor donut follows every filter but the range (it always covers 90 days)
+  const nowMinute = Math.floor(Date.now() / 60_000) * 60_000;
+  const byVendor = useMemo(() => kevByVendor(filtered, nowMinute, 90), [filtered, nowMinute]);
+  const epss = useMemo(() => epssHistogram(inRange), [inRange]);
   const vendors = countBy(inRange, (k) => k.vendor);
   const products = countBy(inRange, productKey);
   const weaknesses = useMemo(() => {
@@ -209,6 +217,12 @@ export const KevTab: React.FC<KevTabProps> = ({ kev, hiddenVendorCount, news, ex
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ChartCard title="Added by vendor (90 days)">
+          <DonutChart title="KEV additions by vendor, last 90 days" data={byVendor} centerLabel={sliceTotal(byVendor)} />
+        </ChartCard>
+        <ChartCard title={`EPSS scores (${days ? rangeLabel : 'whole catalog'})`} note="Probability of exploitation in the next 30 days, for the entries FIRST has scored">
+          <Histogram title={`EPSS scores of the KEV entries ${days ? `added in the last ${rangeLabel}` : 'in the catalog'}`} buckets={epss} color="fill-violet-500" />
+        </ChartCard>
         <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
           <SectionTitle>Time from disclosure to KEV</SectionTitle>
           <BarList color="bg-rose-500/70" rows={timing.buckets.map((b) => ({ key: b.id, label: b.label, value: b.count }))} />
