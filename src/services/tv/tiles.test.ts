@@ -208,6 +208,15 @@ describe('tilesForNpm', () => {
     expect(tiles[0]).toMatchObject({ tone: 'critical', time: ago(3), npm: { severity: 'malware', packages: ['evil-pkg'], yours: ['evil-pkg@1.0.0'] } });
   });
 
+  it('gives one tile per advisory id when the malware list and the advisories share one', () => {
+    const shared = adv('GHSA-4444-4444-4444', 'critical', 1, { ranges: [{ package: 'evil-pkg', vulnerable: '>= 0' }] });
+    const d = npmData([shared]);
+    const m: NpmMalwareData = { version: 1, generatedAt: ago(0), updatedAt: ago(0), entries: [['GHSA-4444-4444-4444', 'evil-pkg', '>= 0', ago(1)]] };
+    const tiles = tilesForNpm(d, m, matchPackages([{ name: 'evil-pkg', version: '1.0.0' }], d, m), NOW);
+    expect(ids(tiles)).toEqual(['npm-GHSA-4444-4444-4444']);
+    expect(npmTilesForMix(d, m, matchPackages([{ name: 'evil-pkg', version: '1.0.0' }], d, m), NOW)).toHaveLength(1);
+  });
+
   it('links the QR code to the GitHub advisory only for a valid GHSA id', () => {
     expect(ghsaUrl('GHSA-cfgh-jmpq-rvwx')).toBe('https://github.com/advisories/GHSA-cfgh-jmpq-rvwx');
     for (const bad of ['GHSA-aaaa-aaaa-aaaa', 'GHSA-2222-2222', 'GHSA-2222-2222-2222/../x', 'javascript:alert(1)', '']) expect(ghsaUrl(bad)).toBeUndefined();

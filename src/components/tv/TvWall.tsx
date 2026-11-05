@@ -72,6 +72,8 @@ export default function TvWall({ page, sub = '' }: { page: ActiveNavTab; sub?: s
   const npmWall = page === 'vulnerabilities' && sub === 'npm';
   const { advisories: npmData, malware: npmMalware } = useNpmAdvisories(npmWall || mixed);
   const { results: npmResults } = useNpmMatches(npmData, npmMalware); // asks OSV only when that setting is on
+  // The OSV answer arrives as a change of the results: null until one has come (always null with OSV off)
+  const npmOsvAnswered = npmResults.some(r => r.osv === 'checked') || null;
 
   // The wall rebuilds on its own schedule (refills, data signature); it reads the latest data through this ref
   const latest = { page, npmWall, articles, feeds, cveIntel, incidents, vulns, victims, settings, mixed, msrc, stats, npmData, npmMalware, npmResults };
@@ -137,7 +139,7 @@ export default function TvWall({ page, sub = '' }: { page: ActiveNavTab; sub?: s
       tilesById.current = keepLive(new Map(tiles.map(t => [t.id, t])), tilesById.current, live);
       panelsById.current = keepLive(new Map(panels.map(p => [NUM + p.id, p])), panelsById.current, live);
       const numberItems: EngineItem[] = panels.map(p => ({ id: NUM + p.id, weight: p.weight, shapes: p.shapes }));
-      return mixItems(mixItems(toEngineItems(main), toEngineItems(npm), NPM_EVERY), numberItems);
+      return mixItems(mixItems(toEngineItems(main), toEngineItems(npm), NPM_EVERY, true), numberItems);
     },
     size,
     tv.intervalSeconds * 1000,
@@ -152,6 +154,8 @@ export default function TvWall({ page, sub = '' }: { page: ActiveNavTab; sub?: s
   useBreakingDetection(news, {
     page,
     data: [articles, vulns, cveIntel, victims, incidents, npmData, npmMalware, npmResults],
+    // The npm data loads on demand, after the wall has settled: each source's first load is starting data, not news
+    baseline: [npmData, npmMalware, npmOsvAnswered],
     synced: initialSyncDone,
     build,
     kevAdded: () => kevAddedMap(ref.current.vulns, ref.current.cveIntel),

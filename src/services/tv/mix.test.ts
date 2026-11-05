@@ -30,4 +30,10 @@ describe('mixItems', () => {
     const out = mixItems(stories(12), numbers(5), 6);
     expect(out.map(i => i.id)).toEqual(['s0', 's1', 's2', 's3', 's4', 'num:n0', 's5', 's6', 's7', 's8', 's9', 'num:n1', 's10', 's11']);
   });
+  it('with keepRest, items left over when the stories run short follow at the end, at most one per started group', () => {
+    expect(mixItems(stories(2), numbers(2), 6, true).map(i => i.id)).toEqual(['s0', 's1', 'num:n0']);
+    expect(mixItems([], numbers(3), 6, true).map(i => i.id)).toEqual(['num:n0']);
+    expect(mixItems(stories(8), numbers(3), 6, true).map(i => i.id)).toEqual(['s0', 's1', 's2', 's3', 's4', 'num:n0', 's5', 's6', 's7', 'num:n1']);
+    expect(mixItems(stories(2), numbers(2), 6).map(i => i.id)).toEqual(['s0', 's1']); // without it, as before
+  });
 });

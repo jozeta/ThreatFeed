@@ -256,7 +256,7 @@ function npmTiles(data: NpmAdvisoryData, malware: NpmMalwareData | null, results
   const newest = (a: { time?: string }, b: { time?: string }) => timeOf(b.time ?? '') - timeOf(a.time ?? '');
 
   const mal: TvTile[] = [];
-  const seen = new Set<string>();
+  const seen = new Set<string>(); // advisory ids with a tile
   for (const [id, pkg, vulnerable, published] of malware?.entries ?? []) {
     const h = hits.get(id)?.filter(x => x.name.toLowerCase() === pkg.toLowerCase());
     if (!h?.length || seen.has(id)) continue;
@@ -267,7 +267,7 @@ function npmTiles(data: NpmAdvisoryData, malware: NpmMalwareData | null, results
   const yours: TvTile[] = [];
   const tiers: TvTile[][] = [[], []];
   for (const a of data.recent) {
-    if (a.withdrawn) continue;
+    if (a.withdrawn || seen.has(a.id)) continue; // one tile per id: a malware tile already stands for it
     const h = hits.get(a.id);
     const t = h?.length ? null : tier(a);
     if (!h?.length && t === null) continue;
