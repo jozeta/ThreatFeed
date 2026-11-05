@@ -3,6 +3,8 @@ import {
   runAlertCheck, emptyAlertStore, feedMatches, isNew, npmUnseenCount, AlertStore, CheckInput, AlertMatch, PENDING_CAP, NPM_SEEN_CAP,
 } from './alertEngine';
 import type { NpmAdvisory, NpmAdvisoryData, NpmIndexEntry, NpmMalwareData } from '../npm/advisories';
+import { affectingKeys, matchPackages } from '../npm/match';
+import { parsePackageEntry } from '../npm/semver';
 import { AlertRule, Article, ConditionGroup, KevEntry, NewsCondition, VulnCondition, VulnData } from '../../types';
 import { article } from '../../test/fixtures';
 import { createBuiltInRules, duplicateRule, migrateAlertRules } from './alertRules';
@@ -536,11 +538,27 @@ describe('npm packages', () => {
     expect(Object.keys(next.store.rules['npm-packages'].handled)).toEqual([keyOf(NEW[0], 'lodash@4.17.15')]);
   });
 
-  it(`caps npmSeen at ${NPM_SEEN_CAP}, dropping the oldest`, () => {
+  it(`keeps every affecting key and caps the rest of npmSeen at ${NPM_SEEN_CAP}, oldest first`, () => {
     const many: NpmIndexEntry[] = Array.from({ length: NPM_SEEN_CAP + 10 }, (_, i) => [`GHSA-${i}`, 'low', [['lodash', '< 5.0.0']]]);
-    const { store } = runAlertCheck(npmInput(['lodash'], advisories(many)), emptyAlertStore(NOW));
-    expect(store.npmSeen).toHaveLength(NPM_SEEN_CAP);
-    expect(store.npmSeen).not.toContain('GHSA-0|lodash');
+    const first = runAlertCheck(npmInput(['lodash'], advisories(many)), emptyAlertStore(NOW));
+    expect(first.store.npmSeen).toHaveLength(NPM_SEEN_CAP + 10); // all still affect lodash: none may go
+    const second = runAlertCheck(npmInput(['lodash'], advisories(many), null, { now: later(HOUR) }), first.store);
+    expect(second.notify).toEqual([]);
+    // Once only the last 10 affect, the stale keys are trimmed oldest first
+    const third = runAlertCheck(npmInput(['lodash'], advisories(many.slice(-10)), null, { now: later(2 * HOUR) }), second.store);
+    expect(third.notify).toEqual([]);
+    expect(third.store.npmSeen).toHaveLength(NPM_SEEN_CAP);
+    expect(third.store.npmSeen).not.toContain('GHSA-0|lodash');
+    expect(third.store.npmSeen).toContain(`GHSA-${NPM_SEEN_CAP + 9}|lodash`);
+  });
+
+  it('records exactly affectingKeys: unreadable ranges in, withdrawn advisories out', () => {
+    const data = advisories([PROTO, ['GHSA-unpa-rsed-0000', 'high', [['lodash', 'not a range']]], ['GHSA-with-draw-0000', 'high', [['lodash', '< 5.0.0']], 1]]);
+    const { store } = runAlertCheck(npmInput(['lodash@4.17.15', 'lodash'], data), emptyAlertStore(NOW));
+    const entries = ['lodash@4.17.15', 'lodash'].map(e => parsePackageEntry(e)!);
+    expect([...store.npmSeen].sort()).toEqual(affectingKeys(matchPackages(entries, data, null)).sort());
+    expect(store.npmSeen).toContain('GHSA-unpa-rsed-0000|lodash@4.17.15');
+    expect(store.npmSeen.some(k => k.startsWith('GHSA-with-draw-0000'))).toBe(false);
   });
 
   it('lists recorded alerts in My Feed and counts the unseen ones for the npm tab', () => {

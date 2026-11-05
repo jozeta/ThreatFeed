@@ -20,6 +20,7 @@ import {
 import { loadActors, loadEntities, loadMsrc, loadNpmAdvisories, loadNpmMalware, loadRansomwareIntel, loadSnapshot, loadStats, loadTrends, loadVulnData } from '../services/snapshot';
 import { decodeNpmData, decodeNpmMalware, type NpmAdvisoryData, type NpmMalwareData } from '../services/npm/advisories';
 import { buildEntityMatcher } from '../services/intelligence/entityLinks';
+import { NPM_RULE_ID } from '../services/intelligence/alertEngine';
 import { EntityMatcherContext } from '../hooks/useEntityMatcher';
 import { createSnapshotLoader, type LoadedFor } from '../services/snapshotLoader';
 import { loadArticleContent } from '../services/articleContent';
@@ -523,7 +524,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // handler catches up when the tab returns
       const notificationPermission = 'Notification' in window ? Notification.permission : undefined;
       // My npm packages can't alert without packages to watch, so then it doesn't keep a hidden tab refreshing
-      const alertRules = (settingsRef.current.alertRules ?? []).filter(r => r.builtIn !== 'npm-packages' || settingsRef.current.npmPackages?.length);
+      const alertRules = (settingsRef.current.alertRules ?? []).filter(r => r.builtIn !== NPM_RULE_ID || settingsRef.current.npmPackages?.length);
       if (!navigator.onLine || shouldPauseWhenHidden(document.hidden, notificationPermission, alertRules)) return;
       // Snapshot mode: reload the (regularly rebuilt) snapshot; only feeds it lacks are fetched live
       if (settingsRef.current.dataSource !== 'live') {

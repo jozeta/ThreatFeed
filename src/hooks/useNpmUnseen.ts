@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { AlertStore, NPM_RULE_ID, npmUnseenCount } from '../services/intelligence/alertEngine';
-import { ALERT_STORE_EVENT, loadAlertStore, saveAlertStore } from '../services/intelligence/alertStore';
+import { ALERT_STORE_EVENT, loadAlertStore, saveAlertSeen } from '../services/intelligence/alertStore';
 
 /**
  * New npm alerts (advisories affecting your packages, alerted by "My npm packages") since the Vulns npm tab was
@@ -25,7 +25,7 @@ export function useNpmUnseen(open: boolean): number {
 
   useEffect(() => {
     if (!open || count === 0) return;
-    void loadAlertStore().then(current => saveAlertStore({ ...current, seen: { ...current.seen, npm: new Date().toISOString() } }));
+    void saveAlertSeen('npm', new Date().toISOString());
   }, [open, count]);
 
   return open ? 0 : count;

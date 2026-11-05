@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
 import { AlertMatch, AlertStore, feedMatches, isNew } from '../services/intelligence/alertEngine';
-import { ALERT_STORE_EVENT, loadAlertStore, saveAlertStore } from '../services/intelligence/alertStore';
+import { ALERT_STORE_EVENT, loadAlertStore, saveAlertSeen } from '../services/intelligence/alertStore';
 import { AlertRuleKind } from '../types';
 
 /** One My Feed row: an item and every rule that matched it */
@@ -69,8 +69,7 @@ export function useAlertFeed(): AlertFeed {
   }, [store, feeds, articles, vulns, cveIntel, npmAdvisories, npmMalware, settings]);
 
   const markSeen = useCallback(async (kind: AlertRuleKind) => {
-    const current = await loadAlertStore();
-    await saveAlertStore({ ...current, seen: { ...current.seen, [kind]: new Date().toISOString() } });
+    await saveAlertSeen(kind, new Date().toISOString());
   }, []);
 
   return {

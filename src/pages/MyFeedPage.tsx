@@ -52,7 +52,7 @@ function cveFacts(cve: string, vulns: VulnData | null) {
 }
 
 const VulnRow: React.FC<{ row: AlertRow; vulns: VulnData | null; onOpen: () => void }> = ({ row, vulns, onOpen }) => {
-  const facts = cveFacts(row.ref, vulns);
+  const facts: Partial<ReturnType<typeof cveFacts>> = isCve(row.ref) ? cveFacts(row.ref, vulns) : {}; // npm alerts are keyed by advisory id
   // Watched events and npm alerts (`id|package`) carry what happened in their title; a plain CVE match just repeats vendor and product
   const events = row.matches.filter((m) => m.itemId.includes('#') || m.itemId.includes('|'));
   return (

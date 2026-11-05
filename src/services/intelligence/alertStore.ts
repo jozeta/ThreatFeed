@@ -1,4 +1,4 @@
-import { getStoredValue, saveStoredValue } from '../storage/indexeddb';
+import { getStoredValue, saveStoredValue, updateStoredValue } from '../storage/indexeddb';
 import { ALERT_STORE_KEY, AlertStore, emptyAlertStore } from './alertEngine';
 import { loadWatchStore } from './cveWatch';
 
@@ -17,5 +17,17 @@ export async function loadAlertStore(): Promise<AlertStore> {
 
 export async function saveAlertStore(store: AlertStore): Promise<void> {
   await saveStoredValue(ALERT_STORE_KEY, store);
+  window.dispatchEvent(new Event(ALERT_STORE_EVENT));
+}
+
+/**
+ * Sets one "seen" time and nothing else, in one transaction: saving a whole loaded copy instead could overwrite
+ * what an alert check saved in between (its new matches and npm keys).
+ */
+export async function saveAlertSeen(kind: keyof AlertStore['seen'], at: string): Promise<void> {
+  await updateStoredValue<AlertStore>(ALERT_STORE_KEY, current => {
+    const store = current ?? emptyAlertStore();
+    return { ...store, seen: { ...store.seen, [kind]: at } };
+  });
   window.dispatchEvent(new Event(ALERT_STORE_EVENT));
 }

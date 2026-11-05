@@ -79,7 +79,7 @@ const NEWS_MAX_AGE_MS = DAY_MS; // older articles are recorded but never notify,
 /** `seen` starts at creation time, so whatever is baselined on day one isn't NEW */
 export function emptyAlertStore(now: Date = new Date()): AlertStore {
   const stamp = now.toISOString();
-  return { rules: {}, watch: {}, pending: [], seen: { news: stamp, vulns: stamp }, npmSeen: [], npmKnownEntries: [] };
+  return { rules: {}, watch: {}, pending: [], seen: { news: stamp, vulns: stamp, npm: stamp }, npmSeen: [], npmKnownEntries: [] };
 }
 
 // isNew runs once per My Feed row; a Set per quiet list keeps that from scanning thousands of baseline IDs each time
@@ -273,10 +273,12 @@ function npmCheck(input: CheckInput, store: AlertStore): { state?: RuleState; fr
   for (const [key, at] of Object.entries(handled)) {
     if (!watched.has(keyEntry(key)) || (!current.has(key) && now.getTime() - Date.parse(at) > HANDLED_TTL_DAYS * DAY_MS)) delete handled[key];
   }
+  // Every key still affecting a package stays (dropping one would alert it again); the cap trims the rest, oldest first
+  const stale = [...seen].filter(k => !current.has(k)).slice(-Math.max(0, NPM_SEEN_CAP - current.size));
   return {
     state: { version: NPM_RULE_ID, terms: [], handled, enabled: true },
     fresh,
-    seen: [...seen].slice(-NPM_SEEN_CAP),
+    seen: [...stale, ...[...seen].filter(k => current.has(k))],
     known: entries,
   };
 }
@@ -396,7 +398,7 @@ export function runAlertCheck(input: CheckInput, store: AlertStore): CheckResult
       watch: watch?.next ?? store.watch,
       pending,
       ...(lastNotifiedAt ? { lastNotifiedAt } : {}),
-      seen: { ...store.seen, news: store.seen?.news ?? stamp, vulns: store.seen?.vulns ?? stamp },
+      seen: { news: store.seen?.news ?? stamp, vulns: store.seen?.vulns ?? stamp, npm: store.seen?.npm ?? stamp },
       npmSeen: npm.seen,
       npmKnownEntries: npm.known,
     },

@@ -304,6 +304,15 @@ export async function saveStoredValue(key: string, value: unknown): Promise<void
   await db.put('settings', { key, value });
 }
 
+/** Read-modify-write of one stored value in a single transaction, so a concurrent write in between isn't lost */
+export async function updateStoredValue<T>(key: string, update: (current: T | null) => T): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('settings', 'readwrite');
+  const entry = await tx.store.get(key);
+  await tx.store.put({ key, value: update(entry ? (entry.value as T) : null) });
+  await tx.done;
+}
+
 export async function getSettingsFromDB(): Promise<UserSettings | null> {
   try {
     const db = await getDB();
