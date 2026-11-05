@@ -99,6 +99,7 @@ interface NpmAdvisoryPanelProps {
   id: string;
   found: Found | null;
   loading: boolean;
+  failed?: boolean; // the npm data couldn't be loaded and nothing is stored
   hits: AffectedEntry[];
   results: PackageResult[];
   news: Article[];
@@ -107,7 +108,9 @@ interface NpmAdvisoryPanelProps {
 }
 
 /** One npm advisory: what it says, what it affects, whether your packages are in it, and the news about it */
-export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, loading, hits, results, news, onOpenArticle, onClose }) => {
+const isGhsa = (id: string) => /^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(id);
+
+export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, loading, failed, hits, results, news, onOpenArticle, onClose }) => {
   const a = found?.kind === 'detail' ? found.advisory : null;
   const severity = a?.severity ?? (found?.kind === 'index' ? found.severity : found?.kind === 'malware' ? 'critical' : undefined);
   const withdrawn = a?.withdrawn ?? (found?.kind === 'index' && found.withdrawn ? 'yes' : undefined);
@@ -155,7 +158,12 @@ export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, l
         <PanelCloseButton />
       </div>
 
-      {loading && !found && <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading npm advisories…</p>}
+      {failed && !found && (
+        <p className="text-sm font-serif text-theme-text-muted">
+          Couldn't load npm advisory data.{isGhsa(id) && <> <a href={`https://github.com/advisories/${id}`} target="_blank" rel="noopener noreferrer" className="text-theme-accent underline">Open {id} on GitHub</a>.</>}
+        </p>
+      )}
+      {loading && !failed && !found && <p className="text-xs font-mono text-theme-text-muted animate-pulse">Loading npm advisories…</p>}
       {!loading && !found && (
         <p className="text-sm font-serif text-theme-text-muted">{id} isn't in the published npm data: it may be for another ecosystem, not yet reviewed, or not yet in this snapshot.</p>
       )}
@@ -230,7 +238,7 @@ export const NpmAdvisoryPanel: React.FC<NpmAdvisoryPanelProps> = ({ id, found, l
 /** The npm advisory panel (?advisory=GHSA-…), mounted once by the app over any page; the npm data only loads once one is opened */
 export const NpmAdvisoryPanelHost: React.FC<{ id: string; onOpenArticle: (a: Article) => void }> = ({ id, onOpenArticle }) => {
   const { articles } = useFeeds();
-  const { advisories, malware } = useNpmAdvisories();
+  const { advisories, malware, failed } = useNpmAdvisories();
   const { results, affecting } = useNpmMatches(advisories, malware);
   const found = useMemo(() => findAdvisory(id, advisories, malware), [id, advisories, malware]);
   const cves = found?.kind === 'detail' ? found.advisory.cves : NO_CVES;
@@ -240,6 +248,7 @@ export const NpmAdvisoryPanelHost: React.FC<{ id: string; onOpenArticle: (a: Art
       id={id}
       found={found}
       loading={!advisories}
+      failed={failed}
       hits={affecting.get(id) ?? []}
       results={results}
       news={news}

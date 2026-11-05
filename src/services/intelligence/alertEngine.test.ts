@@ -552,6 +552,15 @@ describe('npm packages', () => {
     expect(third.store.npmSeen).toContain(`GHSA-${NPM_SEEN_CAP + 9}|lodash`);
   });
 
+  it('keeps no stale keys when every slot is taken by an affecting key', () => {
+    const many: NpmIndexEntry[] = Array.from({ length: NPM_SEEN_CAP }, (_, i) => [`GHSA-${i}`, 'low', [['lodash', '< 5.0.0']]]);
+    const first = runAlertCheck(npmInput(['lodash'], advisories(many)), emptyAlertStore(NOW));
+    first.store.npmSeen.push('GHSA-gone|lodash'); // stale: no longer affects
+    const second = runAlertCheck(npmInput(['lodash'], advisories(many), null, { now: later(HOUR) }), first.store);
+    expect(second.store.npmSeen).toHaveLength(NPM_SEEN_CAP);
+    expect(second.store.npmSeen).not.toContain('GHSA-gone|lodash');
+  });
+
   it('records exactly affectingKeys: unreadable ranges in, withdrawn advisories out', () => {
     const data = advisories([PROTO, ['GHSA-unpa-rsed-0000', 'high', [['lodash', 'not a range']]], ['GHSA-with-draw-0000', 'high', [['lodash', '< 5.0.0']], 1]]);
     const { store } = runAlertCheck(npmInput(['lodash@4.17.15', 'lodash'], data), emptyAlertStore(NOW));

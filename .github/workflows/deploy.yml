@@ -160,15 +160,19 @@ jobs:
           echo "Restored $kept published content shards"
       # The ledger (feeds/seen.json) exists only in the published site and the cache, and a deploy replaces the
       # whole site; without it the next run would start over and re-date every item. If the snapshot wrote no
-      # feeds, put the published (or cached) set of five back, all or none. If neither is there and the site
+      # feeds, put the published (or cached) set back, all or none (npm.xml is optional: sets published before it
+      # existed are complete without it). If neither is there and the site
       # isn't simply without feeds yet (404), stop before deploying so the old site keeps serving.
       - name: Keep the published RSS feeds
         run: |
           dir=public/data/feeds
-          names="seen.json news.xml vulns.xml ransomware.xml npm.xml"
+          names="seen.json news.xml vulns.xml ransomware.xml"
+          optional="npm.xml"
           valid() { [ -s "$1" ] && node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(!d||d.version!==1||typeof d.feeds!=='object')process.exit(1)" "$1" 2>/dev/null; }
           complete() { for n in $names; do [ -s "$1/$n" ] || return 1; done; valid "$1/seen.json"; }
           complete "$dir" && exit 0
+          # npm.xml is optional: restored when present, and a 404 for it alone is not a failure
+          fetch_optional() { c=$(curl -sS -L -o "$1/$optional" -w '%{http_code}' --max-time 120 "https://jozeta.github.io/ThreatFeed/data/feeds/$optional?t=$(date +%s)") || c=000; [ "$c" = 200 ] && [ -s "$1/$optional" ] || rm -f "$1/$optional"; }
           mkdir -p "$dir"
           tmp=$(mktemp -d)
           code=000
@@ -180,13 +184,13 @@ jobs:
               [ "$n" = seen.json ] && code=$c
               if [ "$c" != 200 ]; then fetched=0; break; fi
             done
-            if [ "$fetched" = 1 ] && complete "$tmp"; then for n in $names; do mv "$tmp/$n" "$dir/$n"; done; echo "Restored the published feeds"; exit 0; fi
+            if [ "$fetched" = 1 ] && complete "$tmp"; then fetch_optional "$tmp"; for n in $names $optional; do [ -f "$tmp/$n" ] && mv "$tmp/$n" "$dir/$n"; done; echo "Restored the published feeds"; exit 0; fi
             [ "$code" = 404 ] && break
             sleep 15
           done
-          if complete .cache/feeds; then for n in $names; do cp ".cache/feeds/$n" "$dir/$n"; done; echo "Restored the feeds from the Action cache"; exit 0; fi
+          if complete .cache/feeds; then for n in $names $optional; do [ -f ".cache/feeds/$n" ] && cp ".cache/feeds/$n" "$dir/$n"; done; echo "Restored the feeds from the Action cache"; exit 0; fi
           # Never deploy part of a set: feeds without their ledger would be re-dated by the next run
-          for n in $names; do rm -f "$dir/$n"; done
+          for n in $names $optional; do rm -f "$dir/$n"; done
           if [ "$code" = 404 ]; then echo "No feeds published yet"; exit 0; fi
           echo "::error::feeds/seen.json is missing and the published feeds couldn't be fetched (seen.json: HTTP $code) or restored from the cache; not deploying, so the ledger isn't lost"
           exit 1

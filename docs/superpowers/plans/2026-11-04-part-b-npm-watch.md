@@ -27,8 +27,8 @@
 - **Data window:**
   - The detailed list covers reviewed npm advisories published or updated in the last **90 days**.
   - The index covers **all** reviewed npm advisories.
-  - Malware covers the last **90 days**.
-  - `npm-advisories.json` must stay under about **1.5 MB** raw. Log a warning when over, as the other files do.
+  - Malware covers the last **30 days**, in its own file `npm-malware.json`.
+  - Size budgets: `npm-advisories.json` under about **800 KB** raw and **600 KB** gzipped. Log a warning when over, as the other files do.
 - **Statuses:**
   - `affected`
   - `not-affected`: checked against all reviewed advisories, plus OSV when that is on.

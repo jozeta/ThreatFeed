@@ -13,6 +13,7 @@ import { BarList, chipClass, SectionTitle } from '../incidents/shared';
 import { StackedBars } from './StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from './shared';
 import { Package, Search, Skull } from 'lucide-react';
+import { formatRelativeTime } from '../../utils/date';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
@@ -32,8 +33,11 @@ const STATUS: Record<PackageStatus, { label: string; className: string; title: s
   affected: { label: 'Affected', className: 'bg-rose-600 text-white border-rose-600', title: 'This version is inside a vulnerable range' },
   unknown: { label: 'Check manually', className: 'text-amber-600 dark:text-amber-400 border-amber-500/50', title: 'A range could not be read, or the version could not: never shown as safe' },
   'no-version': { label: 'No version', className: 'text-orange-500 border-orange-500/50', title: 'No version given, so every advisory on the package is listed' },
-  'not-affected': { label: 'Not affected', className: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/50', title: 'Checked against every reviewed npm advisory and the malware reports' },
+  'not-affected': { label: 'Not affected', className: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/50', title: 'Checked against every reviewed npm advisory' },
 };
+const notAffectedTitle = (r: PackageResult) => (r.status === 'not-affected' && r.malwareCheckedDays !== null
+  ? `${STATUS['not-affected'].title} and the malware reports of the last ${r.malwareCheckedDays} days`
+  : STATUS[r.status].title);
 
 const osvLabel = (r: PackageResult, checking: boolean) =>
   r.osv === 'off' ? 'OSV off' : checking && r.osv === 'unavailable' ? 'OSV checking…' : r.osv === 'checked' ? 'OSV checked' : 'OSV unavailable';
@@ -64,7 +68,7 @@ const PackageCard: React.FC<{ result: PackageResult; osvChecking: boolean }> = (
     <li className={`p-3 rounded-lg border ${r.malware ? 'border-rose-600 bg-rose-600/10' : r.status === 'affected' ? 'border-rose-500/40 bg-rose-500/5' : 'border-theme-border bg-theme-surface'}`}>
       <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
         <span className="font-bold text-theme-text break-all">{formatPackageEntry(r.entry)}</span>
-        <span className={`px-1.5 rounded border text-[10px] font-bold uppercase ${status.className}`} title={status.title}>{status.label}</span>
+        <span className={`px-1.5 rounded border text-[10px] font-bold uppercase ${status.className}`} title={notAffectedTitle(r)}>{status.label}</span>
         {r.malware && <span className="px-1.5 rounded bg-rose-600 text-white text-[10px] font-bold uppercase inline-flex items-center gap-1"><Skull className="w-3 h-3" /> Malware</span>}
         {r.highestSeverity && !r.malware && <span className="text-theme-text-muted inline-flex items-center gap-1">highest <SeverityPill severity={r.highestSeverity === 'unknown' ? undefined : r.highestSeverity} /></span>}
       </div>
@@ -204,6 +208,7 @@ export const NpmTab: React.FC<NpmTabProps> = ({ advisories, malware, matches, on
   return (
     <div className="space-y-6">
       <div>
+        <p className="mb-2 text-[10px] font-mono text-theme-text-muted">Data from {formatRelativeTime(advisories.generatedAt)}</p>
         <SectionTitle>My packages{entries.length ? ` (${entries.length})` : ''}</SectionTitle>
         {entries.length === 0 ? (
           <p className="text-sm font-serif text-theme-text-muted">

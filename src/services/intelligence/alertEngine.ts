@@ -274,7 +274,8 @@ function npmCheck(input: CheckInput, store: AlertStore): { state?: RuleState; fr
     if (!watched.has(keyEntry(key)) || (!current.has(key) && now.getTime() - Date.parse(at) > HANDLED_TTL_DAYS * DAY_MS)) delete handled[key];
   }
   // Every key still affecting a package stays (dropping one would alert it again); the cap trims the rest, oldest first
-  const stale = [...seen].filter(k => !current.has(k)).slice(-Math.max(0, NPM_SEEN_CAP - current.size));
+  const allowance = Math.max(0, NPM_SEEN_CAP - current.size);
+  const stale = allowance === 0 ? [] : [...seen].filter(k => !current.has(k)).slice(-allowance);
   return {
     state: { version: NPM_RULE_ID, terms: [], handled, enabled: true },
     fresh,
