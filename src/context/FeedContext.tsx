@@ -522,7 +522,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Background tabs don't refresh (unless they can send alert notifications); the visibilitychange
       // handler catches up when the tab returns
       const notificationPermission = 'Notification' in window ? Notification.permission : undefined;
-      if (!navigator.onLine || shouldPauseWhenHidden(document.hidden, notificationPermission, settingsRef.current.alertRules ?? [])) return;
+      // My npm packages can't alert without packages to watch, so then it doesn't keep a hidden tab refreshing
+      const alertRules = (settingsRef.current.alertRules ?? []).filter(r => r.builtIn !== 'npm-packages' || settingsRef.current.npmPackages?.length);
+      if (!navigator.onLine || shouldPauseWhenHidden(document.hidden, notificationPermission, alertRules)) return;
       // Snapshot mode: reload the (regularly rebuilt) snapshot; only feeds it lacks are fetched live
       if (settingsRef.current.dataSource !== 'live') {
         refreshFeedsInternal(feedsRef.current, undefined, { useSnapshot: true, skipBackedOff: true });

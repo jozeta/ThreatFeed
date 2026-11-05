@@ -490,7 +490,7 @@ export type TvTileSize = 'large' | 'medium' | 'small' | 'xsmall';
 export type ActiveNavTab = 'newspaper' | 'latest' | 'unread' | 'briefing' | 'feed' | 'ransomware' | 'vulnerabilities' | 'bookmarks' | 'sources' | 'health' | 'settings';
 
 export type AlertRuleKind = 'news' | 'vulns';
-export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves';
+export type BuiltInRule = 'watchlist' | 'stack-news' | 'stack-vulns' | 'watched-cves' | 'npm-packages';
 export type NewsCondition =
   | { field: 'keyword'; values: string[] } // checkWatchlistMatch semantics
   | { field: 'vendor'; values: string[] } // containsTerm on title + description

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFeeds } from '../context/FeedContext';
 import { useSettings } from '../context/SettingsContext';
-import { runAlertCheck } from '../services/intelligence/alertEngine';
-import { alertSettingsFrom, rulesNeedVulns } from '../services/intelligence/alertRules';
+import { NPM_RULE_ID, runAlertCheck } from '../services/intelligence/alertEngine';
+import { alertSettingsFrom, rulesNeedVulns, type AlertSettings } from '../services/intelligence/alertRules';
 import { getSettingsFromDB } from '../services/storage/indexeddb';
 import { loadAlertStore, saveAlertStore } from '../services/intelligence/alertStore';
 import { fetchEpssScores } from '../services/intelligence/cveWatch';
@@ -10,6 +10,10 @@ import { notificationsSupported, notifyAlertMatches } from '../services/notifica
 
 const CHECK_INTERVAL_MS = 5 * 60_000; // sends matches held by the gap once it ends, even with auto-refresh off
 const LEADER_LOCK = 'threatfeed-alerts';
+
+/** The npm advisory files are only loaded for an enabled "My npm packages" rule with packages to match */
+const needsNpmData = (s: Pick<AlertSettings, 'alertRules' | 'npmPackages'>) =>
+  s.npmPackages.length > 0 && s.alertRules.some(r => r.builtIn === NPM_RULE_ID && r.enabled);
 
 const locksSupported = () => typeof navigator !== 'undefined' && 'locks' in navigator && !!navigator.locks;
 
@@ -22,10 +26,12 @@ const locksSupported = () => typeof navigator !== 'undefined' && 'locks' in navi
  * settings at each check, so rules edited in another tab apply. Without Web Locks every tab checks, as before.
  */
 export function AlertMonitor(): null {
-  const { feeds, articles, cveIntel, vulns, ensureVulns, snapshotGeneratedAt, isRefreshing, initialSyncDone } = useFeeds();
+  const {
+    feeds, articles, cveIntel, vulns, ensureVulns, npmAdvisories, ensureNpmAdvisories, npmMalware, ensureNpmMalware, snapshotGeneratedAt, isRefreshing, initialSyncDone,
+  } = useFeeds();
   const { settings } = useSettings();
-  const latest = useRef({ feeds, articles, cveIntel, vulns, settings, initialSyncDone });
-  latest.current = { feeds, articles, cveIntel, vulns, settings, initialSyncDone };
+  const latest = useRef({ feeds, articles, cveIntel, vulns, npmAdvisories, npmMalware, settings, initialSyncDone });
+  latest.current = { feeds, articles, cveIntel, vulns, npmAdvisories, npmMalware, settings, initialSyncDone };
   const running = useRef(false);
   const rerun = useRef(false);
   const [isLeader, setIsLeader] = useState(() => !locksSupported());
@@ -57,6 +63,13 @@ export function AlertMonitor(): null {
     if (needsVulns) void ensureVulns();
   }, [needsVulns, ensureVulns, snapshotGeneratedAt]);
 
+  const needsNpm = needsNpmData(settings);
+  useEffect(() => {
+    if (!needsNpm) return;
+    void ensureNpmAdvisories();
+    void ensureNpmMalware();
+  }, [needsNpm, ensureNpmAdvisories, ensureNpmMalware, snapshotGeneratedAt]);
+
   const check = async () => {
     // Before the stored data and first refresh have landed, articles/vulns are partial and would mis-baseline
     if (!latest.current.initialSyncDone || !leader.current) return;
@@ -66,9 +79,10 @@ export function AlertMonitor(): null {
       const s = alertSettingsFrom(latest.current.settings, await getSettingsFromDB(), new Date());
       // A Vulns rule added in another tab: load the data; its arrival re-runs the check
       if (rulesNeedVulns(s.alertRules, s)) void ensureVulns();
+      if (needsNpmData(s)) { void ensureNpmAdvisories(); void ensureNpmMalware(); }
       const watched = s.watchedCves;
       const epss = watched.length > 0 ? await fetchEpssScores(watched) : new Map<string, number>();
-      const { feeds: feedList, articles: list, cveIntel: intel, vulns: data } = latest.current; // read after the await
+      const { feeds: feedList, articles: list, cveIntel: intel, vulns: data, npmAdvisories: npmData, npmMalware: malware } = latest.current; // read after the await
       const store = await loadAlertStore();
       const categories = new Map(feedList.map(f => [f.id, f.category]));
       const result = runAlertCheck({
@@ -81,6 +95,8 @@ export function AlertMonitor(): null {
         feedCategory: id => categories.get(id),
         now: new Date(),
         permissionGranted: notificationsSupported() && Notification.permission === 'granted',
+        // Matched once both files are in: malware arriving after the advisories would read as new reports
+        npm: { packages: s.npmPackages, advisories: npmData && malware ? npmData : null, malware },
       }, store);
       await saveAlertStore(result.store);
       notifyAlertMatches(result.notify);
@@ -98,7 +114,7 @@ export function AlertMonitor(): null {
   useEffect(() => {
     if (isRefreshing || !initialSyncDone || !isLeader) return;
     void checkRef.current();
-  }, [isRefreshing, initialSyncDone, isLeader, vulns, settings.alertRules, settings.watchlistKeywords, settings.stackKeywords, settings.watchedCves, settings.alertGapHours]);
+  }, [isRefreshing, initialSyncDone, isLeader, vulns, npmAdvisories, npmMalware, settings.alertRules, settings.watchlistKeywords, settings.stackKeywords, settings.watchedCves, settings.npmPackages, settings.alertGapHours]);
 
   useEffect(() => {
     const timer = window.setInterval(() => void checkRef.current(), CHECK_INTERVAL_MS);

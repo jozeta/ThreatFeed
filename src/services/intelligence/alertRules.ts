@@ -168,16 +168,21 @@ export const BUILT_IN_NAMES: Record<BuiltInRule, string> = {
   'stack-news': 'My Stack (news)',
   'stack-vulns': 'My Stack (vulns)',
   'watched-cves': 'Watched CVEs',
+  'npm-packages': 'My npm packages',
 };
 
-const BUILT_IN_ORDER: BuiltInRule[] = ['watchlist', 'stack-news', 'stack-vulns', 'watched-cves'];
+const BUILT_IN_ORDER: BuiltInRule[] = ['watchlist', 'stack-news', 'stack-vulns', 'watched-cves', 'npm-packages'];
 const BUILT_IN_KIND: Record<BuiltInRule, AlertRule['kind']> = {
-  'watchlist': 'news', 'stack-news': 'news', 'stack-vulns': 'vulns', 'watched-cves': 'vulns',
+  'watchlist': 'news', 'stack-news': 'news', 'stack-vulns': 'vulns', 'watched-cves': 'vulns', 'npm-packages': 'vulns',
 };
 
 type RuleLists = Pick<UserSettings, 'watchlistKeywords' | 'stackKeywords' | 'watchedCves'>;
 
-/** The four built-in rules; their conditions are derived live from the settings lists, so `root` is stored empty */
+/**
+ * The built-in rules; their conditions are derived live from the settings lists, so `root` is stored empty.
+ * "My npm packages" matches the watched packages against the npm advisories (not a condition tree) and
+ * notifies from the start: it only ever alerts on advisories published after a package was added.
+ */
 export function createBuiltInRules(watchlistNotifications: boolean, now: Date): AlertRule[] {
   const stamp = now.toISOString();
   return BUILT_IN_ORDER.map(builtIn => ({
@@ -185,7 +190,7 @@ export function createBuiltInRules(watchlistNotifications: boolean, now: Date): 
     name: BUILT_IN_NAMES[builtIn],
     kind: BUILT_IN_KIND[builtIn],
     enabled: true,
-    notify: watchlistNotifications && (builtIn === 'watchlist' || builtIn === 'watched-cves'),
+    notify: builtIn === 'npm-packages' || (watchlistNotifications && (builtIn === 'watchlist' || builtIn === 'watched-cves')),
     root: { op: 'any', items: [] },
     builtIn,
     createdAt: stamp,
@@ -241,6 +246,7 @@ export function resolveRoot(rule: AlertRule, s: RuleLists): AlertRule['root'] {
     case 'stack-news': return { op: 'any', items: [{ field: 'vendor', values: s.stackKeywords }] };
     case 'stack-vulns': return { op: 'any', items: [{ field: 'vendor', values: s.stackKeywords }] };
     case 'watched-cves': return { op: 'any', items: [{ field: 'watched' }] };
+    case 'npm-packages': return { op: 'any', items: [] }; // matched in the alert engine, never by conditions
     default: return rule.root;
   }
 }
@@ -369,7 +375,7 @@ export function migrateAlertRules(saved: Partial<UserSettings>, now: Date): Aler
   return [...kept, ...builtIns.filter(r => !have.has(r.builtIn))];
 }
 
-export type AlertSettings = RuleLists & Pick<UserSettings, 'alertRules' | 'alertGapHours'>;
+export type AlertSettings = RuleLists & Pick<UserSettings, 'alertRules' | 'alertGapHours' | 'npmPackages'>;
 
 const stringList = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
@@ -385,6 +391,7 @@ export function alertSettingsFrom(memory: AlertSettings, saved: Partial<UserSett
     watchlistKeywords: stringList(saved.watchlistKeywords) ?? memory.watchlistKeywords,
     stackKeywords: stringList(saved.stackKeywords) ?? memory.stackKeywords,
     watchedCves: stringList(saved.watchedCves) ?? memory.watchedCves,
+    npmPackages: stringList(saved.npmPackages) ?? memory.npmPackages,
     alertGapHours: (ALERT_GAP_OPTIONS as readonly number[]).includes(saved.alertGapHours as number) ? saved.alertGapHours! : memory.alertGapHours,
   };
 }

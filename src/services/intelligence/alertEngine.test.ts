@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  runAlertCheck, emptyAlertStore, feedMatches, isNew, AlertStore, CheckInput, AlertMatch, PENDING_CAP,
+  runAlertCheck, emptyAlertStore, feedMatches, isNew, npmUnseenCount, AlertStore, CheckInput, AlertMatch, PENDING_CAP, NPM_SEEN_CAP,
 } from './alertEngine';
+import type { NpmAdvisory, NpmAdvisoryData, NpmIndexEntry, NpmMalwareData } from '../npm/advisories';
 import { AlertRule, Article, ConditionGroup, KevEntry, NewsCondition, VulnCondition, VulnData } from '../../types';
 import { article } from '../../test/fixtures';
-import { createBuiltInRules, duplicateRule } from './alertRules';
+import { createBuiltInRules, duplicateRule, migrateAlertRules } from './alertRules';
 
 const NOW = new Date('2026-10-30T12:00:00Z');
 const HOUR = 3_600_000;
@@ -426,5 +427,148 @@ describe('feedMatches', () => {
     expect(rows[0]).toMatchObject({ itemId: `${CVE}#kev`, ref: CVE, kind: 'vulns', firstMatchedAt: NOW.toISOString() });
     expect(rows[0].title).toContain(`${CVE} Acme Router`);
     expect(feedMatches(input({ rules: [watched], vulns: listed }, { watchedCves: [] }), store)).toEqual([]);
+  });
+});
+
+describe('npm packages', () => {
+  const npmRule = createBuiltInRules(false, NOW).find(r => r.builtIn === 'npm-packages')!;
+  const PROTO: NpmIndexEntry = ['GHSA-p6mc-m468-83gw', 'high', [['lodash', '< 4.17.19', '4.17.19']]];
+  const CMD: NpmIndexEntry = ['GHSA-35jh-r3h4-6jhm', 'high', [['lodash', '< 4.17.21', '4.17.21']]];
+  const NEW: NpmIndexEntry = ['GHSA-xxxx-yyyy-zzzz', 'critical', [['lodash', '< 4.18.0', '4.18.0']]];
+  const OTHER: NpmIndexEntry = ['GHSA-aaaa-bbbb-cccc', 'medium', [['react', '< 16.0.0', '16.0.0']]];
+  const detail = (id: string, summary: string) => ({ id, summary } as NpmAdvisory);
+  const advisories = (index: NpmIndexEntry[], recent: NpmAdvisory[] = []): NpmAdvisoryData => ({
+    version: 1, generatedAt: '2026-10-30T00:00:00Z', updatedAt: '2026-10-30T00:00:00Z', recent, index,
+  });
+  const malware = (entries: NpmMalwareData['entries']): NpmMalwareData => ({
+    version: 1, generatedAt: '2026-10-30T00:00:00Z', updatedAt: '2026-10-30T00:00:00Z', entries,
+  });
+  const npmInput = (packages: string[], data: NpmAdvisoryData, mal: NpmMalwareData | null = null, overrides: Partial<CheckInput> = {}) =>
+    input({ rules: [npmRule], vulns: null, npm: { packages, advisories: data, malware: mal }, ...overrides });
+  const keyOf = (id: string, entry: string) => `${id}|${entry}`;
+
+  it('baseline on add, notify once later', () => {
+    const empty = runAlertCheck(npmInput([], advisories([PROTO, CMD])), emptyAlertStore(NOW));
+    // lodash@4.17.15 already has 2 affecting advisories when added: recorded, not alerted
+    const added = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, CMD]), null, { now: later(HOUR) }), empty.store);
+    expect(added.notify).toEqual([]);
+    expect(added.store.npmSeen.sort()).toEqual([keyOf(CMD[0], 'lodash@4.17.15'), keyOf(PROTO[0], 'lodash@4.17.15')].sort());
+    expect(added.store.npmKnownEntries).toEqual(['lodash@4.17.15']);
+
+    const data = advisories([PROTO, CMD, NEW], [detail(NEW[0], 'Prototype pollution')]);
+    const next = runAlertCheck(npmInput(['lodash@4.17.15'], data, null, { now: later(2 * HOUR) }), added.store);
+    expect(next.notify).toHaveLength(1);
+    expect(next.notify[0]).toMatchObject({
+      ruleId: 'npm-packages', ruleName: 'My npm packages', kind: 'vulns', itemId: keyOf(NEW[0], 'lodash@4.17.15'), ref: NEW[0],
+      title: `lodash@4.17.15: Prototype pollution (${NEW[0]})`, notifiable: true,
+    });
+    expect(next.store.npmSeen).toContain(keyOf(NEW[0], 'lodash@4.17.15'));
+
+    const again = runAlertCheck(npmInput(['lodash@4.17.15'], data, null, { now: later(3 * HOUR) }), next.store);
+    expect(again.notify).toEqual([]);
+  });
+
+  it('first run with packages already on the list baselines silently', () => {
+    const first = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, CMD])), emptyAlertStore(NOW));
+    expect(first.notify).toEqual([]);
+    expect(first.store.npmSeen).toHaveLength(2);
+  });
+
+  it('an updated range that now covers the version alerts once', () => {
+    const narrow: NpmIndexEntry = [NEW[0], 'critical', [['lodash', '< 4.17.10', '4.17.10']]];
+    const first = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, narrow])), emptyAlertStore(NOW));
+    expect(first.store.npmSeen).toEqual([keyOf(PROTO[0], 'lodash@4.17.15')]);
+    const widened = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, NEW]), null, { now: later(HOUR) }), first.store);
+    expect(ids(widened.notify)).toEqual([keyOf(NEW[0], 'lodash@4.17.15')]);
+    expect(widened.notify[0].title).toBe(`lodash@4.17.15: ${NEW[0]}`); // no detail older than 90 days: the id alone
+  });
+
+  it('malware for a watched package alerts', () => {
+    const first = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO]), malware([])), emptyAlertStore(NOW));
+    const bad = malware([['GHSA-mmmm-mmmm-mmmm', 'lodash', '>= 0', '2026-10-30T10:00:00Z']]);
+    const next = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO]), bad, { now: later(HOUR) }), first.store);
+    expect(next.notify).toHaveLength(1);
+    expect(next.notify[0].title).toBe('Malicious release: lodash@4.17.15 (GHSA-mmmm-mmmm-mmmm)');
+  });
+
+  it('removing the package drops its keys and alerts nothing', () => {
+    const first = runAlertCheck(npmInput(['lodash@4.17.15', 'react@15.0.0'], advisories([PROTO, OTHER])), emptyAlertStore(NOW));
+    expect(first.store.npmSeen).toHaveLength(2);
+    const removed = runAlertCheck(npmInput(['react@15.0.0'], advisories([PROTO, CMD, OTHER]), null, { now: later(HOUR) }), first.store);
+    expect(removed.notify).toEqual([]);
+    expect(removed.store.npmSeen).toEqual([keyOf(OTHER[0], 'react@15.0.0')]);
+    expect(removed.store.npmKnownEntries).toEqual(['react@15.0.0']);
+    // Added back later, it is a new package again: a fresh baseline, not an alert for each advisory
+    const back = runAlertCheck(npmInput(['react@15.0.0', 'lodash@4.17.15'], advisories([PROTO, CMD, OTHER]), null, { now: later(2 * HOUR) }), removed.store);
+    expect(back.notify).toEqual([]);
+  });
+
+  it('keeps its state while the npm data is not loaded, but still drops removed packages', () => {
+    const first = runAlertCheck(npmInput(['lodash@4.17.15', 'react@15.0.0'], advisories([PROTO, OTHER])), emptyAlertStore(NOW));
+    const absent = runAlertCheck(input({ rules: [npmRule], vulns: null, now: later(HOUR) }), first.store);
+    expect(absent.store.npmSeen).toEqual(first.store.npmSeen);
+    expect(absent.store.npmKnownEntries).toEqual(first.store.npmKnownEntries);
+    expect(absent.store.rules['npm-packages']).toEqual(first.store.rules['npm-packages']);
+
+    const unloaded = { packages: ['react@15.0.0'], advisories: null, malware: null };
+    const pruned = runAlertCheck(input({ rules: [npmRule], vulns: null, npm: unloaded, now: later(HOUR) }), first.store);
+    expect(pruned.store.npmSeen).toEqual([keyOf(OTHER[0], 'react@15.0.0')]);
+    expect(pruned.store.npmKnownEntries).toEqual(['react@15.0.0']);
+    // Added back once the data is loaded, lodash baselines again
+    const back = runAlertCheck(npmInput(['react@15.0.0', 'lodash@4.17.15'], advisories([PROTO, CMD, OTHER]), null, { now: later(2 * HOUR) }), pruned.store);
+    expect(back.notify).toEqual([]);
+  });
+
+  it('switched off and back on, it baselines again instead of alerting what came out meanwhile', () => {
+    const first = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO])), emptyAlertStore(NOW));
+    const off = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, NEW]), null, { rules: [{ ...npmRule, enabled: false }], now: later(HOUR) }), first.store);
+    expect(off.notify).toEqual([]);
+    const on = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, NEW]), null, { now: later(2 * HOUR) }), off.store);
+    expect(on.notify).toEqual([]);
+    expect(on.store.npmSeen).toContain(keyOf(NEW[0], 'lodash@4.17.15'));
+  });
+
+  it('with notify off, records the alert without notifying', () => {
+    const quiet = { ...npmRule, notify: false };
+    const first = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO]), null, { rules: [quiet] }), emptyAlertStore(NOW));
+    const next = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO, NEW]), null, { rules: [quiet], now: later(HOUR) }), first.store);
+    expect(next.notify).toEqual([]);
+    expect(Object.keys(next.store.rules['npm-packages'].handled)).toEqual([keyOf(NEW[0], 'lodash@4.17.15')]);
+  });
+
+  it(`caps npmSeen at ${NPM_SEEN_CAP}, dropping the oldest`, () => {
+    const many: NpmIndexEntry[] = Array.from({ length: NPM_SEEN_CAP + 10 }, (_, i) => [`GHSA-${i}`, 'low', [['lodash', '< 5.0.0']]]);
+    const { store } = runAlertCheck(npmInput(['lodash'], advisories(many)), emptyAlertStore(NOW));
+    expect(store.npmSeen).toHaveLength(NPM_SEEN_CAP);
+    expect(store.npmSeen).not.toContain('GHSA-0|lodash');
+  });
+
+  it('lists recorded alerts in My Feed and counts the unseen ones for the npm tab', () => {
+    const first = runAlertCheck(npmInput(['lodash@4.17.15'], advisories([PROTO])), emptyAlertStore(NOW));
+    const data = advisories([PROTO, NEW], [detail(NEW[0], 'Prototype pollution')]);
+    const { store } = runAlertCheck(npmInput(['lodash@4.17.15'], data, null, { now: later(HOUR) }), first.store);
+    const rows = feedMatches({ ...npmInput(['lodash@4.17.15'], data), npm: { packages: ['lodash@4.17.15'], advisories: data, malware: null } }, store);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ ruleId: 'npm-packages', ref: NEW[0], title: `lodash@4.17.15: Prototype pollution (${NEW[0]})` });
+    // Without the npm data loaded the row still shows, with the id for a title; unwatched packages drop out
+    expect(feedMatches({ ...npmInput([], data), npm: { packages: ['lodash@4.17.15'], advisories: null, malware: null } }, store)[0].title).toBe(`lodash@4.17.15: ${NEW[0]}`);
+    expect(feedMatches({ ...npmInput([], data), npm: { packages: [], advisories: data, malware: null } }, store)).toEqual([]);
+
+    expect(npmUnseenCount(store, ['lodash@4.17.15'])).toBe(1);
+    expect(npmUnseenCount(store, [])).toBe(0);
+    expect(npmUnseenCount({ ...store, seen: { ...store.seen, npm: later(2 * HOUR).toISOString() } }, ['lodash@4.17.15'])).toBe(0);
+  });
+
+  it('keeps the npm tab\'s seen time across checks', () => {
+    const stamp = later(HOUR).toISOString();
+    const { store } = runAlertCheck(npmInput([], advisories([])), { ...emptyAlertStore(NOW), seen: { news: NOW.toISOString(), vulns: NOW.toISOString(), npm: stamp } });
+    expect(store.seen.npm).toBe(stamp);
+  });
+
+  it('migration adds the built-in rule once', () => {
+    const old = createBuiltInRules(false, NOW).filter(r => r.builtIn !== 'npm-packages');
+    const migrated = migrateAlertRules({ alertRules: old }, NOW);
+    expect(migrated.filter(r => r.builtIn === 'npm-packages')).toEqual([expect.objectContaining({ id: 'npm-packages', name: 'My npm packages', kind: 'vulns', enabled: true, notify: true })]);
+    expect(migrateAlertRules({ alertRules: migrated }, later(HOUR)).filter(r => r.builtIn === 'npm-packages')).toHaveLength(1);
   });
 });

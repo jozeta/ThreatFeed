@@ -21,6 +21,7 @@ const SUBS = ['news', 'vulns'] as const;
 type Sub = (typeof SUBS)[number];
 
 const PAGE_SIZE = 50;
+const isCve = (ref: string) => /^CVE-\d{4}-\d{4,}$/i.test(ref); // the other Vulns refs are npm advisory ids
 
 const NewTag: React.FC = () => (
   <span className="badge-pop px-1.5 py-0.5 rounded bg-theme-accent text-white text-[10px] font-mono font-bold uppercase tracking-wider flex-shrink-0">New</span>
@@ -52,8 +53,8 @@ function cveFacts(cve: string, vulns: VulnData | null) {
 
 const VulnRow: React.FC<{ row: AlertRow; vulns: VulnData | null; onOpen: () => void }> = ({ row, vulns, onOpen }) => {
   const facts = cveFacts(row.ref, vulns);
-  // Watched events carry the change in their title; a plain CVE match just repeats vendor and product
-  const events = row.matches.filter((m) => m.itemId.includes('#'));
+  // Watched events and npm alerts (`id|package`) carry what happened in their title; a plain CVE match just repeats vendor and product
+  const events = row.matches.filter((m) => m.itemId.includes('#') || m.itemId.includes('|'));
   return (
     <article
       onClick={onOpen}
@@ -194,7 +195,7 @@ export const MyFeedPage: React.FC<{ onOpenArticle: (article: Article) => void }>
       ) : (
         <div className="rounded-lg border border-theme-border bg-theme-card overflow-hidden">
           {rows.slice(0, visibleCount).map((row) => {
-            if (row.kind === 'vulns') return <VulnRow key={row.ref} row={row} vulns={vulns} onOpen={() => openCve(row.ref)} />;
+            if (row.kind === 'vulns') return <VulnRow key={row.ref} row={row} vulns={vulns} onOpen={() => (isCve(row.ref) ? openCve(row.ref) : openPanel('advisory', row.ref))} />;
             const article = articleById.get(row.ref)!;
             return (
               <div key={row.ref}>
