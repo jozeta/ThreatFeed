@@ -6,6 +6,10 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Charts: donuts, ranked bars and histograms on Vulns (KEV by vendor, EPSS histogram, CVSS bands, critical CVEs per day by CWE family), the npm tab (severity, vulnerabilities vs malware, fix available, top CWEs, My packages), Ransomware → Victims (sector, group share, top 5 groups per day) and Briefing (categories, severity per day, top vendors)
+- npm dashboard (`#/vulns/npm?dash=1`) and new chart panels on the Vulns and Ransomware dashboards; TV chart colours no longer depend on the app theme, and Unknown/Other are grey
+- npm TV wall (`#/vulns/npm?tv=1`) with advisory tiles (Yours line, QR to the GitHub advisory); mixed mode adds npm tiles (at most 1 in 6), and advisories affecting your packages get the NEW badge when they arrive
+- Page tab rows (Vulns, Ransomware, My Feed) and chip rows (My Feed, Bookmarks) wrap onto more lines instead of scrolling sideways
 - npm vulnerability watch: Settings → My npm packages (`name` or `name@version`, synced and in backups) matched on your device against all reviewed GitHub npm advisories, with statuses (affected, not affected, no version, unknown) and a minimum safe version
 - Vulnerabilities → npm packages tab: stats, per-day chart, filters, highlighted rows, My packages view, malware section (malicious and hijacked releases, 30 days) and a linkable advisory panel
 - Optional "Also check full history with OSV.dev" for your npm packages (off by default, per device; sends package names and versions to Google's OSV service)
