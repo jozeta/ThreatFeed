@@ -11,7 +11,7 @@ import { localDayKey } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle, selectClass } from '../incidents/shared';
-import { StackedBars } from './StackedBars';
+import { StackedBars } from '../../components/charts/StackedBars';
 import { CveButton, CweChip, cweLabel, EpssValue, ExploitBadges, SeverityPill, SsvcBadge, StatCards } from './shared';
 import { VendorButton } from '../../components/VendorLink';
 import { EntityLink } from '../../components/EntityText';

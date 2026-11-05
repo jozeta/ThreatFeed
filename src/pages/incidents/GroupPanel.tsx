@@ -7,7 +7,7 @@ import { formatRelativeTime } from '../../utils/date';
 import { BarList, countBy, SectionTitle } from './shared';
 import { GroupIntelSection, LeakSiteStatus } from './GroupIntelSection';
 import { activityChange, groupActivity } from '../../services/intelligence/groupActivity';
-import { StackedBars } from '../vulns/StackedBars';
+import { StackedBars } from '../../components/charts/StackedBars';
 import { CountUp } from '../vulns/shared';
 import { PanelCloseButton, SidePanel } from '../../components/Common/SidePanel';
 import { EntityText } from '../../components/EntityText';

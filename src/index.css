@@ -587,8 +587,25 @@ button.tag-chip {
   from { transform: scaleY(0); }
   to { transform: scaleY(1); }
 }
+/* Ranked bars grow from the left; the donut fades in. --k is the TV speed factor (1 elsewhere) */
+.chart-grow-x {
+  transform-box: fill-box;
+  transform-origin: left;
+  animation: chart-grow-x calc(320ms * var(--k, 1)) cubic-bezier(0.22, 1, 0.36, 1) var(--chart-delay, 0ms) backwards;
+}
+@keyframes chart-grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.chart-fade {
+  animation: chart-fade calc(420ms * var(--k, 1)) ease-out var(--chart-delay, 0ms) backwards;
+}
+@keyframes chart-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
-.reduce-motion :is(.fade-up, .stagger > *, .badge-pop, .chart-grow) {
+.reduce-motion :is(.fade-up, .stagger > *, .badge-pop, .chart-grow, .chart-grow-x, .chart-fade) {
   animation: none !important;
 }
 .reduce-motion :is(.lift, .lift-flat, .press, .tab-ink),
@@ -602,7 +619,9 @@ button.tag-chip {
   .fade-up,
   .stagger > *,
   .badge-pop,
-  .chart-grow {
+  .chart-grow,
+  .chart-grow-x,
+  .chart-fade {
     animation: none !important;
   }
   .lift,

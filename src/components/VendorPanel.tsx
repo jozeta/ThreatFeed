@@ -9,7 +9,7 @@ import { severityFromScore } from '../services/intelligence/vulns';
 import { weeklySeries } from '../services/intelligence/trends';
 import { formatRelativeTime } from '../utils/date';
 import { SectionTitle } from '../pages/incidents/shared';
-import { StackedBars } from '../pages/vulns/StackedBars';
+import { StackedBars } from './charts/StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from '../pages/vulns/shared';
 import { PanelCloseButton, SidePanel } from './Common/SidePanel';
 import { EntityText } from './EntityText';

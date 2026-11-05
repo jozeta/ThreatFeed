@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChartEmpty } from './ChartEmpty';
 
 export interface BarSegment {
   name: string;
@@ -13,19 +14,26 @@ export interface BarBucket {
 }
 
 /** Vertical stacked bars (one per day or month), with a tooltip per bar and a small legend. */
-export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; unit: string; dimBefore?: number; format?: (n: number) => string }> = ({
-  buckets, ariaLabel, unit, dimBefore = 0, format = String,
+export const StackedBars: React.FC<{
+  buckets: BarBucket[]; ariaLabel: string; unit: string; dimBefore?: number; format?: (n: number) => string;
+  /** Show the segment legend (default); it only appears when there is more than one kind of segment */
+  legend?: boolean;
+  /** Replaces the default spoken summary (ariaLabel plus totals) */
+  ariaSummary?: string;
+}> = ({
+  buckets, ariaLabel, unit, dimBefore = 0, format = String, legend: showLegend = true, ariaSummary,
 }) => {
   const totals = buckets.map((b) => b.segments.reduce((sum, s) => sum + s.value, 0));
   const max = Math.max(1, ...totals);
   const width = 600;
   const height = 110;
   const bar = width / Math.max(1, buckets.length);
+  if (buckets.length === 0) return <ChartEmpty />;
   const legend = buckets[0]?.segments.filter((s) => buckets.some((b) => b.segments.find((x) => x.name === s.name)?.value)) ?? [];
 
   return (
     <figure className="w-full">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28" preserveAspectRatio="none" role="img" aria-label={ariaLabel}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28" preserveAspectRatio="none" role="img" aria-label={ariaSummary ?? ariaLabel}>
         {buckets.map((b, i) => {
           let y = height;
           return (
@@ -47,7 +55,7 @@ export const StackedBars: React.FC<{ buckets: BarBucket[]; ariaLabel: string; un
       </svg>
       <figcaption className="flex flex-wrap justify-between gap-2 text-[10px] font-mono text-theme-text-muted mt-1">
         <span>{buckets[0]?.short}</span>
-        {legend.length > 1 && (
+        {showLegend && legend.length > 1 && (
           <span className="flex flex-wrap gap-3">
             {legend.map((s) => (
               <span key={s.name} className="inline-flex items-center gap-1">

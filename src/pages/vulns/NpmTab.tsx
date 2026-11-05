@@ -10,7 +10,7 @@ import { formatPackageEntry } from '../../services/npm/semver';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, SectionTitle } from '../incidents/shared';
-import { StackedBars } from './StackedBars';
+import { StackedBars } from '../../components/charts/StackedBars';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from './shared';
 import { Package, Search, Skull } from 'lucide-react';
 import { formatRelativeTime } from '../../utils/date';

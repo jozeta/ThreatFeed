@@ -5,7 +5,7 @@ import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { BarList, chipClass, countBy, SectionTitle } from '../incidents/shared';
-import { StackedBars } from './StackedBars';
+import { StackedBars } from '../../components/charts/StackedBars';
 import { CveButton, SEVERITY_FILL, SeverityPill, StatCards } from './shared';
 import { ExternalLink } from 'lucide-react';
 
