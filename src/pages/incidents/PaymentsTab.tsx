@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { PaymentFamily } from '../../types';
-import { StackedBars } from '../vulns/StackedBars';
+import { StackedBars } from '../../components/charts/StackedBars';
 import { StatCards } from '../vulns/shared';
 import { BarList, formatCount, SectionTitle } from './shared';
 import { ExternalLink } from 'lucide-react';

@@ -22,3 +22,13 @@ describe('VBars', () => {
     expect(html.match(/tv-grow-y/g)).toHaveLength(4);
   });
 });
+
+describe('seriesColors', () => {
+  it('greys neutral labels and missing map entries; ranks count coloured series only', async () => {
+    const { seriesColors, NEUTRAL_COLOR } = await import('./dashParts');
+    const { DONUT_COLORS } = await import('../charts/DonutChart');
+    expect(seriesColors([{ label: 'Unknown' }, { label: 'A' }, { label: 'No CWE' }, { label: 'B' }, { label: 'x', other: true }]))
+      .toEqual([NEUTRAL_COLOR, DONUT_COLORS[0], NEUTRAL_COLOR, DONUT_COLORS[1], NEUTRAL_COLOR]);
+    expect(seriesColors([{ label: 'High' }, { label: 'Odd' }], { High: '#f97316' })).toEqual(['#f97316', NEUTRAL_COLOR]);
+  });
+});

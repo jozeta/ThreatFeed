@@ -16,8 +16,10 @@ vi.mock('./TvWall', () => ({
     return null;
   },
 }));
-vi.mock('./VulnDashboard', () => ({ default: () => null }));
-vi.mock('./RansomDashboard', () => ({ default: () => null }));
+const dashboards: string[] = [];
+vi.mock('./VulnDashboard', () => ({ default: () => { dashboards.push('vulns'); return null; } }));
+vi.mock('./RansomDashboard', () => ({ default: () => { dashboards.push('ransomware'); return null; } }));
+vi.mock('./NpmDashboard', () => ({ default: () => { dashboards.push('npm'); return null; } }));
 
 import TvShell from './TvShell';
 
@@ -26,6 +28,7 @@ import TvShell from './TvShell';
 let root: Root;
 beforeEach(() => {
   mounts.length = 0;
+  dashboards.length = 0;
   settings.mix = false;
   root = createRoot(document.createElement('div'));
 });
@@ -38,5 +41,11 @@ describe('TvShell', () => {
     settings.mix = true;
     act(() => root.render(createElement(TvShell, { kind: 'tv', page: 'newspaper' })));
     expect(mounts).toEqual(['latest|false', 'newspaper|false', 'newspaper|true']);
+  });
+  it('shows the npm dashboard on the npm tab of Vulnerabilities, the Vulns dashboard elsewhere on it', () => {
+    act(() => root.render(createElement(TvShell, { kind: 'dash', page: 'vulnerabilities', sub: 'npm' })));
+    act(() => root.render(createElement(TvShell, { kind: 'dash', page: 'vulnerabilities', sub: 'kev' })));
+    act(() => root.render(createElement(TvShell, { kind: 'dash', page: 'ransomware' })));
+    expect([...new Set(dashboards)]).toEqual(['npm', 'vulns', 'ransomware']);
   });
 });

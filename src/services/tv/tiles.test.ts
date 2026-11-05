@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { toEngineItems, tilesForBriefing, tilesForFront, tilesForRansomware, TvTile } from './tiles';
+import { ghsaUrl, npmTilesForMix, toEngineItems, tilesForBriefing, tilesForFront, tilesForNpm, tilesForRansomware, TvTile } from './tiles';
+import { toIndexEntry, type NpmAdvisory, type NpmAdvisoryData, type NpmMalwareData } from '../npm/advisories';
+import { matchPackages } from '../npm/match';
 import { article } from '../../test/fixtures';
 import { Briefing } from '../intelligence/briefing';
 import { LeakSiteVictim } from '../../types';
@@ -133,5 +135,100 @@ describe('tilesForBriefing', () => {
     expect(tiles[0].kind).toBe('kev');
     expect(tiles[0].tone).toBe('critical');
     expect(tiles[0].headline).toContain('CVE-2026-1234');
+  });
+});
+
+describe('tilesForNpm', () => {
+  const adv = (id: string, severity: NpmAdvisory['severity'], hoursAgo: number, over: Partial<NpmAdvisory> = {}): NpmAdvisory => ({
+    id, cves: [], summary: `Summary of ${id}`, description: '', severity, cvss: [], cwes: [],
+    ranges: [{ package: `pkg-${id.slice(5, 9)}`, vulnerable: '< 2.0.0', patched: '2.0.0' }],
+    published: ago(hoursAgo), updated: ago(hoursAgo), references: [], credits: [], url: `https://github.com/advisories/${id}`, ...over,
+  });
+  const npmData = (recent: NpmAdvisory[]): NpmAdvisoryData => ({
+    version: 1, generatedAt: ago(0), updatedAt: ago(0), recent,
+    index: recent.map(toIndexEntry),
+  });
+  const ids = (tiles: TvTile[]) => tiles.map(t => t.id);
+
+  it('shows 7 days of critical and high first, then medium, newest first in each; low and older ones are left out', () => {
+    const d = npmData([
+      adv('GHSA-2222-2222-2222', 'medium', 1),
+      adv('GHSA-3333-3333-3333', 'high', 30),
+      adv('GHSA-4444-4444-4444', 'critical', 5),
+      adv('GHSA-5555-5555-5555', 'low', 2),
+      adv('GHSA-6666-6666-6666', 'critical', 24 * 8),
+      adv('GHSA-7777-7777-7777', 'medium', 50),
+    ]);
+    expect(ids(tilesForNpm(d, null, [], NOW))).toEqual(['npm-GHSA-4444-4444-4444', 'npm-GHSA-3333-3333-3333', 'npm-GHSA-2222-2222-2222', 'npm-GHSA-7777-7777-7777']);
+    expect(tilesForNpm(d, null, [], NOW, 2)).toHaveLength(2);
+  });
+
+  it('leaves out withdrawn advisories', () => {
+    const d = npmData([adv('GHSA-2222-2222-2222', 'critical', 1, { withdrawn: ago(0) }), adv('GHSA-3333-3333-3333', 'high', 1)]);
+    expect(ids(tilesForNpm(d, null, [], NOW))).toEqual(['npm-GHSA-3333-3333-3333']);
+  });
+
+  it('carries severity, packages, the range to the fix, the GHSA and CVE ids, and the advisory as text', () => {
+    const d = npmData([adv('GHSA-2222-2222-2222', 'critical', 1, {
+      cves: ['CVE-2026-1'], ranges: [{ package: 'left-pad', vulnerable: '< 1.3.0', patched: '1.3.0' }, { package: 'right-pad', vulnerable: '< 2.0.0' }],
+    })]);
+    const [t] = tilesForNpm(d, null, [], NOW);
+    expect(t).toMatchObject({
+      kind: 'npm', tone: 'critical', headline: 'Summary of GHSA-2222-2222-2222', time: ago(1),
+      url: 'https://github.com/advisories/GHSA-2222-2222-2222',
+      npm: { severity: 'critical', packages: ['left-pad', 'right-pad'], vulnerable: '< 1.3.0', patched: '1.3.0', ids: ['GHSA-2222-2222-2222', 'CVE-2026-1'], yours: [] },
+    });
+  });
+
+  it('adds a "Yours" line only when the advisory affects a watched version, and puts those first at any age and severity', () => {
+    const lodash = adv('GHSA-2222-2222-2222', 'low', 24 * 40, { ranges: [{ package: 'lodash', vulnerable: '<= 4.17.22', patched: '4.17.23' }] });
+    const d = npmData([adv('GHSA-3333-3333-3333', 'critical', 1), lodash]);
+    const affected = matchPackages([{ name: 'lodash', version: '4.17.15' }], d, null);
+    const tiles = tilesForNpm(d, null, affected, NOW);
+    expect(ids(tiles)).toEqual(['npm-GHSA-2222-2222-2222', 'npm-GHSA-3333-3333-3333']);
+    expect(tiles[0].npm?.yours).toEqual(['lodash@4.17.15']);
+    expect(tiles[1].npm?.yours).toEqual([]);
+
+    // A version outside the range, or no version at all, is not "yours"
+    for (const entry of [{ name: 'lodash', version: '4.17.23' }, { name: 'lodash' }]) {
+      const tiles = tilesForNpm(d, null, matchPackages([entry], d, null), NOW);
+      expect(ids(tiles)).toEqual(['npm-GHSA-3333-3333-3333']);
+    }
+  });
+
+  it('adds malware releases only when they affect a watched package, first', () => {
+    const d = npmData([adv('GHSA-3333-3333-3333', 'high', 1)]);
+    const m: NpmMalwareData = { version: 1, generatedAt: ago(0), updatedAt: ago(0), entries: [
+      ['GHSA-4444-4444-4444', 'evil-pkg', '>= 0', ago(3)],
+      ['GHSA-5555-5555-5555', 'other-evil', '>= 0', ago(2)],
+    ] };
+    const results = matchPackages([{ name: 'evil-pkg', version: '1.0.0' }], d, m);
+    const tiles = tilesForNpm(d, m, results, NOW);
+    expect(ids(tiles)).toEqual(['npm-GHSA-4444-4444-4444', 'npm-GHSA-3333-3333-3333']);
+    expect(tiles[0]).toMatchObject({ tone: 'critical', time: ago(3), npm: { severity: 'malware', packages: ['evil-pkg'], yours: ['evil-pkg@1.0.0'] } });
+  });
+
+  it('gives one tile per advisory id when the malware list and the advisories share one', () => {
+    const shared = adv('GHSA-4444-4444-4444', 'critical', 1, { ranges: [{ package: 'evil-pkg', vulnerable: '>= 0' }] });
+    const d = npmData([shared]);
+    const m: NpmMalwareData = { version: 1, generatedAt: ago(0), updatedAt: ago(0), entries: [['GHSA-4444-4444-4444', 'evil-pkg', '>= 0', ago(1)]] };
+    const tiles = tilesForNpm(d, m, matchPackages([{ name: 'evil-pkg', version: '1.0.0' }], d, m), NOW);
+    expect(ids(tiles)).toEqual(['npm-GHSA-4444-4444-4444']);
+    expect(npmTilesForMix(d, m, matchPackages([{ name: 'evil-pkg', version: '1.0.0' }], d, m), NOW)).toHaveLength(1);
+  });
+
+  it('links the QR code to the GitHub advisory only for a valid GHSA id', () => {
+    expect(ghsaUrl('GHSA-cfgh-jmpq-rvwx')).toBe('https://github.com/advisories/GHSA-cfgh-jmpq-rvwx');
+    for (const bad of ['GHSA-aaaa-aaaa-aaaa', 'GHSA-2222-2222', 'GHSA-2222-2222-2222/../x', 'javascript:alert(1)', '']) expect(ghsaUrl(bad)).toBeUndefined();
+    const d = npmData([adv('GHSA-2222-2222-2222', 'critical', 1), adv('GHSA-0000-0000-0000', 'critical', 2)]);
+    const tiles = tilesForNpm(d, null, [], NOW);
+    expect(tiles.map(t => t.url)).toEqual(['https://github.com/advisories/GHSA-2222-2222-2222', undefined]);
+  });
+
+  it('mixed mode takes critical and high from the last 48 hours plus anything affecting a watched package', () => {
+    const old = adv('GHSA-2222-2222-2222', 'medium', 24 * 40, { ranges: [{ package: 'lodash', vulnerable: '<= 4.17.22', patched: '4.17.23' }] });
+    const d = npmData([adv('GHSA-3333-3333-3333', 'critical', 10), adv('GHSA-4444-4444-4444', 'high', 60), adv('GHSA-5555-5555-5555', 'medium', 1), old]);
+    const results = matchPackages([{ name: 'lodash', version: '4.17.15' }], d, null);
+    expect(ids(npmTilesForMix(d, null, results, NOW))).toEqual(['npm-GHSA-2222-2222-2222', 'npm-GHSA-3333-3333-3333']);
   });
 });

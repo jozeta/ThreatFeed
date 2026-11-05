@@ -7,7 +7,11 @@ import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
 import { ActivityChart } from './ActivityChart';
-import { BarList, chipClass, countBy, SectionTitle, selectClass } from './shared';
+import { BarList, ChartCard, chipClass, countBy, SectionTitle, selectClass } from './shared';
+import { DonutChart } from '../../components/charts/DonutChart';
+import { StackedBars } from '../../components/charts/StackedBars';
+import { sliceTotal } from '../../components/charts/chartData';
+import { groupShare, victimsBySector, victimsPerDayTopGroups } from '../../services/charts/figures';
 import { ExternalLink, Search } from 'lucide-react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -67,6 +71,12 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, int
       quietGroups: before.filter(([g, n]) => n >= 3 && !recent.has(g)).map(([key, n]) => ({ key, count: n })),
     };
   }, [victims, intel]);
+
+  // The 30-day charts follow the filters, like the activity chart, but not the time range
+  const nowMinute = Math.floor(Date.now() / 60_000) * 60_000;
+  const bySector = useMemo(() => victimsBySector(filtered, nowMinute), [filtered, nowMinute]);
+  const byGroup = useMemo(() => groupShare(filtered, nowMinute), [filtered, nowMinute]);
+  const perDayTopGroups = useMemo(() => victimsPerDayTopGroups(filtered, nowMinute), [filtered, nowMinute]);
 
   // Where the collected history begins (the chart starts there, whatever the filters)
   const historyStart = useMemo(() => victims.reduce<string | undefined>((min, v) => (!min || v.discoveredAt < min ? v.discoveredAt : min), undefined), [victims]);
@@ -157,6 +167,18 @@ export const VictimsTab: React.FC<VictimsTabProps> = ({ victims, structured, int
       <div className="p-4 rounded-lg bg-theme-surface border border-theme-border">
         <SectionTitle>Leak-site posts over time</SectionTitle>
         <ActivityChart victims={filtered} historyStart={historyStart} maxDays={90} highlightDays={days} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <ChartCard title="Victims by sector (30 days)">
+          <DonutChart title="Leak-site victims by sector, last 30 days" data={bySector} centerLabel={sliceTotal(bySector)} />
+        </ChartCard>
+        <ChartCard title="Share by group (30 days)">
+          <DonutChart title="Leak-site victims by ransomware group, last 30 days" data={byGroup} centerLabel={sliceTotal(byGroup)} />
+        </ChartCard>
+        <ChartCard title="Top 5 groups per day (30 days)">
+          <StackedBars ariaLabel="Leak-site victims per day over the last 30 days, for the five most active groups" unit="victims" buckets={perDayTopGroups} />
+        </ChartCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

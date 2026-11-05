@@ -4,7 +4,7 @@ import { countryFlag, countryName, groupDisplayName } from '../../utils/countrie
 import { buildHash } from '../../hooks/useHashRoute';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
-import { StackedBars } from '../vulns/StackedBars';
+import { StackedBars } from '../../components/charts/StackedBars';
 import { StatCards } from '../vulns/shared';
 import { BarList, chipClass, countBy, SectionTitle } from './shared';
 import { ExternalLink, Search } from 'lucide-react';

@@ -5,8 +5,11 @@ import { clusterArticles } from '../articles/clustering';
 import { calculateImportance } from '../articles/importance';
 import { countryName } from '../../utils/countries';
 import { EngineItem, Shape } from './tileEngine';
+import type { NpmAdvisory, NpmAdvisoryData, NpmMalwareData } from '../npm/advisories';
+import type { PackageResult } from '../npm/match';
+import { formatPackageEntry } from '../npm/semver';
 
-export type TvTileKind = 'story' | 'victim' | 'kev' | 'breach' | 'trend';
+export type TvTileKind = 'story' | 'victim' | 'kev' | 'breach' | 'trend' | 'npm';
 export type TvTone = 'critical' | 'high' | 'info' | 'ransomware';
 
 export interface TvTile {
@@ -22,8 +25,23 @@ export interface TvTile {
   cves?: string[];
   /** Critical severity (breaking news) */
   critical?: boolean;
-  /** Article link */
+  /** Article link; for an npm advisory its GitHub page (the QR code's target) */
   url?: string;
+  /** An npm advisory's details (kind 'npm'): all plain text, rendered as text */
+  npm?: NpmTileInfo;
+}
+
+export interface NpmTileInfo {
+  severity: NpmAdvisory['severity'] | 'malware';
+  /** The packages it lists, a watched one first */
+  packages: string[];
+  /** The first package's affected range and first fixed version */
+  vulnerable: string;
+  patched?: string;
+  /** GHSA id, then CVE ids */
+  ids: string[];
+  /** The watched entries (name@version) it affects; empty when none */
+  yours: string[];
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -177,6 +195,108 @@ export function tilesForRansomware(news: Article[], victims: LeakSiteVictim[], g
     else out.push(stories[s++]);
   }
   return out.slice(0, max);
+}
+
+// npm advisories (the npm wall, and mixed mode). "Affecting" means a watched entry with a version inside a range (or a
+// range that can't be read, which matching flags rather than clears); an entry without a version only lists the
+// package's advisories, so it doesn't count.
+
+const DAY_MS = 24 * HOUR_MS;
+const GHSA_ID = /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/i;
+
+/** The GitHub advisory page for a GHSA id; undefined (no QR code) when the id isn't a well-formed GHSA id */
+export function ghsaUrl(id: string): string | undefined {
+  return GHSA_ID.test(id) ? `https://github.com/advisories/${id}` : undefined;
+}
+
+interface Hit { name: string; label: string; vulnerable: string; patched?: string }
+
+/** Advisory id → the watched, versioned entries it affects */
+function watchedHits(results: PackageResult[]): Map<string, Hit[]> {
+  const map = new Map<string, Hit[]>();
+  for (const r of results) {
+    if (!r.entry.version) continue;
+    for (const a of r.advisories) {
+      const hit: Hit = { name: r.entry.name, label: formatPackageEntry(r.entry), vulnerable: a.vulnerable, patched: a.patched };
+      const list = map.get(a.id);
+      if (list) list.push(hit);
+      else map.set(a.id, [hit]);
+    }
+  }
+  return map;
+}
+
+const NPM_WEIGHT: Record<NpmTileInfo['severity'], number> = { malware: 10, critical: 8, high: 6, medium: 4, low: 2, unknown: 2 };
+const npmTone = (s: NpmTileInfo['severity']): TvTone => (s === 'critical' || s === 'malware' ? 'critical' : s === 'high' ? 'high' : 'info');
+
+function npmTile(id: string, severity: NpmTileInfo['severity'], time: string, headline: string, packages: string[], range: { vulnerable: string; patched?: string }, cves: string[], hits: Hit[] = []): TvTile {
+  const watched = hits.map(h => h.name.toLowerCase());
+  const ordered = [...new Set(packages)].sort((a, b) => Number(watched.includes(b.toLowerCase())) - Number(watched.includes(a.toLowerCase())));
+  const info: NpmTileInfo = { severity, packages: ordered, vulnerable: range.vulnerable, ids: [id, ...cves], yours: hits.map(h => h.label) };
+  if (range.patched) info.patched = range.patched;
+  return {
+    id: `npm-${id}`,
+    kind: 'npm',
+    tone: npmTone(severity),
+    source: severity === 'malware' ? 'npm malware' : 'npm advisory',
+    time,
+    headline,
+    weight: NPM_WEIGHT[severity] + (hits.length ? 4 : 0),
+    url: ghsaUrl(id),
+    npm: info,
+  };
+}
+
+/**
+ * The npm tiles: advisories affecting a watched package (malware releases first, then advisories, newest first in
+ * each, at any age the data holds), then the others by `tier` (0 first, 1 next, null left out), newest first in each. Withdrawn advisories never show.
+ */
+function npmTiles(data: NpmAdvisoryData, malware: NpmMalwareData | null, results: PackageResult[], tier: (a: NpmAdvisory) => number | null, max: number): TvTile[] {
+  const hits = watchedHits(results);
+  const newest = (a: { time?: string }, b: { time?: string }) => timeOf(b.time ?? '') - timeOf(a.time ?? '');
+
+  const mal: TvTile[] = [];
+  const seen = new Set<string>(); // advisory ids with a tile
+  for (const [id, pkg, vulnerable, published] of malware?.entries ?? []) {
+    const h = hits.get(id)?.filter(x => x.name.toLowerCase() === pkg.toLowerCase());
+    if (!h?.length || seen.has(id)) continue;
+    seen.add(id);
+    mal.push(npmTile(id, 'malware', published, `Malicious release of ${pkg}`, [pkg], { vulnerable }, [], h));
+  }
+
+  const yours: TvTile[] = [];
+  const tiers: TvTile[][] = [[], []];
+  for (const a of data.recent) {
+    if (a.withdrawn || seen.has(a.id)) continue; // one tile per id: a malware tile already stands for it
+    const h = hits.get(a.id);
+    const t = h?.length ? null : tier(a);
+    if (!h?.length && t === null) continue;
+    // The range shown: the one that matched the watched version, else the advisory's first
+    const range = h?.[0] ?? a.ranges[0] ?? { vulnerable: '' };
+    const tile = npmTile(a.id, a.severity, a.published, a.summary, a.ranges.map(r => r.package), range, a.cves, h);
+    (h?.length ? yours : tiers[t!]).push(tile);
+  }
+  return [...mal.sort(newest), ...yours.sort(newest), ...tiers[0].sort(newest), ...tiers[1].sort(newest)].slice(0, max);
+}
+
+const within = (iso: string, now: number, ms: number) => {
+  const t = timeOf(iso);
+  return t > 0 && now - t <= ms;
+};
+
+/** The npm wall: 7 days of advisories, critical and high first, then medium; plus everything affecting a watched package (first) */
+export function tilesForNpm(data: NpmAdvisoryData, malware: NpmMalwareData | null, results: PackageResult[], now: number, max = 30): TvTile[] {
+  return npmTiles(data, malware, results, a => {
+    if (!within(a.published, now, 7 * DAY_MS)) return null;
+    return a.severity === 'critical' || a.severity === 'high' ? 0 : a.severity === 'medium' ? 1 : null;
+  }, max);
+}
+
+/** Mixed mode's npm tiles: critical and high advisories from the last 48 hours, plus everything affecting a watched package (first) */
+export function npmTilesForMix(data: NpmAdvisoryData, malware: NpmMalwareData | null, results: PackageResult[], now: number, max = 10): TvTile[] {
+  return npmTiles(data, malware, results, a => (
+    within(a.published, now, 48 * HOUR_MS) && (a.severity === 'critical' || a.severity === 'high') ? 0 : null
+  ), max);
 }
 
 const STORY_SHAPES: Shape[] = ['1x1', '2x1', '2x2'];

@@ -22,7 +22,7 @@ export function kevAddedMap(
 
 /**
  * Tiles that are breaking: not in `seen`, never victims, less than an hour old, and critical or about a CVE added to KEV
- * within 24 hours. A KEV tile's time is only the day it was added, so for it that day being within 24 hours counts as
+ * within 24 hours; or an npm advisory affecting a watched package, at any age. A KEV tile's time is only the day it was added, so for it that day being within 24 hours counts as
  * fresh. Newest first.
  */
 export function findBreaking(tiles: TvTile[], seen: Set<string>, kevAdded: Map<string, string>, now: number): TvTile[] {
@@ -34,7 +34,11 @@ export function findBreaking(tiles: TvTile[], seen: Set<string>, kevAdded: Map<s
     .filter(t => {
       if (seen.has(t.id) || t.kind === 'victim') return false;
       const time = timeOf(t.time);
-      if (!Number.isFinite(time) || now - time >= (t.kind === 'kev' ? DAY_MS : HOUR_MS)) return false;
+      if (!Number.isFinite(time)) return false;
+      // An npm advisory on a watched package is news whenever it reaches the data (review and the snapshot can lag its
+      // publication); other npm advisories never break
+      if (t.kind === 'npm') return (t.npm?.yours.length ?? 0) > 0;
+      if (now - time >= (t.kind === 'kev' ? DAY_MS : HOUR_MS)) return false;
       return !!t.critical || (t.cves ?? []).some(newKev);
     })
     .sort((a, b) => timeOf(b.time) - timeOf(a.time));

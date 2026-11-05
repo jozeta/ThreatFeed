@@ -3,7 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TvTile } from '../../services/tv/tiles';
-import { DETECT_THROTTLE_MS, useBreakingDetection, useBreakingNews } from './useBreakingNews';
+import { DETECT_THROTTLE_MS, firstArrival, useBreakingDetection, useBreakingNews } from './useBreakingNews';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -134,5 +134,77 @@ describe('useBreakingDetection', () => {
       advance(1000);
     }
     expect(builds).toBeLessThanOrEqual(20 / (DETECT_THROTTLE_MS / 1000) + 1);
+  });
+});
+
+describe('firstArrival', () => {
+  it('is true only for the change that first makes a source non-null', () => {
+    const loaded: boolean[] = [];
+    expect(firstArrival(loaded, [null, null])).toBe(false);
+    expect(firstArrival(loaded, [{}, null])).toBe(true);
+    expect(firstArrival(loaded, [{}, null])).toBe(false);
+    expect(firstArrival(loaded, [{}, {}])).toBe(true);
+    expect(firstArrival(loaded, [{ newer: 1 }, {}])).toBe(false);
+  });
+});
+
+describe('useBreakingDetection with on-demand npm data', () => {
+  // An npm advisory on a watched package: breaking at any age once the wall runs
+  const yours = (id: string): TvTile => ({
+    id, kind: 'npm', tone: 'info', source: 'npm advisory', time: new Date(NOW - 200 * 86400e3).toISOString(), headline: id, weight: 1,
+    npm: { severity: 'medium', packages: ['lodash'], vulnerable: '< 2', ids: [id], yours: ['lodash@1.0.0'] },
+  });
+  let advisories: TvTile[] | null;
+  let malware: TvTile[] | null;
+  let broke: string[][];
+  let root: ReturnType<typeof createRoot>;
+  let accepts: boolean;
+
+  function H() {
+    const news = useBreakingNews();
+    useBreakingDetection(news, {
+      page: 'latest', data: [advisories, malware], baseline: [advisories, malware], synced: true,
+      build: () => [...(advisories ?? []), ...(malware ?? [])],
+      kevAdded: () => new Map(),
+      acceptsNews: () => accepts,
+      onBreaking: found => broke.push(found.map(t => t.id)),
+    });
+    return null;
+  }
+  const render = () => act(() => root.render(createElement(H)));
+  const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    advisories = null; malware = null; broke = []; accepts = false;
+    root = createRoot(document.createElement('div'));
+    render(); // the wall starts before the npm data has loaded
+    accepts = true;
+    advance(DETECT_THROTTLE_MS);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    vi.useRealTimers();
+  });
+
+  it('the first load of each source after the wall settled is starting data, not news', () => {
+    advisories = [yours('npm-a'), yours('npm-b')];
+    render();
+    advance(DETECT_THROTTLE_MS);
+    malware = [yours('npm-m')]; // a second source loading later
+    render();
+    advance(DETECT_THROTTLE_MS);
+    expect(broke).toEqual([]);
+  });
+
+  it('a new affecting advisory after the first load still breaks', () => {
+    advisories = [yours('npm-a')];
+    render();
+    advance(DETECT_THROTTLE_MS);
+    advisories = [yours('npm-a'), yours('npm-new')];
+    render();
+    advance(DETECT_THROTTLE_MS);
+    expect(broke).toEqual([['npm-new']]);
   });
 });

@@ -4,8 +4,11 @@ import { Article, CveRecord, ExploitInfo, NvdStats } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
-import { BarList, chipClass, SectionTitle } from '../incidents/shared';
-import { StackedBars } from './StackedBars';
+import { BarList, ChartCard, chipClass, SectionTitle } from '../incidents/shared';
+import { StackedBars } from '../../components/charts/StackedBars';
+import { RankedBars } from '../../components/charts/RankedBars';
+import { criticalPerDayByCweFamily } from '../../services/charts/figures';
+import { CVSS_BANDS } from '../../services/intelligence/vulns';
 import { CveButton, CweChip, cweLabel, EpssValue, ExploitBadges, SEVERITY_FILL, SeverityPill, SsvcBadge, StatCards, vectorText } from './shared';
 import { Search } from 'lucide-react';
 
@@ -26,10 +29,14 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
   const [cwe, setCwe] = useHashParam('cwe');
   const [assigner, setAssigner] = useHashParam('cna');
   const totals = useMemo(() => stats.daily.reduce(
-    (t, d) => ({ critical: t.critical + d.critical, high: t.high + d.high, unscored: t.unscored + d.unscored }),
-    { critical: 0, high: 0, unscored: 0 }
+    (t, d) => ({ critical: t.critical + d.critical, high: t.high + d.high, medium: t.medium + d.medium, low: t.low + d.low, unscored: t.unscored + d.unscored }),
+    { critical: 0, high: 0, medium: 0, low: 0, unscored: 0 }
   ), [stats]);
   const days = stats.daily.length;
+  // Bands from the NVD day counts, which cover every new CVE (the CVE lists only hold the critical and high ones)
+  const bands = CVSS_BANDS.flatMap((b) => (b.id === 'unscored' ? [] : [{ label: b.label, value: totals[b.id] }]));
+  const nowMinute = Math.floor(Date.now() / 60_000) * 60_000;
+  const criticalByCwe = useMemo(() => criticalPerDayByCweFamily(notable, nowMinute, days), [notable, nowMinute, days]);
 
   const rows = useMemo(() => {
     const q = query.toLowerCase();
@@ -67,6 +74,15 @@ export const NewCvesTab: React.FC<NewCvesTabProps> = ({ stats, notable, kevIds, 
           }))}
         />
         <p className="mt-2 text-[10px] font-mono text-theme-text-muted">Today is partial. Recent CVEs often have no score yet while NVD and the CNA work through them.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ChartCard title={`CVSS bands (${days} days)`} note={`Scored CVEs only; ${totals.unscored.toLocaleString()} more are waiting for a score`}>
+          <RankedBars title={`New CVEs by CVSS band over the last ${days} days`} data={bands} color="fill-rose-500" format={(n) => n.toLocaleString()} />
+        </ChartCard>
+        <ChartCard title={`Critical CVEs per day, by weakness (${days} days)`}>
+          <StackedBars ariaLabel={`Critical CVEs published per day over the last ${days} days, by CWE family`} unit="critical CVEs" buckets={criticalByCwe} />
+        </ChartCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

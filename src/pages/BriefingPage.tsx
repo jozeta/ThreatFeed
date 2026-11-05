@@ -11,6 +11,12 @@ import { downloadText } from '../services/intelligence/iocExport';
 import { SeverityBadge, CveChip } from '../components/Common/ThreatBadges';
 import { Sparkline } from '../components/Common/Sparkline';
 import { formatRelativeTime } from '../utils/date';
+import { ChartCard } from './incidents/shared';
+import { DonutChart } from '../components/charts/DonutChart';
+import { RankedBars } from '../components/charts/RankedBars';
+import { StackedBars } from '../components/charts/StackedBars';
+import { sliceTotal } from '../components/charts/chartData';
+import { storiesByCategory, storiesPerDayBySeverity, topVendorsThisWeek } from '../services/charts/figures';
 import { ClipboardList, Copy, Check, Download, FileText, ShieldAlert, Target, Layers, Skull, TrendingUp, Server, Database } from 'lucide-react';
 
 interface BriefingPageProps {
@@ -38,7 +44,7 @@ const Section: React.FC<{ icon: React.ReactNode; title: string; count?: number; 
 const Empty: React.FC<{ text: string }> = ({ text }) => <p className="text-xs font-serif italic text-theme-text-muted">{text}</p>;
 
 export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSearch }) => {
-  const { articles, cveIntel, incidents } = useFeeds();
+  const { articles, feeds, cveIntel, incidents } = useFeeds();
   const vulns = useVulns();
   const { settings } = useSettings();
   const { open: openTrending, clickHint } = useOpenTrending(onSearch);
@@ -50,6 +56,13 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
     () => buildBriefing(articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, Date.now(), incidents, vulns),
     [articles, cveIntel, settings.watchlistKeywords, settings.stackKeywords, windowHours, incidents, vulns]
   );
+
+  // The charts cover fixed windows (7 and 14 days), whatever the briefing window
+  const nowMinute = Math.floor(Date.now() / 60_000) * 60_000;
+  const kevVendors = useMemo(() => [...new Set((vulns?.kev ?? []).map((k) => k.vendor))], [vulns]);
+  const byCategory = useMemo(() => storiesByCategory(articles, feeds, nowMinute), [articles, feeds, nowMinute]);
+  const perDayBySeverity = useMemo(() => storiesPerDayBySeverity(articles, nowMinute), [articles, nowMinute]);
+  const topVendors = useMemo(() => topVendorsThisWeek(articles, nowMinute, kevVendors), [articles, nowMinute, kevVendors]);
 
   const stackVulnCount = briefing.stackVulns.kev.length + briefing.stackVulns.cves.length + briefing.stackVulns.advisories.length;
   const markdown = () => briefingToMarkdown(briefing);
@@ -148,6 +161,18 @@ export const BriefingPage: React.FC<BriefingPageProps> = ({ onOpenArticle, onSea
             <span>Download .html</span>
           </button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pt-6">
+        <ChartCard title="Stories by category (7 days)">
+          <DonutChart title="Stories by feed category, last 7 days" data={byCategory} centerLabel={sliceTotal(byCategory)} />
+        </ChartCard>
+        <ChartCard title="Stories per day, by severity (14 days)">
+          <StackedBars ariaLabel="Stories published per day over the last 14 days, by severity" unit="stories" buckets={perDayBySeverity} />
+        </ChartCard>
+        <ChartCard title="Most-mentioned vendors (7 days)">
+          <RankedBars title="Vendors mentioned most in stories over the last 7 days" data={topVendors} color="fill-rose-500" />
+        </ChartCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-10">

@@ -57,7 +57,7 @@ export const RansomwarePage: React.FC<{ onOpenArticle: (article: Article) => voi
         </p>
       </div>
 
-      <div className="flex gap-1 mt-6 mb-6 border-b border-theme-border overflow-x-auto relative" role="tablist" ref={ink.listRef}>
+      <div className="flex gap-1 mt-6 mb-6 border-b border-theme-border flex-wrap relative" role="tablist" ref={ink.listRef}>
         {tabs.map((t) => (
           <button
             key={t.id}

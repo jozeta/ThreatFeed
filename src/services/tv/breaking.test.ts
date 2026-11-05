@@ -61,3 +61,13 @@ describe('kevAddedMap', () => {
     expect(kevAddedMap(null, undefined).size).toBe(0);
   });
 });
+
+describe('findBreaking (npm)', () => {
+  it('an unseen npm advisory affecting a watched package is breaking whatever its age; other npm tiles are not', () => {
+    const npm = (yours: string[]) => tile({ id: 'npm-x', kind: 'npm', time: iso(3 * 24 * 60 * MIN), npm: { severity: 'medium', packages: ['lodash'], vulnerable: '< 2', ids: ['GHSA-x'], yours } });
+    expect(findBreaking([npm(['lodash@1.0.0'])], new Set(), none, NOW).map(t => t.id)).toEqual(['npm-x']);
+    expect(findBreaking([npm(['lodash@1.0.0'])], new Set(['npm-x']), none, NOW)).toEqual([]);
+    expect(findBreaking([npm([])], new Set(), none, NOW)).toEqual([]);
+    expect(findBreaking([{ ...npm([]), time: iso(5 * MIN), critical: false }], new Set(), none, NOW)).toEqual([]);
+  });
+});

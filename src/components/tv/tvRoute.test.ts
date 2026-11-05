@@ -10,6 +10,13 @@ describe('tvRoute', () => {
     expect(tvAvailable('vulnerabilities')).toEqual(['dash']);
     expect(tvAvailable('settings')).toEqual([]);
   });
+  it('offers TV on the Vulnerabilities npm tab only', () => {
+    expect(tvAvailable('vulnerabilities', 'npm')).toEqual(['tv', 'dash']);
+    expect(tvAvailable('vulnerabilities', '')).toEqual(['dash']);
+    expect(tvAvailable('vulnerabilities', 'kev')).toEqual(['dash']);
+    expect(tvFromParams('vulnerabilities', new URLSearchParams('tv=1'), 'npm')).toBe('tv');
+    expect(tvFromParams('vulnerabilities', new URLSearchParams('tv=1'))).toBeNull();
+  });
   it('reads the mode from the params only where the page offers it', () => {
     expect(tvFromParams('briefing', new URLSearchParams('dash=1'))).toBeNull();
     expect(tvFromParams('ransomware', new URLSearchParams('dash=1'))).toBe('dash');

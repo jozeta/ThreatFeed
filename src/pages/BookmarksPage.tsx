@@ -154,7 +154,7 @@ export const BookmarksPage: React.FC<BookmarksPageProps> = ({ onOpenArticle }) =
       </div>
 
       {/* Bookmark Folders Navigation */}
-      <div className="mt-6 flex items-center gap-2 overflow-x-auto scrollbar-none pb-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2 pb-2">
         <button
           onClick={() => setSelectedFolder('all')}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all flex-shrink-0 ${

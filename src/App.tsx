@@ -74,7 +74,7 @@ export const App: React.FC = () => {
   const deepLink = useFeedDeepLinks();
   const levels = usePanelLevels(route.params, Boolean(activeArticle));
   // ?tv=1 / ?dash=1: a full-screen mode over the app, which goes inert underneath
-  const tvKind = tvFromParams(activeTab, route.params);
+  const tvKind = tvFromParams(activeTab, route.params, route.sub);
   const appRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (appRef.current) appRef.current.inert = tvKind !== null; // React 18 has no `inert` prop
@@ -307,7 +307,7 @@ export const App: React.FC = () => {
     {tvKind && (
       <TvErrorBoundary>
         <Suspense fallback={<div className="tv-root fixed inset-0 z-[90]" />}>
-          <TvShell kind={tvKind} page={activeTab} />
+          <TvShell kind={tvKind} page={activeTab} sub={route.sub} />
         </Suspense>
       </TvErrorBoundary>
     )}

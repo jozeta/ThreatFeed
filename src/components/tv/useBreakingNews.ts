@@ -37,6 +37,22 @@ export function useBreakingNews() {
   }).current;
 }
 
+/**
+ * Whether any of `values` is non-null for the first time, recording it in `loaded` (one flag per position). Data loaded on
+ * demand (the npm advisories, malware and OSV answer) arrives after the wall has settled; its first load is the
+ * starting data for that source, not news.
+ */
+export function firstArrival(loaded: boolean[], values: unknown[]): boolean {
+  let first = false;
+  values.forEach((v, i) => {
+    if (v !== null && v !== undefined && !loaded[i]) {
+      loaded[i] = true;
+      first = true;
+    }
+  });
+  return first;
+}
+
 /** Detection runs at most this often (leading and trailing); the app's refresh can flush data about once a second. */
 export const DETECT_THROTTLE_MS = 5000;
 
@@ -44,6 +60,8 @@ interface DetectionOptions {
   page: string;
   /** Identities of the data behind `build`; a change triggers a run */
   data: unknown[];
+  /** Sources loaded on demand, null until loaded: the change that first loads one counts as seen (see firstArrival) */
+  baseline?: unknown[];
   /** The app's first sync has completed (FeedContext `initialSyncDone`); before that all data counts as seen */
   synced: boolean;
   build: () => TvTile[];
@@ -64,6 +82,7 @@ export function useBreakingDetection(news: ReturnType<typeof useBreakingNews>, o
   const lastRun = useRef(-Infinity);
   const page = useRef(opts.page);
   const seenOnly = useRef(false); // a change since the last run happened while gated
+  const loaded = useRef<boolean[]>([]);
 
   useEffect(() => () => {
     if (timer.current !== undefined) clearTimeout(timer.current);
@@ -71,7 +90,8 @@ export function useBreakingDetection(news: ReturnType<typeof useBreakingNews>, o
 
   useEffect(() => {
     const o = optsRef.current;
-    if (page.current !== o.page || !o.synced || !o.acceptsNews()) seenOnly.current = true;
+    const first = firstArrival(loaded.current, o.baseline ?? []);
+    if (first || page.current !== o.page || !o.synced || !o.acceptsNews()) seenOnly.current = true;
     page.current = o.page;
     if (timer.current !== undefined) return; // the scheduled run reads the latest data
     const run = () => {
@@ -91,5 +111,5 @@ export function useBreakingDetection(news: ReturnType<typeof useBreakingNews>, o
     if (wait <= 0) run();
     else timer.current = setTimeout(run, wait);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opts.page, opts.synced, ...opts.data]);
+  }, [opts.page, opts.synced, ...opts.data, ...(opts.baseline ?? [])]);
 }

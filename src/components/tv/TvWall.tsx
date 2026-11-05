@@ -7,7 +7,7 @@ import { useVulns } from '../../hooks/useVulns';
 import { useLeakSiteVictims } from '../../hooks/useLeakSiteVictims';
 import { filterAndSortArticles } from '../../services/articles/filterSort';
 import { buildBriefing } from '../../services/intelligence/briefing';
-import { tilesForBriefing, tilesForFront, tilesForRansomware, toEngineItems, TvTile } from '../../services/tv/tiles';
+import { npmTilesForMix, tilesForBriefing, tilesForFront, tilesForNpm, tilesForRansomware, toEngineItems, TvTile } from '../../services/tv/tiles';
 import { EngineItem, GRIDS } from '../../services/tv/tileEngine';
 import { mixItems } from '../../services/tv/mix';
 import { useReducedMotion } from '../Common/SidePanel';
@@ -19,10 +19,14 @@ import { kevAddedMap } from '../../services/tv/breaking';
 import { CellDelayContext, cellDelayMs, SPEED_FACTOR, wallOutMs, wallTransition } from './wallMotion';
 import { PanelDef } from './DashboardWall';
 import { VulnCtx, vulnNumberPanels } from './dashPanels';
+import { useNpmAdvisories } from '../../hooks/useNpmAdvisories';
+import { useNpmMatches } from '../../hooks/useNpmMatches';
 
 /** Mixed mode's number panels: ids kept apart from story ids */
 const NUM = 'num:';
 const NONE: string[] = []; // stable, so the panels' data memo still hits when a setting is missing
+/** Mixed mode keeps npm advisories to at most 1 in 6 of the stories */
+const NPM_EVERY = 6;
 
 const NO_FILTERS = {
   searchQuery: '', selectedCategory: null, selectedSourceId: null, selectedTag: null,
@@ -49,7 +53,8 @@ function Empty() {
   );
 }
 
-export default function TvWall({ page }: { page: ActiveNavTab }) {
+/** The TV wall of a page; `sub` is its tab (the Vulnerabilities npm tab has its own wall) */
+export default function TvWall({ page, sub = '' }: { page: ActiveNavTab; sub?: string }) {
   const { articles, feeds, cveIntel, incidents, initialSyncDone, msrc, stats, ensureMsrc, ensureStats, snapshotGeneratedAt } = useFeeds();
   const vulns = useVulns();
   const { victims } = useLeakSiteVictims();
@@ -63,9 +68,15 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     void ensureMsrc();
     void ensureStats();
   }, [mixed, ensureMsrc, ensureStats, snapshotGeneratedAt]);
+  // npm advisories: the npm wall's tiles, and in mixed mode a share of the story pool; loaded only for those
+  const npmWall = page === 'vulnerabilities' && sub === 'npm';
+  const { advisories: npmData, malware: npmMalware } = useNpmAdvisories(npmWall || mixed);
+  const { results: npmResults } = useNpmMatches(npmData, npmMalware); // asks OSV only when that setting is on
+  // The OSV answer arrives as a change of the results: null until one has come (always null with OSV off)
+  const npmOsvAnswered = npmResults.some(r => r.osv === 'checked') || null;
 
   // The wall rebuilds on its own schedule (refills, data signature); it reads the latest data through this ref
-  const latest = { page, articles, feeds, cveIntel, incidents, vulns, victims, settings, mixed, msrc, stats };
+  const latest = { page, npmWall, articles, feeds, cveIntel, incidents, vulns, victims, settings, mixed, msrc, stats, npmData, npmMalware, npmResults };
   const ref = useRef(latest);
   ref.current = latest;
   // Tile content by id: the latest build's tiles, plus kept ones the live wall still references that it lacks
@@ -81,9 +92,9 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   };
   const numbers = (): PanelDef[] => (ref.current.mixed ? vulnNumberPanels(vulnCtx(), vulnCtx) : []);
 
-  const build = (): TvTile[] => {
+  const pageTiles = (now: number): TvTile[] => {
     const d = ref.current;
-    const now = Date.now();
+    if (d.npmWall) return d.npmData ? tilesForNpm(d.npmData, d.npmMalware, d.npmResults, now) : [];
     if (d.page === 'newspaper' || d.page === 'latest') {
       const shown = filterAndSortArticles(d.articles, NO_FILTERS, false, d.feeds, d.settings.watchlistKeywords, {
         mutedKeywords: d.settings.mutedKeywords,
@@ -103,11 +114,24 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
     return [];
   };
 
+  /** The page's tiles, and mixed mode's npm tiles kept apart so they can be spaced out among the stories */
+  const buildParts = (): { main: TvTile[]; npm: TvTile[] } => {
+    const d = ref.current;
+    const now = Date.now();
+    const npm = d.mixed && d.npmData ? npmTilesForMix(d.npmData, d.npmMalware, d.npmResults, now) : [];
+    return { main: pageTiles(now), npm };
+  };
+  const build = (): TvTile[] => {
+    const { main, npm } = buildParts();
+    return [...main, ...npm];
+  };
+
   const news = useBreakingNews();
   const size = tv.size;
   const { slots, size: gridSize, leaving, label, prioritize, acceptsNews } = useLivingWall(
     (full, live) => {
-      const tiles = build();
+      const { main, npm } = buildParts();
+      const tiles = [...main, ...npm];
       if (full) news.markSeen(tiles);
       const panels = numbers();
       // Items the live wall still references (on screen, leaving, queued) keep content when this build lacks them; `live`
@@ -115,12 +139,12 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
       tilesById.current = keepLive(new Map(tiles.map(t => [t.id, t])), tilesById.current, live);
       panelsById.current = keepLive(new Map(panels.map(p => [NUM + p.id, p])), panelsById.current, live);
       const numberItems: EngineItem[] = panels.map(p => ({ id: NUM + p.id, weight: p.weight, shapes: p.shapes }));
-      return mixItems(toEngineItems(tiles), numberItems);
+      return mixItems(mixItems(toEngineItems(main), toEngineItems(npm), NPM_EVERY, true), numberItems);
     },
     size,
     tv.intervalSeconds * 1000,
     {
-      signature: `${page}|${mixed ? `mix|${msrc ? 'm' : '-'}|${stats ? 's' : '-'}|` : ''}${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
+      signature: `${page}|${sub}|${mixed ? `mix|${msrc ? 'm' : '-'}|${stats ? 's' : '-'}|` : ''}${npmData ? 'n' : '-'}|${npmMalware ? 'w' : '-'}|${npmResults.length}|${articles.length}|${vulns ? 'v' : '-'}|${victims.length}|${Object.keys(cveIntel ?? {}).length}|${incidents ? 'i' : '-'}`,
       outMs: wallOutMs(reduced, tv.transition, tv.speed),
     }
   );
@@ -129,7 +153,9 @@ export default function TvWall({ page }: { page: ActiveNavTab }) {
   // wall started jump the queue
   useBreakingDetection(news, {
     page,
-    data: [articles, vulns, cveIntel, victims, incidents],
+    data: [articles, vulns, cveIntel, victims, incidents, npmData, npmMalware, npmResults],
+    // The npm data loads on demand, after the wall has settled: each source's first load is starting data, not news
+    baseline: [npmData, npmMalware, npmOsvAnswered],
     synced: initialSyncDone,
     build,
     kevAdded: () => kevAddedMap(ref.current.vulns, ref.current.cveIntel),

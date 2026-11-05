@@ -10,6 +10,15 @@ export const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children
   <h2 className="pb-2 mb-3 border-b-2 border-theme-accent font-mono text-xs font-black uppercase tracking-widest text-theme-text">{children}</h2>
 );
 
+/** A titled stats-area card holding one chart */
+export const ChartCard: React.FC<{ title: string; note?: React.ReactNode; children: React.ReactNode }> = ({ title, note, children }) => (
+  <div className="p-4 rounded-lg bg-theme-surface border border-theme-border min-w-0">
+    <SectionTitle>{title}</SectionTitle>
+    {children}
+    {note && <p className="mt-2 text-[10px] font-mono text-theme-text-muted">{note}</p>}
+  </div>
+);
+
 /** Horizontal bar list for "top N" breakdowns; rows are optional buttons */
 export const BarList: React.FC<{
   rows: { key: string; label: React.ReactNode; value: number; active?: boolean; onClick?: () => void; action?: React.ReactNode }[]; // action: a second control beside the bar

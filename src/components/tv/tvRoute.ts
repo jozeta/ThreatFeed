@@ -17,14 +17,15 @@ const AVAILABLE: Partial<Record<ActiveNavTab, TvKind[]>> = {
   newspaper: ['tv'], latest: ['tv'], briefing: ['tv'], ransomware: ['tv', 'dash'], vulnerabilities: ['dash'],
 };
 
-/** The full-screen modes a page offers */
-export function tvAvailable(page: ActiveNavTab): TvKind[] {
+/** The full-screen modes a page offers; `sub` is the page's tab (the Vulnerabilities npm tab also has a TV wall) */
+export function tvAvailable(page: ActiveNavTab, sub = ''): TvKind[] {
+  if (page === 'vulnerabilities' && sub === 'npm') return ['tv', 'dash'];
   return AVAILABLE[page] ?? [];
 }
 
-/** The mode the URL asks for (?tv=1 or ?dash=1), null when absent or not offered on this page */
-export function tvFromParams(page: ActiveNavTab, params: URLSearchParams): TvKind | null {
-  const offered = tvAvailable(page);
+/** The mode the URL asks for (?tv=1 or ?dash=1), null when absent or not offered on this page and tab */
+export function tvFromParams(page: ActiveNavTab, params: URLSearchParams, sub = ''): TvKind | null {
+  const offered = tvAvailable(page, sub);
   if (params.get('tv') === '1' && offered.includes('tv')) return 'tv';
   if (params.get('dash') === '1' && offered.includes('dash')) return 'dash';
   return null;
@@ -79,5 +80,5 @@ export function leaveFullscreen(): void {
 
 export const tvKindNow = (): TvKind | null => {
   const route = parseHash(window.location.hash);
-  return tvFromParams(route.page, route.params);
+  return tvFromParams(route.page, route.params, route.sub);
 };

@@ -9,8 +9,13 @@ import {
 import { formatPackageEntry } from '../../services/npm/semver';
 import { usePagedCount } from '../../hooks/usePagedCount';
 import { LoadMoreButton } from '../../components/Common/LoadMoreButton';
-import { BarList, chipClass, SectionTitle } from '../incidents/shared';
-import { StackedBars } from './StackedBars';
+import { BarList, ChartCard, chipClass, SectionTitle } from '../incidents/shared';
+import { StackedBars } from '../../components/charts/StackedBars';
+import { DonutChart } from '../../components/charts/DonutChart';
+import { NEUTRAL_COLOR, SEVERITY_HEX as SEVERITY_COLORS } from '../../components/charts/colors';
+import { RankedBars } from '../../components/charts/RankedBars';
+import { sliceTotal } from '../../components/charts/chartData';
+import { myPackagesStatus, npmFixShare, npmSeverityShare, npmTopCwes, npmVulnVsMalware } from '../../services/charts/figures';
 import { CveButton, EpssValue, SEVERITY_FILL, SeverityPill, StatCards } from './shared';
 import { Package, Search, Skull } from 'lucide-react';
 import { formatRelativeTime } from '../../utils/date';
@@ -35,6 +40,12 @@ const STATUS: Record<PackageStatus, { label: string; className: string; title: s
   'no-version': { label: 'No version', className: 'text-orange-500 border-orange-500/50', title: 'No version given, so every advisory on the package is listed' },
   'not-affected': { label: 'Not affected', className: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/50', title: 'Checked against every reviewed npm advisory' },
 };
+// Donut colours by slice label (slices come largest first): severities as in the per-day chart (SEVERITY_FILL),
+// package statuses as their badges
+const SEVERITY_HEX: Record<string, string> = { ...SEVERITY_COLORS, Unknown: NEUTRAL_COLOR };
+const STATUS_HEX: Record<string, string> = { Affected: '#e11d48', 'Check manually': '#f59e0b', 'No version': '#f97316', 'Not affected': '#10b981' };
+const KIND_HEX: Record<string, string> = { Vulnerabilities: '#f59e0b', Malware: '#e11d48', 'Fix available': '#10b981', 'No fix': '#e11d48' };
+const colorsBy = (map: Record<string, string>, slices: { label: string }[]) => slices.map((s) => map[s.label] ?? '#94a3b8');
 const notAffectedTitle = (r: PackageResult) => (r.status === 'not-affected' && r.malwareCheckedDays !== null
   ? `${STATUS['not-affected'].title} and the malware reports of the last ${r.malwareCheckedDays} days`
   : STATUS[r.status].title);
@@ -200,6 +211,12 @@ export const NpmTab: React.FC<NpmTabProps> = ({ advisories, malware, matches, on
     return buckets;
   }, [rows, now]);
 
+  const severityShare = useMemo(() => npmSeverityShare(advisories, now), [advisories, now]);
+  const vulnVsMalware = useMemo(() => npmVulnVsMalware(advisories, malware, now), [advisories, malware, now]);
+  const fixShare = useMemo(() => npmFixShare(advisories, now), [advisories, now]);
+  const topCwes = useMemo(() => npmTopCwes(advisories, now), [advisories, now]);
+  const packagesStatus = useMemo(() => myPackagesStatus(results), [results]);
+
   // Malicious releases, the ones your packages are in first
   const yourMalware = results.filter((r) => r.malware);
   const recentMalware = useMemo(() => rows.filter((r) => r.kind === 'malware'), [rows]);
@@ -247,6 +264,26 @@ export const NpmTab: React.FC<NpmTabProps> = ({ advisories, malware, matches, on
             segments: [...SEVERITIES, 'unknown' as const].map((s) => ({ name: s, value: d.counts[s] || 0, className: SEVERITY_FILL[s] })),
           }))}
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <ChartCard title="By severity (30 days)">
+          <DonutChart title="npm advisories by severity, last 30 days" data={severityShare} centerLabel={sliceTotal(severityShare)} colors={colorsBy(SEVERITY_HEX, severityShare)} />
+        </ChartCard>
+        <ChartCard title="Vulnerabilities vs malware (7 days)" note="Advisories published or updated, and malicious-release reports">
+          <DonutChart title="npm vulnerability advisories versus malware reports, last 7 days" data={vulnVsMalware} centerLabel={sliceTotal(vulnVsMalware)} colors={colorsBy(KIND_HEX, vulnVsMalware)} />
+        </ChartCard>
+        <ChartCard title="Fix available (30 days)" note="A fix means every affected range has a patched version">
+          <DonutChart title="npm advisories with a fix, last 30 days" data={fixShare} centerLabel={sliceTotal(fixShare)} colors={colorsBy(KIND_HEX, fixShare)} />
+        </ChartCard>
+        <ChartCard title="Top weaknesses (30 days)">
+          <RankedBars title="Most common weaknesses (CWE) in npm advisories, last 30 days" data={topCwes} color="fill-sky-500" />
+        </ChartCard>
+        {packagesStatus.length > 0 && (
+          <ChartCard title={`My packages (${results.length})`}>
+            <DonutChart title="My npm packages by status" data={packagesStatus} centerLabel={sliceTotal(packagesStatus)} colors={colorsBy(STATUS_HEX, packagesStatus)} />
+          </ChartCard>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
