@@ -6,7 +6,20 @@
 
 Inspired by the editorial elegance, typography, and usability of **Newsify for iOS**, ThreatFeed transforms security alerts, threat research, and exploit writeups into a high-end digital publication.
 
-![image](Screenshot.png)
+<table>
+<tr>
+<td align="center"><img src="Screenshot.png" alt="ThreatFeed front page" width="100%"><br><sub>The front page, laid out as a digital newspaper</sub></td>
+</tr>
+</table>
+
+Version: **1.0.1**
+
+## What's new in 1.0.1
+
+- The version number is shown at the bottom of Settings.
+- README: version, this section and a captioned screenshot grid.
+
+Older changes: see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

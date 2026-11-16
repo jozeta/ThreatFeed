@@ -1194,6 +1194,10 @@ export const SettingsPage: React.FC = () => {
           </button>
         </div>
       </section>
+
+      <p className="font-mono text-xs text-theme-text-muted text-center" data-testid="app-version">
+        ThreatFeed v{__APP_VERSION__}
+      </p>
     </div>
   );
 };

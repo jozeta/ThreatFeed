@@ -1,6 +1,10 @@
 /// <reference types="vitest" />
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
+
+// The one version number lives in package.json; the app reads it at build time (Settings footer).
+const APP_VERSION = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
 // The Content-Security-Policy of the built site (GitHub Pages can't send headers, so it is a meta tag).
 // Only scripts and fonts are locked to this origin. Feeds and article images come from any https site
@@ -34,6 +38,7 @@ const contentSecurityPolicy = (): Plugin => ({
 export default defineConfig({
   base: process.env.GITHUB_PAGES ? '/ThreatFeed/' : '/',
   plugins: [react(), contentSecurityPolicy()],
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   server: {
     port: 5173,
     host: true

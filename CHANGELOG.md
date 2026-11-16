@@ -2,10 +2,13 @@
 
 All notable changes to ThreatFeed are listed here, newest first.
 
-The project has no tagged releases yet, so changes are grouped by date. Entries before November 2026 were reconstructed from the commit history.
+The project has no tagged releases yet, so changes before 1.0.1 are grouped by date. Entries before November 2026 were reconstructed from the commit history.
 
 ## Unreleased
 
+## 1.0.1 - 2026-11-12
+
+- README shows the current version, a "What's new" section and a captioned screenshot grid. The version (from `package.json`) is shown at the bottom of Settings, with a test.
 - Security review (SEC-DOM-2): the card/headline text stripper decodes entities in an inert `DOMParser` document instead of a detached `innerHTML` (with tests); the reader's `dangerouslySetInnerHTML` is DOMPurify output and is marked as reviewed.
 - Fixed: Sort By works on the chronological front page (newest-first stays the default; the "Earlier" divider only shows when newest-first). Package names match case-insensitively in every ecosystem (a `Saxon-HE` advisory now affects `saxon-he`); `#/vulns/npm?eco=<ecosystem>` keeps the filter when that file is loading or failed; two ecosystems with the same package name no longer share a React key; "My packages" wording on the Packages tab; the invalid-entry message explains that Go versions start with `v`
 - New defaults (only settings you never changed move to them): TV and dashboards 30 s, X-Small tiles, Slow animation; the front page is chronological; the built-in Watchlist, My Stack and Watched CVEs rules start off, so My Feed starts empty (rules with notifications on stay on); the watchlist is trimmed to 21 key terms and vendors; Consumer Tech, Swedish (Feber) and Tech Guides & How-To are off in Categories in use
